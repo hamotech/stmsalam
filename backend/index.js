@@ -6,7 +6,15 @@ import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
 // Firebase Admin
-import { db } from './lib/firebase.js';
+import { db, firebaseReady } from './lib/firebase.js';
+
+// Helper for Firestore with Timeout
+const withTimeout = (promise, ms = 2500) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore Timeout')), ms))
+  ]);
+};
 
 // Menu data (for seeding)
 import { menuItems, categories, shopInfo, outlets } from '../frontend/src/data/menuData.js';
@@ -31,9 +39,13 @@ app.use(express.json());
 // SEEDING (Run once or check)
 // ============================================================
 const seedFirestore = async () => {
+  if (!firebaseReady) {
+    console.warn('⏩ Skipping Firestore Seeding: No Service Account provided.');
+    return;
+  }
   try {
     const catsRef = db.collection('categories');
-    const catsSnap = await catsRef.limit(1).get();
+    const catsSnap = await withTimeout(catsRef.limit(1).get());
     if (catsSnap.empty) {
       console.log('🌱 Seeding Categories to Firestore...');
       const batch = db.batch();
@@ -45,7 +57,7 @@ const seedFirestore = async () => {
     }
 
     const prodsRef = db.collection('products');
-    const prodsSnap = await prodsRef.limit(1).get();
+    const prodsSnap = await withTimeout(prodsRef.limit(1).get());
     if (prodsSnap.empty) {
       console.log('🌱 Seeding Products to Firestore...');
       const batch = db.batch();
@@ -180,22 +192,26 @@ app.patch('/api/orders/:id/status', async (req, res) => {
 app.get('/api/info', (req, res) => res.json({ shopInfo, outlets }));
 
 app.get('/api/menu', async (req, res) => {
+  if (!firebaseReady) return res.json(menuItems); // Immediate local fallback
   try {
-    const snap = await db.collection('products').get();
+    const snap = await withTimeout(db.collection('products').get());
     const products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(products);
   } catch (err) {
-    res.json(menuItems); // Fallback to static
+    console.warn('⚠️ Firestore Menu Query failed, falling back to local data:', err.message);
+    res.json(menuItems); 
   }
 });
 
 app.get('/api/categories', async (req, res) => {
+  if (!firebaseReady) return res.json(categories); // Immediate local fallback
   try {
-    const snap = await db.collection('categories').get();
+    const snap = await withTimeout(db.collection('categories').get());
     const categoriesList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(categoriesList);
   } catch (err) {
-    res.json(categories); // Fallback to static
+    console.warn('⚠️ Firestore Categories Query failed, falling back to local data:', err.message);
+    res.json(categories);
   }
 });
 
