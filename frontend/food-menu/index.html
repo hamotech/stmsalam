@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STM Salam - Dynamic Food Menu</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="/" class="home-btn" title="Back to Home">
+                <i class="fa-solid fa-house"></i>
+                <span>Home</span>
+            </a>
+            <div class="logo">
+                <img src="stmsalamlogo.png" alt="STM Salam Logo" style="height: 50px; object-fit: contain;">
+            </div>
+            <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="menuSearch" placeholder="Search for food or drinks...">
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Crafted with Tradition, Served with <span class="highlight">Passion</span></h1>
+                <p>Authentic Teh Tarik, Burgers, and Indian Delights</p>
+            </div>
+        </section>
+
+        <section class="category-tabs" id="categoryTabs">
+            <!-- Categories will be injected here -->
+        </section>
+
+        <section class="menu-container" id="menuContainer">
+            <!-- Menu categories and items will be injected here -->
+        </section>
+
+        <section class="gallery-section" id="gallerySection" style="padding: 80px 0; background: #fffaf5;">
+            <div class="div-container">
+                <div style="text-align: center; margin-bottom: 50px;">
+                    <h2 style="font-size: 36px; color: #013220; font-weight: 900;">Moments at STM Salam</h2>
+                    <p style="color: #666; font-size: 18px;">A visual journey through our heritage and flavors.</p>
+                </div>
+                <div class="gallery-grid" id="galleryGrid">
+                    <!-- Gallery items will be injected here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="cartBar" class="cart-bar hidden">
+        <div class="cart-info">
+            <i class="fa-solid fa-bag-shopping"></i>
+            <span id="cartCount">0</span> items in your tray
+        </div>
+        <button class="checkout-btn">View Order <i class="fa-solid fa-arrow-right"></i></button>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>

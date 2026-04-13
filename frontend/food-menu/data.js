@@ -1,0 +1,107 @@
+// Auto-generated Menu Data from Folder Structure
+const menuStructure = {
+  "BURGER KABABAB": [
+    "BEEF BURGER CHEESY (SGD 7.40).png",
+    "BEEF BURGER classic (SGD 6.40).png",
+    "BEEF BURRTIO (SGD 10.40).jpg",
+    "BEEF HEALTHY BOWL (SGD 11.50).png",
+    "BEEF KEBAB (8.90).jpg",
+    "BEEF QUESADILLA (11.50).png",
+    "CHICKEN BURRITO (SGD 9.40).png",
+    "CHICKEN HEALTHY BOWL (SGD 11.00).jpg",
+    "CHICKEN KEBAB (SGD 6.90).png",
+    "CHICKEN QUESADILLA (SGD 10.50).jpg",
+    "Chicken burger CHEESY (SGD 6.90).png",
+    "Chicken burger classic (SGD 6.90).png",
+    "HUMMUS BEEF (tortilla) (SGD 11.50).png",
+    "HUMMUS CHICKEN (tortilla) (11.00).png",
+    "HUMMUS LAMB( tortilla) (SGD 13.50).png",
+    "Hummus (SGD 6.40).png",
+    "Hummus FALAFEL (tortilla) (SGD 10.90).png",
+    "LAMB BURGER CHEESY (SGD 7.90).png",
+    "LAMB BURGER CLASSIC (SGD 7.90).png",
+    "LAMB BURRITO (SGD 12.40).png",
+    "LAMB HEALTHY BOWL (SGD 12.50).jpg",
+    "LAMB KEBAB (SGD 10.40).png",
+    "LAMB QUESADILLA (SGD 12.10).png",
+    "MIX BURRITO (BEEF+CHICKEN) (SGD 11.40).png",
+    "MIX KEBAB (BEEF+CHICKEN) (SDG 9.50 ).png",
+    "PLATE RICE BEEF (SGD 11.50).png",
+    "PLATE RICE LAMB (SGD 12.50).png",
+    "PLATE RICE SHAWARMA CHICKEN (SGD 11.00).png",
+    "VEG FALAFEL BURRITO (9.40).jpg",
+    "VEG FALAFEL HEALTHY BOWL (SGD 11.00).png",
+    "VEG FALAFEL KEBAB (SGD 6.90).png",
+    "VEG FALAFEL QUESADILLA (SGD 10.40).jpg"
+  ],
+  "HOT": [
+    "BOOST HOT (SGD 2.50).png",
+    "BRU COFFEE GINGER (2.40 SGD ).png",
+    "BRU COFFEE NO SUGAR (SGD 2.40).png",
+    "Cofee cino HOT (SGD 3.00).png",
+    "GINGER HORLICKS HOT (SGD 2.70).png",
+    "GINGER KOPI ( SGD 2.40).png",
+    "GINGER WATER HOT (SGD 2.50).png",
+    "HOT MILK (1.80 SGD).png",
+    "Hot Teh Chino (SGD 3.00).png",
+    "HOT TEH O LIMAU (SGD 2.20).png",
+    "KOPI O GINGER (SGD 2.10).png",
+    "MILO GINGER (SGD 2.40).png",
+    "MILO HOT (SGD 2.40).png",
+    "MSALA TEA WITH GINGER ( SGD 2.50).png",
+    "NESCAFE GINGER (SGD 2.90).png",
+    "NESCAFE HOT (SGD 2.90).png",
+    "NESLO, HOT ( SGD 2.50).png",
+    "TEH C NO SUGAR (SGD 2.20).png",
+    "TEH O (SGD 1.70).png",
+    "TEH O GINGER (SGD 2.30).png",
+    "TEH O MINT HOT (SGD 2.10).png",
+    "TEH TARIK (SGD 2.00).png",
+    "TEH TARIK ICE (SGD 3.00).png",
+    "YING YANG ( SGD 2.20).png"
+  ],
+  "INDIAN FOOD": [
+    "Chicken biryani SGD 9.90.png",
+    "MEE COMPO SGD 12.90.png",
+    "MEE GORENG SGD 6.90.png",
+    "MEE GORENG SEA FOOD SGD 8.50.png",
+    "MURTABAK (CHICKEN ) SGD 10.90.png",
+    "MURTABAK (MUTTON) sgd 13.50.png",
+    "mutton biriyani SGD 11.20.png",
+    "PRATA TELUR SGD 4.20.png",
+    "TOSAI MASALA SGD 5.50.png"
+  ],
+  "SIDES": [
+    "CHEESE FRIES SGD 7.80.png",
+    "chicken nuggets (6 pieces) SGD 6.40.png",
+    "french fries SGD 6.90.png",
+    "ONION RINGS SGD 6.90.png"
+  ],
+  "SNACKS": [
+    "7 DAYS 1 piece SGD 1.50.png",
+    "Bhai suji SGD 8.00.png",
+    "Candy 1 packet SGD 1.70.png",
+    "Chicken curry puffs 1 piece SGD 2.40.png",
+    "Coconut bun SGD 1.20.png",
+    "Kaya bun SGD 1.20.png",
+    "mutton curry puff 1 piece SGD 2.40.png",
+    "Potato curry puffs 1 piece SGD 2.00.png",
+    "Roti curry 1 piece SGD 1.30.png",
+    "Roti curry 5 piece SGD 6.00.png",
+    "tapioca chips sgd 4.20.png",
+    "TAPIOCA SAMBAL SGD 4.70.png"
+  ],
+  "SUGARCANE": [
+    "Fresh sugarcan asam, ice (SGD 4.70).png",
+    "Fresh sugarcan ice (SGD 4.00).png",
+    "Fresh Sugercan, lemon LESS ice (SGD 4.50).png",
+    "Fresh Sugercan, lemon no ice (SGD 4.90).png"
+  ],
+  "COLD DRINKS": [
+    "Avocado Juice (SGD 5.50).png",
+    "Apple Juice (SGD 3.50).png",
+    "Watermelon Juice (SGD 4.00).png"
+  ]
+};
+
+export default menuStructure;
