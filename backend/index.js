@@ -8,6 +8,14 @@ import { createClient } from '@supabase/supabase-js';
 // Firebase Admin
 import { db, firebaseReady } from './lib/firebase.js';
 
+// Menu data & Parser
+import dynamicMenu from '../frontend/src/data/dynamicMenu.js';
+import { menuItems, categories, shopInfo, outlets } from '../frontend/src/data/menuData.js';
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'salam123stm';
+
 // Helper for Firestore with Timeout
 const withTimeout = (promise, ms = 2500) => {
   return Promise.race([
@@ -16,12 +24,49 @@ const withTimeout = (promise, ms = 2500) => {
   ]);
 };
 
-// Menu data (for seeding)
-import { menuItems, categories, shopInfo, outlets } from '../frontend/src/data/menuData.js';
+// Helper to parse filename (Duplicate of frontend logic for backend use)
+const parseFileName = (fileName) => {
+    const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+    const priceMatch = nameWithoutExt.match(/(\d+\.\d+)/);
+    const price = priceMatch ? parseFloat(priceMatch[0]) : 0.00;
+    let name = nameWithoutExt
+        .replace(/\(.*?\)/g, '')
+        .replace(/SGD|SDG/gi, '')
+        .replace(/(\d+\.\d+)/g, '')
+        .replace(/_/g, ' ')
+        .trim();
+    name = name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
+    return { name: name || "Delicious Item", price: price };
+};
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'salam123stm';
+// Process dynamicMenu into flat arrays for immediate use
+const allDynamicItems = [];
+const dynamicCategoriesList = [];
+let _pCount = 0;
+
+Object.entries(dynamicMenu).forEach(([catName, fileList]) => {
+    const catId = catName.toLowerCase().replace(/\s+/g, '-');
+    dynamicCategoriesList.push({
+        id: catId,
+        name: catName,
+        image: `/SMT FOOD/SMT FOOD/${catName}/${fileList[0]}`,
+        emoji: '🍽️',
+        active: true
+    });
+    fileList.forEach(file => {
+        const { name, price } = parseFileName(file);
+        allDynamicItems.push({
+            id: `dp-${_pCount++}`,
+            categoryId: catId,
+            name: name,
+            price: price,
+            image: `/SMT FOOD/SMT FOOD/${catName}/${file}`,
+            description: `Authentic ${name} - prepared fresh.`,
+            prepTime: 15,
+            active: true
+        });
+    });
+});
 
 // Optional Supabase setup
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -36,7 +81,7 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================================
-// SEEDING (Run once or check)
+// SEEDING (Comprehensive from Dynamic Menu)
 // ============================================================
 const seedFirestore = async () => {
   if (!firebaseReady) {
@@ -45,27 +90,60 @@ const seedFirestore = async () => {
   }
   try {
     const catsRef = db.collection('categories');
-    const catsSnap = await withTimeout(catsRef.limit(1).get());
-    if (catsSnap.empty) {
-      console.log('🌱 Seeding Categories to Firestore...');
-      const batch = db.batch();
-      categories.forEach(cat => {
-        const docRef = catsRef.doc(cat.id || `cat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`);
-        batch.set(docRef, { ...cat, createdAt: new Date().toISOString() });
-      });
-      await batch.commit();
-    }
-
     const prodsRef = db.collection('products');
+
+    const catsSnap = await withTimeout(catsRef.limit(1).get());
     const prodsSnap = await withTimeout(prodsRef.limit(1).get());
-    if (prodsSnap.empty) {
-      console.log('🌱 Seeding Products to Firestore...');
-      const batch = db.batch();
-      menuItems.forEach(item => {
-        const docRef = prodsRef.doc(item.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`);
-        batch.set(docRef, { ...item, createdAt: new Date().toISOString() });
-      });
-      await batch.commit();
+
+    if (catsSnap.empty || prodsSnap.empty) {
+      console.log('🌱 Starting Comprehensive Seeding from Dynamic Menu...');
+      
+      const catBatch = db.batch();
+      const prodBatch = db.batch();
+      
+      let prodCount = 0;
+
+      for (const [catName, fileList] of Object.entries(dynamicMenu)) {
+        const catId = catName.toLowerCase().replace(/\s+/g, '-');
+        
+        // Use the first item's image as the category image
+        const firstItemFile = fileList[0];
+        const catImg = `/SMT FOOD/SMT FOOD/${catName}/${firstItemFile}`;
+
+        // Add Category
+        const catDoc = catsRef.doc(catId);
+        catBatch.set(catDoc, {
+          id: catId,
+          name: catName,
+          image: catImg,
+          emoji: '🍽️',
+          active: true,
+          createdAt: new Date().toISOString()
+        });
+
+        // Add Products for this category
+        fileList.forEach(file => {
+          const { name, price } = parseFileName(file);
+          const prodId = `p-${Date.now()}-${prodCount++}`;
+          const prodDoc = prodsRef.doc(prodId);
+          prodBatch.set(prodDoc, {
+            id: prodId,
+            categoryId: catId,
+            name: name,
+            price: price,
+            image: `/SMT FOOD/SMT FOOD/${catName}/${file}`,
+            description: `Authentic ${name} - prepared fresh.`,
+            prepTime: 15,
+            active: true,
+            badge: null,
+            createdAt: new Date().toISOString()
+          });
+        });
+      }
+
+      await catBatch.commit();
+      await prodBatch.commit();
+      console.log('✅ Seeding Complete: Categories and Products synced.');
     }
   } catch (err) {
     console.error('❌ Firestore Seeding error:', err.message);
@@ -192,26 +270,26 @@ app.patch('/api/orders/:id/status', async (req, res) => {
 app.get('/api/info', (req, res) => res.json({ shopInfo, outlets }));
 
 app.get('/api/menu', async (req, res) => {
-  if (!firebaseReady) return res.json(menuItems); // Immediate local fallback
+  if (!firebaseReady) return res.json(allDynamicItems); // Use full dynamic menu
   try {
     const snap = await withTimeout(db.collection('products').get());
     const products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(products);
   } catch (err) {
     console.warn('⚠️ Firestore Menu Query failed, falling back to local data:', err.message);
-    res.json(menuItems); 
+    res.json(allDynamicItems); 
   }
 });
 
 app.get('/api/categories', async (req, res) => {
-  if (!firebaseReady) return res.json(categories); // Immediate local fallback
+  if (!firebaseReady) return res.json(dynamicCategoriesList); // Use fall dynamic categories
   try {
     const snap = await withTimeout(db.collection('categories').get());
     const categoriesList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(categoriesList);
   } catch (err) {
     console.warn('⚠️ Firestore Categories Query failed, falling back to local data:', err.message);
-    res.json(categories);
+    res.json(dynamicCategoriesList);
   }
 });
 
