@@ -38,17 +38,15 @@ export default function Cart() {
     else setShowGuestModal(true)
   }
 
-  const handleWhatsAppOrder = () => {
+  const handleWhatsAppOrder = (isDirectGuest = false) => {
     const itemsList = cartItems.map(item => `${item.qty}x ${item.name}`).join(', ')
-    const message = `New Order Request:%0AItems: ${itemsList}%0ATotal Price: $${total.toFixed(2)}%0APlease confirm my delivery address.`
+    const message = `*New Order Request (Guest)*\n\n*Items:* ${itemsList}\n*Subtotal:* $${subtotal.toFixed(2)}\n*Total:* $${total.toFixed(2)}\n\nHello STM Salam, I would like to place this order. Please advise on delivery timing.`
     
-    const whatsappUrl = `https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${message}`
+    const whatsappUrl = `https://wa.me/${(shopInfo?.whatsapp || '').replace(/\D/g, '')}?text=${message}`
     window.open(whatsappUrl, '_blank')
     
     clearCart()
-    const tempId = 'STM-' + Math.floor(Math.random() * 10000)
-    localStorage.setItem('stm_last_order_id', tempId)
-    navigate('/order-success')
+    navigate('/')
   }
 
   if (cartItems.length === 0) {

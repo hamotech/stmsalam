@@ -54,7 +54,6 @@ function Shell() {
           <Route path="/order-success" element={<PageWrapper><OrderSuccess /></PageWrapper>} />
           <Route path="/admin/*"    element={<PageWrapper><Admin /></PageWrapper>} />
           <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
-          <Route path="/seed"     element={<DataSeedPage />} />
         </Routes>
       </AnimatePresence>
       {!hide && <Footer />}

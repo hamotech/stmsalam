@@ -129,21 +129,23 @@ export default function Home() {
   const [showQR, setShowQR] = useState(false)
   const [showPayNow, setShowPayNow] = useState(false)
   const [dynamicProducts, setDynamicProducts] = useState([])
+  const [dynamicGallery, setDynamicGallery] = useState([])
 
   useEffect(() => {
-    const fetchData = () => {
-      const dbProducts = dataService.getProducts().filter(p => p.active !== false);
-      setDynamicProducts(dbProducts.length > 0 ? dbProducts : menuItems);
-    };
-    
-    fetchData();
-    window.addEventListener('storage', fetchData);
-    window.addEventListener('stm_data_updated', fetchData);
+    // We now subscribe directly to Firestore to keep the homepage favorites hot-synced
+    const unsubscribeProducts = dataService.subscribeProducts((products) => {
+      const activeProducts = products.filter(p => p.active !== false);
+      setDynamicProducts(activeProducts.length > 0 ? activeProducts : menuItems);
+    });
+
+    const unsubscribeGallery = dataService.subscribeGallery((items) => {
+      setDynamicGallery(items.filter(i => i.active !== false).slice(0, 4));
+    });
     
     return () => {
-      window.removeEventListener('storage', fetchData);
-      window.removeEventListener('stm_data_updated', fetchData);
-    }
+      unsubscribeProducts();
+      unsubscribeGallery();
+    };
   }, [])
 
 
@@ -612,6 +614,71 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ══════════ SCAN & PAY QUICK SECTION ══════════ */}
+        <section style={{ marginBottom: '80px' }}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.98 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            style={{ 
+              background: 'white', 
+              borderRadius: '40px', 
+              padding: '48px', 
+              border: '1px solid #e2e8f0', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '48px', 
+              flexWrap: 'wrap',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.03)'
+            }}
+          >
+            <div style={{ flex: '1', minWidth: '300px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--gold-tint)', color: 'var(--gold)', padding: '8px 16px', borderRadius: '100px', fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '20px' }}>
+                <QrCode size={16} /> Instant Payment
+              </div>
+              <h2 style={{ fontSize: '36px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '20px', letterSpacing: '-1.5px' }}>Scan & Pay Instantly</h2>
+              <p style={{ color: 'var(--text-light)', fontSize: '17px', fontWeight: 500, lineHeight: 1.6, marginBottom: '32px' }}>
+                In a hurry? You can scan our official SGQR PayNow code directly from your banking app to pay for your orders or support the shop. 
+              </p>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <button onClick={() => setShowQR(true)} style={{ background: 'var(--green-dark)', color: 'white', border: 'none', padding: '16px 32px', borderRadius: '16px', fontWeight: 900, fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <ScanLine size={20} /> Open Scanner
+                </button>
+                <Link to="/menu" style={{ background: 'var(--cream)', color: 'var(--green-dark)', padding: '16px 32px', borderRadius: '16px', fontWeight: 900, fontSize: '16px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  Browse Menu <ArrowRight size={20} />
+                </Link>
+              </div>
+            </div>
+            
+            <motion.div 
+              whileHover={{ scale: 1.02, rotate: 1 }}
+              onClick={() => setShowQR(true)}
+              style={{ 
+                width: '240px', 
+                background: '#f8fafc', 
+                padding: '20px', 
+                borderRadius: '35px', 
+                border: '2px solid var(--gold)', 
+                cursor: 'pointer',
+                position: 'relative'
+              }}
+            >
+              <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, whiteSpace: 'nowrap' }}>Official SGQR</div>
+              <div style={{ background: 'white', borderRadius: '25px', padding: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
+                <img 
+                  src="/qr-payment.png" 
+                  alt="Scan to Pay" 
+                  style={{ width: '100%', height: 'auto', borderRadius: '15px' }} 
+                  onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=STMSalam_Pay'; }}
+                />
+              </div>
+              <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>TAP TO ENLARGE</div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </section>
+
         {/* ══════════ WHY CHOOSE STM SALAM ══════════ */}
         <section style={{ marginBottom: '64px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
@@ -647,11 +714,11 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
-            {galleryMedia.slice(0, 4).map((file, i) => {
-              const isVideo = file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.mov');
+            {dynamicGallery.map((item, i) => {
+              const isVideo = item.type === 'video';
               return (
                 <motion.div
-                  key={file}
+                  key={item.id}
                   whileHover={{ scale: 0.98 }}
                   onClick={() => navigate('/gallery')}
                   style={{ 
@@ -666,20 +733,17 @@ export default function Home() {
                 >
                   {isVideo ? (
                     <video 
-                      src={`/aboutusimage/${file}`} 
+                      src={item.url} 
                       muted 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
                       onMouseOver={e => e.target.play()}
                       onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
                     />
                   ) : (
-                    <img src={`/aboutusimage/${file}`} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   )}
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
                     {isVideo && <PlayCircle size={40} color="white" style={{ opacity: 0.8 }} />}
-                  </div>
-                  <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', opacity: 0 }}>
-                    {/* Hover effect to show view details */}
                   </div>
                 </motion.div>
               );
@@ -971,11 +1035,10 @@ function ActiveOrderTracker() {
     if (!orderId) return
     const checkOrder = async () => {
       try {
-        const res = await fetch(`${API_URL}/orders/${orderId}`)
-        const data = await res.json()
-        if (data.id && data.status !== 'delivered') setActiveOrder(data)
+        const data = await dataService.fetchOrderById(orderId);
+        if (data && data.status && data.status.toLowerCase() !== 'delivered') setActiveOrder(data)
         else setActiveOrder(null)
-      } catch (e) { console.log('Tracker error') }
+      } catch (e) { console.log('Tracker error:', e) }
     }
     checkOrder()
     const interval = setInterval(checkOrder, 10000)

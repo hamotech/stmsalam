@@ -65,28 +65,28 @@ export default function DataSeedPage() {
         </div>
 
         {/* Preview of local data */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
           {[
-            { label: 'Categories', count: local.categories.length, color: '#0ea5e9' },
-            { label: 'Products', count: local.products.length, color: '#10b981' },
-            { label: 'Orders', count: local.orders.length, color: '#d97706' },
+            { label: 'Categories', count: local.categories?.length || 0, color: '#0ea5e9' },
+            { label: 'Products', count: local.products?.length || 0, color: '#10b981' },
+            { label: 'Orders', count: local.orders?.length || 0, color: '#d97706' },
+            { label: 'Gallery', count: 30, color: '#8b5cf6' },
           ].map(({ label, count, color }) => (
-            <div key={label} style={{ background: '#f8fafc', borderRadius: '16px', padding: '20px', textAlign: 'center', border: `2px solid ${color}22` }}>
-              <div style={{ fontSize: '32px', fontWeight: '900', color }}>{count}</div>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', marginTop: '4px' }}>{label}</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>in localStorage</div>
+            <div key={label} style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px 8px', textAlign: 'center', border: `2px solid ${color}22` }}>
+              <div style={{ fontSize: '24px', fontWeight: '900', color }}>{count}</div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginTop: '4px' }}>{label}</div>
             </div>
           ))}
         </div>
 
         {/* Warning if no data */}
-        {local.categories.length === 0 && local.products.length === 0 && local.orders.length === 0 && (
+        {(!local.categories || local.categories.length === 0) && (!local.products || local.products.length === 0) && (!local.orders || local.orders.length === 0) && (
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '16px', padding: '20px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
             <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <div style={{ fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>No localStorage data found</div>
+              <div style={{ fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>Limited local data found</div>
               <div style={{ fontSize: '13px', color: '#a16207', lineHeight: '1.5' }}>
-                Your localStorage appears empty. Open the app in the same browser where you previously used it, then run this migration.
+                We will still migrate your baseline categories and gallery photos into Firebase.
               </div>
             </div>
           </div>
@@ -107,6 +107,10 @@ export default function DataSeedPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                 <span style={{ color: '#374151', fontWeight: '700' }}>Products migrated</span>
                 <span style={{ fontWeight: '900', color: '#15803d' }}>{results.products}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                <span style={{ color: '#374151', fontWeight: '700' }}>Gallery photos migrated</span>
+                <span style={{ fontWeight: '900', color: '#15803d' }}>{results.gallery || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                 <span style={{ color: '#374151', fontWeight: '700' }}>Orders migrated</span>

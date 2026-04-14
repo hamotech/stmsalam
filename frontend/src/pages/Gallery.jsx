@@ -1,20 +1,19 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, X, ZoomIn, Maximize2, Image as ImageIcon, Film } from 'lucide-react'
-import { galleryMedia } from '../data/galleryData'
+import { dataService } from '../admin/services/dataService'
 
 export default function Gallery() {
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [filter, setFilter] = useState('all')
+  const [mediaItems, setMediaItems] = useState([])
 
-  const mediaItems = galleryMedia.map(file => {
-    const isVideo = file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.mov')
-    return {
-      url: `/aboutusimage/${file}`,
-      type: isVideo ? 'video' : 'image',
-      name: file
-    }
-  })
+  React.useEffect(() => {
+    const unsub = dataService.subscribeGallery((data) => {
+      setMediaItems(data.filter(item => item.active !== false))
+    })
+    return () => unsub()
+  }, [])
 
   const filteredMedia = filter === 'all' 
     ? mediaItems 

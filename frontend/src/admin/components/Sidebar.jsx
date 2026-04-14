@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users } from 'lucide-react';
+import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users, Image as ImageIcon } from 'lucide-react';
 
 const Sidebar = () => {
   const navItems = [
@@ -8,6 +8,7 @@ const Sidebar = () => {
     { name: 'Products', path: '/admin/products', icon: <PackageSearch size={20} /> },
     { name: 'Categories', path: '/admin/categories', icon: <Tags size={20} /> },
     { name: 'Orders', path: '/admin/orders', icon: <ShoppingBag size={20} /> },
+    { name: 'Gallery', path: '/admin/gallery', icon: <ImageIcon size={20} /> },
     { name: 'Customers', path: '/admin/customers', icon: <Users size={20} /> }
   ];
 
