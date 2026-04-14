@@ -62,7 +62,7 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
     >
       <div style={{ position: 'relative', height: '240px', overflow: 'hidden', background: '#f8fafc' }} onClick={() => navigate('/menu')}>
         <img 
-          src={item.image || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400'} 
+          src={item.img || item.image || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400'} 
           style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} 
           alt={item.name} 
         />
@@ -122,16 +122,18 @@ export default function Home() {
     '/aboutusimage/juice_bg.png', 
     '/aboutusimage/tea_snacks_bg.png'
   ]
-  const { cartItems, addToCart, updateQty } = useCart()
+  const { cartItems, subtotal, addToCart, updateQty } = useCart()
   const navigate = useNavigate()
   const scrollRef = useRef(null)
   const [weatherAlert, setWeatherAlert] = useState(true)
   const [showQR, setShowQR] = useState(false)
+  const [showPayNow, setShowPayNow] = useState(false)
   const [dynamicProducts, setDynamicProducts] = useState([])
 
   useEffect(() => {
     const fetchData = () => {
-      setDynamicProducts(dataService.getProducts().filter(p => p.active))
+      const dbProducts = dataService.getProducts().filter(p => p.active !== false);
+      setDynamicProducts(dbProducts.length > 0 ? dbProducts : menuItems);
     };
     
     fetchData();
@@ -396,7 +398,7 @@ export default function Home() {
           {[
             { icon: <MessageCircle size={28} />, label: 'WhatsApp Pay', desc: 'Order via chat', color: '#25d366', bg: 'rgba(37,211,102,0.08)', action: () => window.open(`https://wa.me/${shopInfo.whatsapp.replace(/[^0-9]/g, '')}`, '_blank') },
             { icon: <ScanLine size={28} />, label: 'ScanPay', desc: 'QR PayNow', color: 'var(--green-mid)', bg: 'var(--green-tint)', action: () => setShowQR(true) },
-            { icon: <CreditCard size={28} />, label: 'Pay via PayNow', desc: 'Scan & Pay Securely', color: '#4f46e5', bg: 'rgba(79,70,229,0.06)', action: () => navigate('/checkout') },
+            { icon: <CreditCard size={28} />, label: 'Pay via PayNow', desc: 'Scan & Pay Securely', color: '#4f46e5', bg: 'rgba(79,70,229,0.06)', action: () => setShowPayNow(true) },
             { icon: <Smartphone size={28} />, label: 'Get the App', desc: 'iOS & Android', color: 'var(--gold)', bg: 'var(--gold-tint)', action: () => document.getElementById('app-download')?.scrollIntoView({ behavior: 'smooth' }) },
           ].map((a, i) => (
             <motion.button key={i} whileHover={{ y: -4, boxShadow: '0 16px 40px rgba(0,0,0,0.08)' }} onClick={a.action}
@@ -407,6 +409,77 @@ export default function Home() {
             </motion.button>
           ))}
         </div>
+        
+        {/* ══════════ PAYNOW DEDICATED MODAL ══════════ */}
+        <AnimatePresence>
+          {showPayNow && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowPayNow(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(1, 50, 32, 0.92)', backdropFilter: 'blur(12px)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+              <motion.div initial={{ scale: 0.85, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 50 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                onClick={e => e.stopPropagation()}
+                style={{ background: 'white', borderRadius: '40px', padding: '36px 32px', textAlign: 'center', maxWidth: '440px', width: '100%', position: 'relative', overflow: 'hidden', margin: 'auto 0' }}>
+                
+                <button onClick={() => setShowPayNow(false)} style={{ position: 'absolute', top: '20px', right: '20px', width: '36px', height: '36px', borderRadius: '50%', background: '#f1f5f9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-light)', fontSize: '18px', fontWeight: 700 }}>✕</button>
+
+                <div style={{ width: '64px', height: '64px', background: 'var(--gold-tint)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                  <QrCode size={32} color="var(--gold)" />
+                </div>
+                
+                <h3 style={{ fontSize: '24px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '8px' }}>PayNow Secure Payment</h3>
+                <p style={{ color: 'var(--text-light)', fontWeight: 600, marginBottom: '24px', fontSize: '14px' }}>Scan the SGQR code to pay and confirm via WhatsApp.</p>
+
+                <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '28px', border: '2px solid #e2e8f0', marginBottom: '24px' }}>
+                  <div style={{ width: '220px', height: '220px', background: 'white', margin: '0 auto', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                    <object data="/CamScanner.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH" type="application/pdf" style={{ width: '220px', height: '220px', border: 'none' }}>
+                      <img src="/qr-payment.png" alt="QR Code" style={{ width: '180px', height: '180px' }} />
+                    </object>
+                  </div>
+                  
+                  <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
+                    <div style={{ background: 'white', padding: '12px', borderRadius: '16px', border: '1px solid #eef2f6' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-light)', fontWeight: 800, textTransform: 'uppercase' }}>Amount Due</div>
+                      <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--green-dark)' }}>SGD {(subtotal + (subtotal * 0.09) + (subtotal >= 30 ? 0 : 2)).toFixed(2)}</div>
+                    </div>
+                    <div style={{ background: 'white', padding: '12px', borderRadius: '16px', border: '1px solid #eef2f6' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-light)', fontWeight: 800, textTransform: 'uppercase' }}>Temp Order ID</div>
+                      <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--gold)' }}>#PN-{Math.floor(1000 + Math.random() * 9000)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'left', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--green-dark)', marginBottom: '8px' }}>Instructions:</div>
+                  {[
+                    "Scan the SGQR code with your banking app.",
+                    "Pay the total amount shown above.",
+                    "Tap 'I Have Paid' to send screenshot on WhatsApp."
+                  ].map((text, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '13px', color: 'var(--text-light)', fontWeight: 600, marginBottom: '4px' }}>
+                      <div style={{ color: 'var(--green-mid)' }}>•</div> {text}
+                    </div>
+                  ))}
+                </div>
+
+                <motion.button 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    const tempId = `PN-${Math.floor(1000 + Math.random() * 9000)}`;
+                    const total = (subtotal + (subtotal * 0.09) + (subtotal >= 30 ? 0 : 2)).toFixed(2);
+                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Amount: SGD ${total}\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
+                    window.open(`https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                    setShowPayNow(false);
+                  }}
+                  className="btn btn-gold" 
+                  style={{ width: '100%', padding: '20px', borderRadius: '18px', fontSize: '17px', justifyContent: 'center', boxShadow: '0 10px 30px rgba(212,175,55,0.3)', gap: '10px' }}
+                >
+                  <CheckCircle size={22} /> I Have Paid
+                </motion.button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ══════════ OFFER / PROMO SECTION ══════════ */}
         <section style={{ marginBottom: '80px' }}>
@@ -428,14 +501,24 @@ export default function Home() {
               </div>
             </div>
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px' }}>
-              <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(10px)' }}>
-                <img src="/aboutusimage/juice_bg.png" alt="Special Drink" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
-                <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Special Drink</div>
-              </div>
-              <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(-10px)' }}>
-                <img src="/aboutusimage/tea_snacks_bg.png" alt="Snack Platter" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
-                <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Snack Platter</div>
-              </div>
+              {dynamicProducts.filter(p => p.badge === 'bestseller').slice(0, 2).map((p, i) => (
+                <div key={p.id} style={{ position: 'relative', width: '140px', height: '140px', transform: i === 0 ? 'translateY(10px)' : 'translateY(-10px)' }}>
+                  <img src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                  <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                </div>
+              ))}
+              {dynamicProducts.filter(p => p.badge === 'bestseller').length < 2 && (
+                <>
+                  <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(10px)' }}>
+                    <img src="/aboutusimage/juice_bg.png" alt="Special Drink" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                    <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Special Drink</div>
+                  </div>
+                  <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(-10px)' }}>
+                    <img src="/aboutusimage/tea_snacks_bg.png" alt="Snack Platter" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                    <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Snack Platter</div>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         </section>
@@ -463,26 +546,49 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '32px', marginBottom: '56px' }}>
-            {dynamicProducts.filter(item => [
-              "Teh Tarik", 
-              "Msala Tea With Ginger", 
-              "Ginger Kopi", 
-              "Hot Teh O Limau", 
-              "Milo Hot", 
-              "Beef Burger Classic"
-            ].includes(item.name)).map((item, idx) => (
-              <FavoriteItemCard 
-                key={item.id} 
-                item={item} 
-                idx={idx} 
-                inCart={cartItems.find(c => c.id === item.id)}
-                addToCart={addToCart}
-                navigate={navigate}
-              />
-            ))}
+            {dynamicProducts
+              .filter(item => {
+                const catObj = item.category;
+                const cat = (typeof catObj === 'string' ? catObj : catObj?.name || '').toLowerCase();
+                const name = (item.name || '').toLowerCase();
+                
+                // Broad matching for user-requested favorites: tea, sugarcane juice, burgers
+                const isTea = (cat.includes('drink') || cat.includes('tea')) && name.includes('tea');
+                const isSugarcaneOrJuice = cat.includes('sugarcane') || name.includes('sugarcane') || name.includes('juice') || name.includes('sugar');
+                const isBurger = cat.includes('burger') || name.includes('burger');
+                
+                return isTea || isSugarcaneOrJuice || isBurger;
+              })
+              .sort((a, b) => (b.badge === 'bestseller' ? 1 : 0) - (a.badge === 'bestseller' ? 1 : 0)) // Show bestsellers first
+              .slice(0, 8) // Show up to 8 items in the grid
+              .map((item, idx) => (
+                <FavoriteItemCard 
+                  key={item.id} 
+                  item={item} 
+                  idx={idx} 
+                  inCart={cartItems.find(c => c.id === item.id)}
+                  addToCart={addToCart}
+                  navigate={navigate}
+                />
+              ))}
           </div>
 
           <div style={{ textAlign: 'center' }}>
+            {/* View Full Menu Image Preview */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+              {dynamicProducts.slice(0, 4).map((p, i) => (
+                <motion.div key={p.id || i} initial={{ x: -20, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.1 }}
+                  style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', overflow: 'hidden', marginLeft: i === 0 ? 0 : '-15px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)', background: '#f1f5f9' }}>
+                  <img src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </motion.div>
+              ))}
+              {dynamicProducts.length > 4 && (
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', background: 'var(--green-tint)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, marginLeft: '-15px', zIndex: 1, boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
+                  +{dynamicProducts.length - 4}
+                </div>
+              )}
+            </div>
+
             <motion.button
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
@@ -817,7 +923,7 @@ export default function Home() {
                 style={{ width: '240px', height: '480px', background: 'var(--green-dark)', borderRadius: '36px', border: '3px solid rgba(255,255,255,0.15)', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', position: 'relative' }}>
                 <div style={{ padding: '24px 16px 16px', background: '#0d3320' }}>
                   <div style={{ fontWeight: 800, fontSize: '18px', color: 'white' }}>Our Location</div>
-                  <div style={{ opacity: 0.7, color: 'white', fontSize: '12px' }}>Blk 55 Marine Terrace, #01-303, Singapore 440055</div>
+                  <div style={{ opacity: 0.7, color: 'white', fontSize: '12px' }}>Blk 59 Marine Terrace, #01-95, Singapore 440059</div>
                   <div style={{ color: 'var(--gold)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', marginTop: '8px' }}>ZERO-G DELIVERY</div>
                 </div>
                 <div style={{ padding: '16px', flex: 1, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '12px' }}>

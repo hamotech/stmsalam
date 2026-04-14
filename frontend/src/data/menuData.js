@@ -1,7 +1,7 @@
 export const shopInfo = {
   name: 'STM Salam',
   tagline: "Authentic Kopitiam Flavors, Delivered.",
-  address: 'Blk 55 Marine Terrace, #01-303, Singapore 440055',
+  address: 'Blk 59 Marine Terrace, #01-95, Singapore 440059',
   phone: '+65 9191 5766',
   whatsapp: '+65 9191 5766',
   email: 'highlitesg786@gmail.com',
@@ -12,6 +12,10 @@ export const shopInfo = {
   minOrder: 10.00,
   avgDeliveryTime: '25–35 min',
 }
+
+export const outlets = [
+  { id: 1, name: 'STM Salam — Blk 59', address: 'Blk 59 Marine Terrace, #01-95, Singapore 440059', phone: '+65 9191 5766', hours: 'Daily 9:00 AM – 11:00 PM', isMain: true, img: '/bg2.jpeg' },
+]
 
 export const categories = [
   { id: 'hot-drinks', name: 'Hot Drinks', emoji: '☕' },
@@ -35,6 +39,7 @@ export const menuItems = [
   // ─── COLD DRINKS ───
   { id: 10, category: 'cold-drinks', name: 'Kopi C Kosong Ice', price: 2.50, description: 'Iced coffee with evaporated milk, no sugar.', img: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=400', badge: 'bestseller' },
   { id: 11, category: 'cold-drinks', name: 'Honey Lemon Ice', price: 3.00, description: 'Honey and fresh lemon over ice.', img: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400', badge: null },
+  { id: 13, category: 'cold-drinks', name: 'Fresh Lemon Juice Ice', price: 3.00, description: 'Pure freshly squeezed lemon juice served over ice. Refreshing and zesty.', img: '/fresh_lemon_juice_ice_1776176224999.png', badge: 'bestseller' },
   { id: 12, category: 'cold-drinks', name: 'Teh Ginger Ice', price: 2.80, description: 'Iced ginger tea – refreshing and spicy.', img: 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400', badge: null },
 
   // ─── CAN DRINKS ───
@@ -87,6 +92,5 @@ export const promos = [
   { id: 1, code: 'STMSALAM2', title: '$2 OFF first order', subtitle: 'Welcome to STM Salam', color: '#013220' },
 ]
 
-export const outlets = [
-  { id: 1, name: 'STM Salam @ Marine Terrace', address: 'Blk 55 Marine Terrace, #01-303, Singapore 440055', phone: '+65 9191 5766', hours: '9:00 AM - 11:00 PM', isMain: true, img: '/bg1.jpeg' },
-]
+
+

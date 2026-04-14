@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { MapPin, Phone, Clock, Facebook, Instagram } from 'lucide-react'
-import { shopInfo } from '../../data/menuData'
+import { shopInfo, outlets } from '../../data/menuData'
 
 export default function Footer() {
   return (
@@ -21,17 +21,37 @@ export default function Footer() {
             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', lineHeight: 1.8, maxWidth: '300px', marginBottom: '32px' }}>
               Experience the peak of Marine Terrace hospitality. Premium ingredients, crafted with excellence and delivered with grace.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {[
-                { icon: <MapPin size={16} />, text: shopInfo.address },
-                { icon: <Phone size={16} />,  text: shopInfo.phone },
-                { icon: <Clock size={16} />,  text: shopInfo.hours },
-              ].map(({ icon, text }) => (
-                <div key={text} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>
-                  <span style={{ color: 'var(--gold)', marginTop: '2px', flexShrink: 0 }}>{icon}</span>
-                  {text}
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* High Highlight Phone */}
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--gold)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Phone size={20} />
                 </div>
-              ))}
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--gold)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>Quick Support</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900 }}>{shopInfo.phone}</div>
+                </div>
+              </div>
+
+              {/* Two Outlets */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {outlets.map((outlet, i) => (
+                  <div key={outlet.id} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', color: 'rgba(255,255,255,0.7)', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--gold)', marginTop: '2px', flexShrink: 0 }}><MapPin size={16} /></span>
+                    <div>
+                      <div style={{ color: 'white', fontWeight: 800, fontSize: '14px', marginBottom: '2px' }}>{outlet.name}</div>
+                      {outlet.address}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Hours */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>
+                <span style={{ color: 'var(--gold)', flexShrink: 0 }}><Clock size={16} /></span>
+                <span>{shopInfo.hours}</span>
+              </div>
             </div>
           </div>
 

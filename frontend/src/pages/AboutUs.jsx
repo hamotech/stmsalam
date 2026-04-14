@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, Clock, MapPin, Phone, Users, Scroll, ChefHat, Heart, Award, Star, ArrowRight, Play, X, Maximize2 } from 'lucide-react'
 import { galleryMedia } from '../data/galleryData'
 import { Link } from 'react-router-dom'
+import { shopInfo, outlets } from '../data/menuData'
 
 /* ── REUSABLE ANIMATED SECTION ── */
 const RevealSection = ({ children, delay = 0 }) => (
@@ -264,26 +265,36 @@ export default function AboutUs() {
               <div style={{ background: 'var(--green-dark)', borderRadius: '64px', overflow: 'hidden', padding: '80px', display: 'flex', flexWrap: 'wrap', gap: '80px', alignItems: 'center', color: 'white' }}>
                  <div style={{ flex: '1 1 400px' }}>
                     <h2 style={{ fontSize: '48px', fontWeight: 950, marginBottom: '32px', color: 'var(--gold)' }}>Visit Us Today</h2>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                       <div style={{ display: 'flex', gap: '16px' }}>
-                          <MapPin size={24} color="var(--gold)" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                       {/* Phone Highlight */}
+                       <div style={{ display: 'flex', gap: '20px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: 'var(--gold)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                             <Phone size={28} />
+                          </div>
                           <div>
-                             <div style={{ fontWeight: 800, fontSize: '18px' }}>Our Location</div>
-                             <div style={{ opacity: 0.7 }}>Blk 55 Marine Terrace, #01-303, Singapore 440055</div>
+                             <div style={{ fontWeight: 800, fontSize: '12px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '4px' }}>Call for Direct Order</div>
+                             <div style={{ fontWeight: 950, fontSize: '24px' }}>{shopInfo.phone}</div>
                           </div>
                        </div>
-                       <div style={{ display: 'flex', gap: '16px' }}>
-                          <Phone size={24} color="var(--gold)" />
-                          <div>
-                             <div style={{ fontWeight: 800, fontSize: '18px' }}>Call Us</div>
-                             <div style={{ opacity: 0.7 }}>+65 9191 5766</div>
-                          </div>
+
+                       {/* Outlets Grid */}
+                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '32px' }}>
+                          {outlets.map((outlet) => (
+                             <div key={outlet.id} style={{ display: 'flex', gap: '16px' }}>
+                                <MapPin size={24} color="var(--gold)" style={{ flexShrink: 0 }} />
+                                <div>
+                                   <div style={{ fontWeight: 900, fontSize: '16px', color: 'var(--gold)', marginBottom: '4px' }}>{outlet.name}</div>
+                                   <div style={{ opacity: 0.8, fontSize: '14px', lineHeight: 1.5 }}>{outlet.address}</div>
+                                </div>
+                             </div>
+                          ))}
                        </div>
-                       <div style={{ display: 'flex', gap: '16px' }}>
-                          <Clock size={24} color="var(--gold)" />
-                          <div>
-                             <div style={{ fontWeight: 800, fontSize: '18px' }}>Opening Hours</div>
-                             <div style={{ opacity: 0.7 }}>Daily 9:00 AM – 11:00 PM</div>
+
+                       {/* Hours */}
+                       <div style={{ display: 'flex', gap: '16px', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                          <Clock size={20} color="var(--gold)" />
+                          <div style={{ fontWeight: 800, fontSize: '15px' }}>
+                             Serving You <span style={{ color: 'var(--gold)' }}>{shopInfo.hours}</span>
                           </div>
                        </div>
                     </div>
