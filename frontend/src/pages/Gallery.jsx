@@ -117,7 +117,7 @@ export default function Gallery() {
                     </div>
                   </div>
                 ) : (
-                  <img 
+                  <img loading="lazy" 
                     src={item.url} 
                     alt={item.name}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
@@ -199,7 +199,7 @@ export default function Gallery() {
                   style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} 
                 />
               ) : (
-                <img 
+                <img loading="lazy" 
                   src={selectedMedia.url} 
                   alt={selectedMedia.name} 
                   style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block', objectFit: 'contain' }} 

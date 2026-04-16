@@ -77,7 +77,7 @@ export default function AboutUs() {
             <RevealSection>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '-40px', left: '-40px', width: '200px', height: '200px', background: 'rgba(212,175,55,0.1)', borderRadius: '50%', zIndex: -1 }} />
-                <img 
+                <img loading="lazy" 
                   src="/aboutusimage/tea_snacks_bg.png" 
                   alt="Our Heritage" 
                   style={{ width: '100%', borderRadius: '40px', boxShadow: '0 30px 60px rgba(0,0,0,0.1)' }} 
@@ -132,7 +132,7 @@ export default function AboutUs() {
               <RevealSection key={i} delay={i * 0.1}>
                  <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '32px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ height: '300px', overflow: 'hidden' }}>
-                       <img src={fav.img} alt={fav.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       <img loading="lazy" src={fav.img} alt={fav.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                     <div style={{ padding: '32px' }}>
                        <h3 style={{ fontSize: '22px', fontWeight: 900, marginBottom: '12px' }}>{fav.title}</h3>
@@ -203,7 +203,7 @@ export default function AboutUs() {
                       onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
                     />
                   ) : (
-                    <img src={item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img loading="lazy" src={item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   )}
                   {item.type === 'video' && (
                     <div style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -323,7 +323,7 @@ export default function AboutUs() {
               <X size={24} color="black" />
             </motion.button>
             <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }} onClick={e => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '32px', overflow: 'hidden' }}>
-              {selectedMedia.type === 'video' ? <video src={selectedMedia.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '85vh' }} /> : <img src={selectedMedia.url} style={{ maxWidth: '100%', maxHeight: '85vh' }} />}
+              {selectedMedia.type === 'video' ? <video src={selectedMedia.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '85vh' }} /> : <img loading="lazy" src={selectedMedia.url} style={{ maxWidth: '100%', maxHeight: '85vh' }} />}
             </motion.div>
           </motion.div>
         )}

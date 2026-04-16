@@ -153,7 +153,7 @@ export default function DriverPanel() {
                      width: '100%', height: '180px', background: '#e0e0e0', borderRadius: '24px', 
                      marginBottom: '24px', overflow: 'hidden', position: 'relative', border: '1px solid var(--border)'
                    }}>
-                      <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
+                      <img loading="lazy" src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                          <div style={{ width: '40px', height: '40px', background: 'var(--danger)', borderRadius: '50%', border: '4px solid white', boxShadow: '0 5px 15px rgba(0,0,0,0.2)' }} />
                       </div>

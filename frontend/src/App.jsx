@@ -1,23 +1,24 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
-import Home from './pages/Home'
-import Menu from './pages/Menu'
-import Cart from './pages/Cart'
-import Gallery from './pages/Gallery'
-import AboutUs from './pages/AboutUs'
-import Checkout from './pages/Checkout'
-import OrderTracking from './pages/OrderTracking'
-import Login from './pages/Login'
-import Profile from './pages/Profile'
-import OrderSuccess from './pages/OrderSuccess'
-import Admin from './pages/Admin'
-import DriverPanel from './pages/DriverPanel'
-import DataSeedPage from './pages/DataSeedPage'
+
+const Home = lazy(() => import('./pages/Home'))
+const Menu = lazy(() => import('./pages/Menu'))
+const Cart = lazy(() => import('./pages/Cart'))
+const Gallery = lazy(() => import('./pages/Gallery'))
+const AboutUs = lazy(() => import('./pages/AboutUs'))
+const Checkout = lazy(() => import('./pages/Checkout'))
+const OrderTracking = lazy(() => import('./pages/OrderTracking'))
+const Login = lazy(() => import('./pages/Login'))
+const Profile = lazy(() => import('./pages/Profile'))
+const OrderSuccess = lazy(() => import('./pages/OrderSuccess'))
+const Admin = lazy(() => import('./pages/Admin'))
+const DriverPanel = lazy(() => import('./pages/DriverPanel'))
+const DataSeedPage = lazy(() => import('./pages/DataSeedPage'))
 
 function PageWrapper({ children }) {
   return (
@@ -40,21 +41,24 @@ function Shell() {
     <>
       {!hide && <Navbar />}
       <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route path="/"         element={<PageWrapper><Home /></PageWrapper>} />
-          <Route path="/menu"     element={<PageWrapper><Menu /></PageWrapper>} />
-          <Route path="/gallery"  element={<PageWrapper><Gallery /></PageWrapper>} />
-          <Route path="/about"    element={<PageWrapper><AboutUs /></PageWrapper>} />
-          <Route path="/cart"     element={<PageWrapper><Cart /></PageWrapper>} />
-          <Route path="/checkout" element={<PageWrapper><Checkout /></PageWrapper>} />
-          <Route path="/tracking/:orderId" element={<PageWrapper><OrderTracking /></PageWrapper>} />
-          <Route path="/tracking" element={<PageWrapper><OrderTracking /></PageWrapper>} />
-          <Route path="/login"    element={<PageWrapper><Login /></PageWrapper>} />
-          <Route path="/profile"  element={<PageWrapper><Profile /></PageWrapper>} />
-          <Route path="/order-success" element={<PageWrapper><OrderSuccess /></PageWrapper>} />
-          <Route path="/admin/*"    element={<PageWrapper><Admin /></PageWrapper>} />
-          <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
-        </Routes>
+        <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><div style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTopColor: 'var(--green-dark)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /></div>}>
+          <Routes location={location} key={location.pathname}>
+            <Route path="/"         element={<PageWrapper><Home /></PageWrapper>} />
+            <Route path="/menu"     element={<PageWrapper><Menu /></PageWrapper>} />
+            <Route path="/gallery"  element={<PageWrapper><Gallery /></PageWrapper>} />
+            <Route path="/about"    element={<PageWrapper><AboutUs /></PageWrapper>} />
+            <Route path="/cart"     element={<PageWrapper><Cart /></PageWrapper>} />
+            <Route path="/checkout" element={<PageWrapper><Checkout /></PageWrapper>} />
+            <Route path="/tracking/:orderId" element={<PageWrapper><OrderTracking /></PageWrapper>} />
+            <Route path="/tracking" element={<PageWrapper><OrderTracking /></PageWrapper>} />
+            <Route path="/login"    element={<PageWrapper><Login /></PageWrapper>} />
+            <Route path="/profile"  element={<PageWrapper><Profile /></PageWrapper>} />
+            <Route path="/order-success" element={<PageWrapper><OrderSuccess /></PageWrapper>} />
+            <Route path="/admin/*"    element={<PageWrapper><Admin /></PageWrapper>} />
+            <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
+            <Route path="/seed"     element={<PageWrapper><DataSeedPage /></PageWrapper>} />
+          </Routes>
+        </Suspense>
       </AnimatePresence>
       {!hide && <Footer />}
     </>

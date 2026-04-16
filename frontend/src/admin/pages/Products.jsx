@@ -161,7 +161,7 @@ const Products = () => {
           <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
             <div style={{ width: '150px', height: '150px', borderRadius: '20px', background: '#f8fafc', border: '2px dashed #cbd5e1', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', position: 'relative' }}>
               {currentProduct.image ? (
-                <img src={currentProduct.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img loading="lazy" src={currentProduct.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <ImageIcon size={40} color="#94a3b8" />
               )}
@@ -281,7 +281,7 @@ const Products = () => {
               return (
                 <tr key={product.id} style={{ borderBottom: '1px solid #f1f5f9', transition: '0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <img
+                    <img loading="lazy"
                       src={product.image || product.img || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=120'}
                       alt={product.name}
                       style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', background: '#f1f5f9' }}

@@ -1,7 +1,7 @@
 export const shopInfo = {
   name: 'STM Salam',
   tagline: "Authentic Kopitiam Flavors, Delivered.",
-  address: 'Blk 59 Marine Terrace, #01-95, Singapore 440059',
+  address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
   phone: '+65 9191 5766',
   whatsapp: '+65 9191 5766',
   email: 'highlitesg786@gmail.com',
@@ -14,7 +14,7 @@ export const shopInfo = {
 }
 
 export const outlets = [
-  { id: 1, name: 'STM Salam — Blk 59', address: 'Blk 59 Marine Terrace, #01-95, Singapore 440059', phone: '+65 9191 5766', hours: 'Daily 9:00 AM – 11:00 PM', isMain: true, img: '/bg2.jpeg' },
+  { id: 1, name: 'STM Salam — Blk 50A', address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050', phone: '+65 9191 5766', hours: 'Daily 9:00 AM – 11:00 PM', isMain: true, img: '/bg2.jpeg' },
 ]
 
 export const categories = [

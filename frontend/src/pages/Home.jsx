@@ -61,7 +61,7 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
       }}
     >
       <div style={{ position: 'relative', height: '240px', overflow: 'hidden', background: '#f8fafc' }} onClick={() => navigate('/menu')}>
-        <img 
+        <img loading="lazy" 
           src={item.img || item.image || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400'} 
           style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} 
           alt={item.name} 
@@ -338,7 +338,7 @@ export default function Home() {
                     style={{ width: '240px', height: '300px', border: 'none' }}
                   >
                     {/* Fallback if browser can't render PDF inline */}
-                    <img 
+                    <img loading="lazy" 
                       src="/qr-payment.png" 
                       alt="SGQR PayNow Code" 
                       style={{ width: '200px', height: '200px', objectFit: 'contain' }} 
@@ -434,7 +434,7 @@ export default function Home() {
                 <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '28px', border: '2px solid #e2e8f0', marginBottom: '24px' }}>
                   <div style={{ width: '220px', height: '220px', background: 'white', margin: '0 auto', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
                     <object data="/CamScanner.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH" type="application/pdf" style={{ width: '220px', height: '220px', border: 'none' }}>
-                      <img src="/qr-payment.png" alt="QR Code" style={{ width: '180px', height: '180px' }} />
+                      <img loading="lazy" src="/qr-payment.png" alt="QR Code" style={{ width: '180px', height: '180px' }} />
                     </object>
                   </div>
                   
@@ -505,18 +505,18 @@ export default function Home() {
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px' }}>
               {dynamicProducts.filter(p => p.badge === 'bestseller').slice(0, 2).map((p, i) => (
                 <div key={p.id} style={{ position: 'relative', width: '140px', height: '140px', transform: i === 0 ? 'translateY(10px)' : 'translateY(-10px)' }}>
-                  <img src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                  <img loading="lazy" src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
                   <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                 </div>
               ))}
               {dynamicProducts.filter(p => p.badge === 'bestseller').length < 2 && (
                 <>
                   <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(10px)' }}>
-                    <img src="/aboutusimage/juice_bg.png" alt="Special Drink" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                    <img loading="lazy" src="/aboutusimage/juice_bg.png" alt="Special Drink" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
                     <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Special Drink</div>
                   </div>
                   <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(-10px)' }}>
-                    <img src="/aboutusimage/tea_snacks_bg.png" alt="Snack Platter" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                    <img loading="lazy" src="/aboutusimage/tea_snacks_bg.png" alt="Snack Platter" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
                     <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Snack Platter</div>
                   </div>
                 </>
@@ -581,7 +581,7 @@ export default function Home() {
               {dynamicProducts.filter(p => p.badge === 'bestseller' || p.badge === 'new').slice(0, 4).map((p, i) => (
                 <motion.div key={p.id || i} initial={{ x: -20, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.1 }}
                   style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', overflow: 'hidden', marginLeft: i === 0 ? 0 : '-15px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)', background: '#f1f5f9' }}>
-                  <img src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} title={p.name} />
+                  <img loading="lazy" src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} title={p.name} />
                 </motion.div>
               ))}
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', background: 'var(--gold)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '-15px', zIndex: 1, boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
@@ -665,7 +665,7 @@ export default function Home() {
             >
               <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, whiteSpace: 'nowrap' }}>Official SGQR</div>
               <div style={{ background: 'white', borderRadius: '25px', padding: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
-                <img 
+                <img loading="lazy" 
                   src="/qr-payment.png" 
                   alt="Scan to Pay" 
                   style={{ width: '100%', height: 'auto', borderRadius: '15px' }} 
@@ -740,7 +740,7 @@ export default function Home() {
                       onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
                     />
                   ) : (
-                    <img src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img loading="lazy" src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   )}
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
                     {isVideo && <PlayCircle size={40} color="white" style={{ opacity: 0.8 }} />}
@@ -990,7 +990,7 @@ export default function Home() {
                 </div>
                 <div style={{ padding: '16px', flex: 1, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400" style={{ width: '100%', height: '140px', objectFit: 'cover' }} alt="Classic Lamb Burger" />
+                    <img loading="lazy" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400" style={{ width: '100%', height: '140px', objectFit: 'cover' }} alt="Classic Lamb Burger" />
                     <div style={{ padding: '12px' }}>
                       <div style={{ fontWeight: 900, color: 'var(--green-dark)', fontSize: '14px', marginBottom: '4px' }}>Classic Lamb Burger</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1000,7 +1000,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', padding: '8px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                    <img src="https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Hummus Falafel" />
+                    <img loading="lazy" src="https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Hummus Falafel" />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 800, color: 'var(--green-dark)', fontSize: '12px', marginBottom: '2px' }}>Hummus Falafel</div>
                       <div style={{ fontWeight: 800, color: 'var(--green-mid)', fontSize: '11px' }}>$8.50</div>
@@ -1008,7 +1008,7 @@ export default function Home() {
                     <div style={{ width: '24px', height: '24px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px' }}>+</div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', padding: '8px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                    <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Onion Rings" />
+                    <img loading="lazy" src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Onion Rings" />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 800, color: 'var(--green-dark)', fontSize: '12px', marginBottom: '2px' }}>Onion Rings</div>
                       <div style={{ fontWeight: 800, color: 'var(--green-mid)', fontSize: '11px' }}>$5.00</div>

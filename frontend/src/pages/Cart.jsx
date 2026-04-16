@@ -90,7 +90,7 @@ export default function Cart() {
           {cartItems.map(item => (
             <div key={item.id} style={{ background: 'white', borderRadius: '24px', padding: '24px', display: 'flex', gap: '24px', alignItems: 'center', border: '1px solid var(--border)', boxShadow: 'var(--shadow-xs)' }}>
               <div style={{ width: '100px', height: '100px', borderRadius: '18px', overflow: 'hidden', flexShrink: 0 }}>
-                <img src={item.img} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img loading="lazy" src={item.img} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>

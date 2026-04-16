@@ -12,6 +12,7 @@ import { useCart } from '../context/CartContext'
 import AddressManager from '../components/AddressManager'
 import { motion, AnimatePresence } from 'framer-motion'
 import { dataService } from '../admin/services/dataService'
+import { validateRequired, validateEmail, validatePhone, validateFullName } from '../utils/validators'
 
 export default function Profile() {
   const auth = useAuth() || {}
@@ -33,6 +34,58 @@ export default function Profile() {
     dairyFree: false,
     nuts: false
   })
+
+  const [editProfile, setEditProfile] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || ''
+  })
+  const [profileErrors, setProfileErrors] = useState({})
+  const [profileSuccess, setProfileSuccess] = useState('')
+
+  useEffect(() => {
+    if (user) {
+      setEditProfile({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || ''
+      })
+    }
+  }, [user])
+
+  const handleProfileUpdate = (e) => {
+    e.preventDefault();
+    setProfileErrors({});
+    setProfileSuccess('');
+
+    const errors = {};
+    errors.name = validateFullName(editProfile.name);
+    errors.email = validateEmail(editProfile.email);
+    errors.phone = validatePhone(editProfile.phone);
+
+    Object.keys(errors).forEach(key => { if (!errors[key]) delete errors[key] });
+    if (Object.keys(errors).length > 0) {
+      setProfileErrors(errors);
+      return;
+    }
+
+    // Mock update locally since we are using local storage
+    const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]');
+    const userIndex = mockDb.findIndex(u => u.id === user.id || u.email === user.email);
+    if (userIndex >= 0) {
+      const updatedUser = { ...mockDb[userIndex], ...editProfile };
+      mockDb[userIndex] = updatedUser;
+      localStorage.setItem('stm_mock_db', JSON.stringify(mockDb));
+      
+      const { password, ...userWithoutPass } = updatedUser;
+      if (auth.login) auth.login(userWithoutPass);
+      
+      setProfileSuccess('Profile updated successfully!');
+      setTimeout(() => setProfileSuccess(''), 4000);
+    } else {
+      setProfileErrors({ form: 'Cannot update profile.' });
+    }
+  }
 
   // Fetch real orders from Firestore
   useEffect(() => {
@@ -242,16 +295,56 @@ export default function Profile() {
                {activeTab === 'settings' && (
                  <motion.div key="settings" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
                     <h2 style={{ fontSize: '28px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '32px' }}>Account Settings</h2>
-                    <div style={{ display: 'grid', gap: '24px' }}>
+                    
+                    {profileSuccess && (
+                      <div style={{ background: '#f0fdf4', color: '#16a34a', padding: '14px 20px', borderRadius: '14px', marginBottom: '20px', fontSize: '14px', fontWeight: 700, border: '1px solid #bbf7d0' }}>
+                        {profileSuccess}
+                      </div>
+                    )}
+                    {profileErrors.form && (
+                      <div style={{ background: '#fef2f2', color: '#dc2626', padding: '14px 20px', borderRadius: '14px', marginBottom: '20px', fontSize: '14px', fontWeight: 700, border: '1px solid #fecaca' }}>
+                        {profileErrors.form}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleProfileUpdate} noValidate style={{ display: 'grid', gap: '24px' }}>
+                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 950, color: '#94a3b8' }}>FULL NAME</label>
+                          <input 
+                            name="name"
+                            value={editProfile.name} 
+                            onChange={e => { setEditProfile({...editProfile, name: e.target.value}); setProfileErrors({...profileErrors, name: ''}) }}
+                            style={{ padding: '16px', borderRadius: '16px', border: `1.5px solid ${profileErrors.name ? '#dc2626' : '#f1f5f9'}`, background: '#f8fafc', fontWeight: 700, color: '#0f172a' }} 
+                          />
+                          {profileErrors.name && <div style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>{profileErrors.name}</div>}
+                       </div>
+                       
                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <label style={{ fontSize: '11px', fontWeight: 950, color: '#94a3b8' }}>EMAIL ADDRESS</label>
-                          <input readOnly value={user?.email || ''} style={{ padding: '16px', borderRadius: '16px', border: '1.5px solid #f1f5f9', background: '#f8fafc', fontWeight: 700, color: '#64748b' }} />
+                          <input 
+                            name="email"
+                            value={editProfile.email} 
+                            onChange={e => { setEditProfile({...editProfile, email: e.target.value}); setProfileErrors({...profileErrors, email: ''}) }}
+                            style={{ padding: '16px', borderRadius: '16px', border: `1.5px solid ${profileErrors.email ? '#dc2626' : '#f1f5f9'}`, background: '#f8fafc', fontWeight: 700, color: '#0f172a' }} 
+                          />
+                          {profileErrors.email && <div style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>{profileErrors.email}</div>}
                        </div>
+                       
                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <label style={{ fontSize: '11px', fontWeight: 950, color: '#94a3b8' }}>PHONE NUMBER</label>
-                          <input readOnly value={user?.phone || ''} style={{ padding: '16px', borderRadius: '16px', border: '1.5px solid #f1f5f9', background: '#f8fafc', fontWeight: 700, color: '#64748b' }} />
+                          <input 
+                            name="phone"
+                            value={editProfile.phone} 
+                            onChange={e => { setEditProfile({...editProfile, phone: e.target.value}); setProfileErrors({...profileErrors, phone: ''}) }}
+                            style={{ padding: '16px', borderRadius: '16px', border: `1.5px solid ${profileErrors.phone ? '#dc2626' : '#f1f5f9'}`, background: '#f8fafc', fontWeight: 700, color: '#0f172a' }} 
+                          />
+                          {profileErrors.phone && <div style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>{profileErrors.phone}</div>}
                        </div>
-                    </div>
+
+                       <button type="submit" style={{ padding: '16px', borderRadius: '16px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', marginTop: '10px' }}>
+                         Save Changes
+                       </button>
+                    </form>
                  </motion.div>
                )}
             </AnimatePresence>

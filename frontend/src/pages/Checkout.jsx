@@ -5,7 +5,8 @@ import {
   ShieldCheck, ChevronDown, Check, User, Mail, MessageSquare, 
   ArrowLeft, ReceiptText, Lock, QrCode, ArrowRight, PlayCircle, XCircle 
 } from 'lucide-react'
-import { shopInfo } from '../data/menuData'
+import { shopInfo } from '../data/menuData';
+import payScanner from '../assets/payscanner.png';
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { placeOrder } from '../admin/services/dataService'
@@ -31,10 +32,10 @@ export default function Checkout() {
     notes: '',
   })
 
-  const [paymentStatus, setPaymentStatus] = useState('idle') 
-  const [orderDetails, setOrderDetails] = useState(null)
-  const [processing, setProcessing] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [orderDetails, setOrderDetails] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 500);
@@ -80,7 +81,8 @@ export default function Checkout() {
           mode,
           payment,
           notes: formData.notes || '',
-          payment_status: payment === 'cash' ? 'pending' : 'awaiting_screenshot',
+          payment_status: payment === 'cash' ? 'Cash on Delivery' : 'Pending Verification',
+          order_status: payment === 'cash' ? 'Pending' : 'Pending Payment Confirmation',
           stage: 'kitchen_preparation',
           userId: user?.id || 'anonymous'
       });
@@ -88,16 +90,13 @@ export default function Checkout() {
       setOrderDetails(newOrder)
       
       if (payment === 'paynow') {
-        setPaymentStatus('awaiting')
+        setShowPaymentModal(true)
       } else {
-        const message = `Hello STM Salam, I placed a *${payment}* order!\n\nOrder ID: ${newOrder?.id}\nName: ${formData.name}\nTotal: SGD ${(total || 0).toFixed(2)}\n\nLooking forward to my meal!`
-        const waUrl = `https://wa.me/${(shopInfo?.whatsapp || '6591915766').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
-        window.open(waUrl, '_blank')
         finalizeSuccess(newOrder)
       }
     } catch (err) {
       console.error('Order Error:', err);
-      alert('Failed to process order. Please try again.');
+      alert('Failed to process order: ' + err.message);
     } finally {
       setProcessing(false)
     }
@@ -213,6 +212,7 @@ export default function Checkout() {
                     <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px' }}>{item.qty}</div>
                     <span style={{ fontWeight: 800, fontSize: '15px' }}>{item.name}</span>
                   </div>
+
                   <span style={{ fontWeight: 950, color: 'var(--green-dark)' }}>${((item.price || 0) * (item.qty || 0)).toFixed(2)}</span>
                 </div>
               ))}
@@ -292,22 +292,23 @@ export default function Checkout() {
         </div>
       </div>
 
-      {/* ── SGQR PayNow Modal ── */}
+      {/* ── PayNow Scanner Modal ── */}
       <AnimatePresence>
-        {paymentStatus === 'awaiting' && orderDetails && (
+        {showPaymentModal && orderDetails && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
             <div style={{ background: 'white', borderTop: '6px solid var(--gold)', borderRadius: '32px', padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-              <img src="/paynow-logo.png" style={{ height: '30px', marginBottom: '16px' }} alt="PayNow" onError={(e) => { e.target.style.display = 'none'; }} />
-              <h2 style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>Scan to Pay</h2>
-              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Use your banking app to scan the SGQR below.</p>
-              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '2px solid var(--gold)' }}>
-                <img src="/qr-payment.png" style={{ width: '100%', maxWidth: '240px', borderRadius: '12px' }} alt="Payment QR" onError={(e) => { e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=STMSalam_Pay_SGD_${total.toFixed(2)}`; }} />
+              <h2 style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>Scan & Pay</h2>
+              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Scan this code to make payment</p>
+              <img loading="lazy" src={payScanner} alt="Scanner" style={{ width: '200px', maxWidth: '100%', borderRadius: '12px', marginBottom: '16px' }} />
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                <button onClick={() => {
+                  const message = `Hello STM Salam, please scan the payment QR for order #${orderDetails.id?.slice(-6) || ''}`;
+                  const waUrl = `https://wa.me/${(shopInfo?.whatsapp || '6591915766').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+                  window.open(waUrl, '_blank');
+                }} style={{ flex: 1, padding: '12px', background: 'var(--green-mid)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer' }}>Share on WhatsApp</button>
+                <button onClick={() => { finalizeSuccess(orderDetails); }} style={{ flex: 1, padding: '12px', background: 'var(--green-dark)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer' }}>I Have Completed Payment</button>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px', textAlign: 'left', background: 'var(--cream)', padding: '16px', borderRadius: '16px' }}>
-                <div><div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>AMOUNT</div><div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--green-dark)' }}>${total.toFixed(2)}</div></div>
-                <div><div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>REF ID</div><div style={{ fontSize: '20px', fontWeight: 900 }}>#{orderDetails.id?.slice(-6) || 'N/A'}</div></div>
-              </div>
-              <button onClick={handlePaidNotification} style={{ width: '100%', padding: '18px', background: 'var(--green-dark)', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 900, fontSize: '16px', cursor: 'pointer' }}>I Have Paid</button>
+              <button onClick={() => setShowPaymentModal(false)} style={{ marginTop: '8px', padding: '8px', background: 'transparent', color: '#64748b', border: 'none', cursor: 'pointer' }}>Back</button>
             </div>
           </div>
         )}

@@ -56,7 +56,7 @@ export default function Navbar() {
             display: 'flex', alignItems: 'center', gap: '12px', 
             textDecoration: 'none', transition: 'transform 0.2s'
           }}>
-            <img src="/stmsalamlogo.png" alt="Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+            <img loading="lazy" src="/stmsalamlogo.png" alt="Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
           </Link>
 
           {/* DESKTOP NAV (Hidden < 968px) */}

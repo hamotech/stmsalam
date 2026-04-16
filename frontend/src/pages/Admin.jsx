@@ -7,6 +7,8 @@ import Products from '../admin/pages/Products';
 import Orders from '../admin/pages/Orders';
 import Categories from '../admin/pages/Categories';
 import GalleryAdmin from '../admin/pages/GalleryAdmin';
+import Customers from '../admin/pages/Customers';
+import AdminSettings from '../admin/pages/AdminSettings';
 import { useAuth } from '../context/AuthContext';
 
 const AdminLayout = ({ children }) => {
@@ -46,7 +48,8 @@ export default function Admin() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/gallery" element={<GalleryAdmin />} />
-        <Route path="/customers" element={<div style={{ padding: "40px" }}><h2>Customers feature in progress...</h2></div>} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/settings" element={<AdminSettings />} />
       </Routes>
     </AdminLayout>
   );

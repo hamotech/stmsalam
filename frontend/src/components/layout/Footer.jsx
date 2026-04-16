@@ -12,7 +12,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="footer-brand">
             <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <img src="/stmsalamlogo.png" alt="Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
+              <img loading="lazy" src="/stmsalamlogo.png" alt="Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: '26px', fontWeight: 950, color: 'var(--gold)', letterSpacing: '-0.5px', lineHeight: 1 }}>Salam</div>
                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', marginTop: '4px' }}>Genuine Taste Since 1988</div>
@@ -101,7 +101,7 @@ export default function Footer() {
             </div>
             <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.1)' }} />
             <span style={{ background: 'var(--gold)', color: 'var(--green-dark)', fontSize: '11px', fontWeight: 950, padding: '6px 14px', borderRadius: '30px', letterSpacing: '1px' }}>HALAL Certified</span>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>Singapore · Marine Terrace</span>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050</span>
           </div>
         </div>
       </div>

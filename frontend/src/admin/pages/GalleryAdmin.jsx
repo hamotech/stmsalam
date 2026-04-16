@@ -135,7 +135,7 @@ const GalleryAdmin = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ width: '100%', aspectRatio: '1/1', background: '#f8fafc', borderRadius: '24px', border: '2px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
               {currentItem.url ? (
-                <img src={currentItem.url} alt="Gallery Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img loading="lazy" src={currentItem.url} alt="Gallery Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ textAlign: 'center', color: '#94a3b8' }}>
                   <ImageIcon size={48} style={{ marginBottom: '12px' }} />
@@ -228,7 +228,7 @@ const GalleryAdmin = () => {
         {items.map(item => (
           <div key={item.id} style={{ background: 'white', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #eef2f6', position: 'relative' }}>
             <div style={{ width: '100%', height: '220px', background: '#f8fafc', overflow: 'hidden' }}>
-              <img src={item.url} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img loading="lazy" src={item.url} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             {!item.active && (
               <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(239, 68, 68, 0.9)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase' }}>Hidden</div>

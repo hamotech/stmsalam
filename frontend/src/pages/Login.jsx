@@ -4,12 +4,15 @@ import { Phone, Lock, User, ArrowRight, ShieldCheck, Mail, Eye, EyeOff, UserPlus
 import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
 import { API_URL } from '../config/api'
+import { validateRequired, validateEmail, validatePhone, validatePasswordStrength, validateConfirmPassword, validateFullName } from '../utils/validators'
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'guest'
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -25,32 +28,40 @@ export default function Login() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
     setError('')
+    setFieldErrors({ ...fieldErrors, [e.target.name]: '' })
   }
 
   const handleRegister = async (e) => {
     e.preventDefault()
     setError('')
+    
+    const errors = {};
+    errors.name = validateFullName(formData.name);
+    errors.email = validateEmail(formData.email);
+    errors.phone = validatePhone(formData.phone);
+    errors.password = validatePasswordStrength(formData.password);
+    errors.confirmPassword = validateConfirmPassword(formData.password, formData.confirmPassword);
+    
+    Object.keys(errors).forEach(key => { if (!errors[key]) delete errors[key] });
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return
-    }
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match.')
-      return
-    }
+    setIsSubmitting(true);
+    const safeEmail = formData.email.trim().toLowerCase()
 
     try {
       // --- MOCK PERSISTENCE LAYER ---
       const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]')
-      if (mockDb.find(u => u.email === formData.email)) {
+      if (mockDb.find(u => u.email?.toLowerCase() === safeEmail)) {
         throw new Error('Email already registered.')
       }
 
       const newUser = {
         id: 'USR-' + Math.random().toString(36).substr(2, 9),
         name: formData.name,
-        email: formData.email,
+        email: safeEmail,
         phone: formData.phone,
         password: formData.password, // In a real app, this would be hashed
         createdAt: new Date().toISOString()
@@ -74,6 +85,8 @@ export default function Login() {
 
     } catch (err) {
       setError(err.message)
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -81,15 +94,32 @@ export default function Login() {
     e.preventDefault()
     setError('')
 
+    const errors = {};
+    errors.email = validateEmail(formData.email);
+    errors.password = validateRequired(formData.password, 'Password');
+    
+    Object.keys(errors).forEach(key => { if (!errors[key]) delete errors[key] });
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const safeEmail = formData.email.trim().toLowerCase()
+
     try {
       // --- MOCK DATABASE CHECK ---
       const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]')
-      const userMatch = mockDb.find(u => u.email === formData.email && u.password === formData.password)
+      const userMatch = mockDb.find(u => u.email?.toLowerCase() === safeEmail && u.password === formData.password)
 
-      if (formData.email === 'admin@stm.com' && formData.password === 'admin123') {
-         login({ id: 'ADMIN-001', name: 'Admin Master', email: 'admin@stm.com', role: 'admin' })
+      const defaultAdmin = { email: 'admin@stm.com', password: 'admin123' };
+      const adminCreds = JSON.parse(localStorage.getItem('stm_admin_creds')) || defaultAdmin;
+
+      if (safeEmail === adminCreds.email.toLowerCase() && formData.password === adminCreds.password) {
+         login({ id: 'ADMIN-001', name: 'Admin Master', email: adminCreds.email, role: 'admin' })
          setSuccess('Admin login successful! Redirecting...')
          setTimeout(() => navigate('/admin'), 1200)
+         setIsSubmitting(false);
          return
       }
 
@@ -98,6 +128,7 @@ export default function Login() {
          login(userWithoutPass)
          setSuccess('Welcome back! Redirecting...')
          setTimeout(() => navigate(redirectPath), 1200)
+         setIsSubmitting(false);
          return
       }
 
@@ -106,7 +137,7 @@ export default function Login() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.email,
+          email: safeEmail,
           password: formData.password
         })
       })
@@ -118,6 +149,8 @@ export default function Login() {
       setTimeout(() => navigate(redirectPath), 1200)
     } catch (err) {
       setError(err.message)
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -140,6 +173,29 @@ export default function Login() {
     color: active ? 'var(--green-dark)' : 'var(--text-light)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
   })
+
+  const renderInput = ({ icon: Icon, name, type, placeholder, maxLength, isPassword }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ position: 'relative' }}>
+        <Icon size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
+        <input 
+          name={name} 
+          type={isPassword && showPass ? 'text' : type} 
+          placeholder={placeholder} 
+          value={formData[name]} 
+          onChange={handleChange} 
+          maxLength={maxLength}
+          style={{ ...inputStyle, borderColor: fieldErrors[name] ? '#dc2626' : 'var(--border)' }} 
+        />
+        {isPassword && (
+          <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)' }} tabIndex="-1">
+            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        )}
+      </div>
+      {fieldErrors[name] && <div style={{ color: '#dc2626', fontSize: '13px', textAlign: 'left', marginLeft: '16px', fontWeight: 600 }}>{fieldErrors[name]}</div>}
+    </div>
+  )
 
   return (
     <div style={{
@@ -182,13 +238,13 @@ export default function Login() {
           display: 'flex', gap: '6px', background: 'var(--cream)', borderRadius: '18px',
           padding: '6px', marginBottom: '32px'
         }}>
-          <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} style={tabStyle(mode === 'login')}>
+          <button onClick={() => { setMode('login'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'login')}>
             <LogIn size={16} /> Login
           </button>
-          <button onClick={() => { setMode('register'); setError(''); setSuccess(''); }} style={tabStyle(mode === 'register')}>
+          <button onClick={() => { setMode('register'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'register')}>
             <UserPlus size={16} /> Register
           </button>
-          <button onClick={() => { setMode('guest'); setError(''); setSuccess(''); }} style={tabStyle(mode === 'guest')}>
+          <button onClick={() => { setMode('guest'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'guest')}>
             <UserX size={16} /> Guest
           </button>
         </div>
@@ -207,52 +263,25 @@ export default function Login() {
 
         {/* === LOGIN FORM === */}
         {mode === 'login' && (
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ position: 'relative' }}>
-              <Mail size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="email" type="email" placeholder="Email Address" required value={formData.email} onChange={handleChange} style={inputStyle} />
-            </div>
-            <div style={{ position: 'relative' }}>
-              <Lock size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="password" type={showPass ? 'text' : 'password'} placeholder="Password" required value={formData.password} onChange={handleChange} style={inputStyle} />
-              <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)' }}>
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <button type="submit" className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              Sign In <ArrowRight size={20} />
+          <form onSubmit={handleLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {renderInput({ icon: Mail, name: 'email', type: 'email', placeholder: 'Email Address' })}
+            {renderInput({ icon: Lock, name: 'password', type: 'password', placeholder: 'Password', isPassword: true })}
+            <button type="submit" disabled={isSubmitting} className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+              {isSubmitting ? 'Processing...' : 'Sign In'} <ArrowRight size={20} />
             </button>
           </form>
         )}
 
         {/* === REGISTER FORM === */}
         {mode === 'register' && (
-          <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ position: 'relative' }}>
-              <User size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="name" type="text" placeholder="Full Name" required value={formData.name} onChange={handleChange} style={inputStyle} />
-            </div>
-            <div style={{ position: 'relative' }}>
-              <Mail size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="email" type="email" placeholder="Email Address" required value={formData.email} onChange={handleChange} style={inputStyle} />
-            </div>
-            <div style={{ position: 'relative' }}>
-              <Phone size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="phone" type="tel" placeholder="Phone (e.g. 91234567)" maxLength={8} value={formData.phone} onChange={handleChange} style={inputStyle} />
-            </div>
-            <div style={{ position: 'relative' }}>
-              <Lock size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="password" type={showPass ? 'text' : 'password'} placeholder="Create Password (min 6 chars)" required value={formData.password} onChange={handleChange} style={inputStyle} />
-              <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)' }}>
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <ShieldCheck size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-              <input name="confirmPassword" type="password" placeholder="Confirm Password" required value={formData.confirmPassword} onChange={handleChange} style={inputStyle} />
-            </div>
-            <button type="submit" className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              Create Account <UserPlus size={20} />
+          <form onSubmit={handleRegister} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {renderInput({ icon: User, name: 'name', type: 'text', placeholder: 'Full Name' })}
+            {renderInput({ icon: Mail, name: 'email', type: 'email', placeholder: 'Email Address' })}
+            {renderInput({ icon: Phone, name: 'phone', type: 'tel', placeholder: 'Phone (e.g. 91234567)', maxLength: 15 })}
+            {renderInput({ icon: Lock, name: 'password', type: 'password', placeholder: 'Create Password (min 6 chars)', isPassword: true })}
+            {renderInput({ icon: ShieldCheck, name: 'confirmPassword', type: 'password', placeholder: 'Confirm Password', isPassword: true })}
+            <button type="submit" disabled={isSubmitting} className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+              {isSubmitting ? 'Processing...' : 'Create Account'} <UserPlus size={20} />
             </button>
           </form>
         )}
