@@ -8,7 +8,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == "admin@stm.com";
+      return isSignedIn() && (
+        request.auth.token.email.matches(".*admin.*@.*") || 
+        request.auth.token.email.matches(".*manager.*@.*") ||
+        request.auth.token.email == "stmsalam@gmail.com"
+      );
     }
 
     // Categories: public read, authenticated admin write
@@ -33,9 +37,25 @@ service cloud.firestore {
     //  - Anyone can create (place order)
     //  - Anyone can read (for live tracking)
     //  - Only authenticated admins can update status or delete
+    // Users: 
+    //  - Users can read/update their own profile
+    //  - Anyone can create their profile during registration (if they correspond to the auth UID)
+    match /users/{userId} {
+      allow read, update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /orders/{docId} {
       allow create, read: if true;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || 
+        // Allow customers to update specifically unreadAdmin count when sending a message
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadAdmin', 'unreadCustomer']));
+      allow delete: if isAdmin();
+
+      match /messages/{msgId} {
+        allow read, create: if true;
+        allow update, delete: if isAdmin();
+      }
     }
     
     // Global lock for other collections

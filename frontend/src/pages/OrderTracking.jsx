@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Phone, Clock, CheckCircle, Truck, Package, MessageSquare, ChevronRight, ArrowLeft, Star, ShoppingBag, ReceiptText, RefreshCcw, Plus, Loader } from 'lucide-react'
-import { shopInfo } from '../data/menuData'
-import { fetchOrderById } from '../admin/services/dataService'
+import { onSnapshot, doc } from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import ChatWindow from '../components/ChatWindow'
+import { markMessagesAsRead } from '../admin/services/dataService'
 
 export default function OrderTracking() {
   const { orderId: id } = useParams()
@@ -11,10 +10,11 @@ export default function OrderTracking() {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [showChat, setShowChat] = useState(false)
 
   const steps = [
     { id: 'pending', label: 'Order Placed', desc: 'We have received your order', icon: <Plus size={20} /> },
-    { id: 'accepted', label: 'Accepted', desc: 'STM Salam is preparing your food', icon: <CheckCircle size={20} /> },
+    { id: 'confirmed', label: 'Confirmed', desc: 'Kitchen has accepted your order', icon: <CheckCircle size={20} /> },
     { id: 'preparing', label: 'Preparing', desc: 'Our chefs are grilling your kebabs', icon: <Clock size={20} /> },
     { id: 'ready', label: 'Food Ready', desc: 'Order is packed and ready', icon: <Package size={20} /> },
     { id: 'delivering', label: 'Out for Delivery', desc: 'Driver is on the way', icon: <Truck size={20} /> },
@@ -27,33 +27,35 @@ export default function OrderTracking() {
     return idx === -1 ? 0 : idx
   }
 
-  const loadOrder = async () => {
-    if (!id) {
-        setError(true)
-        setLoading(false)
-        return
-    }
-    try {
-      const data = await fetchOrderById(id);
-      if (data) {
-        setOrder(data)
-        setError(false)
-      } else {
-        setError(true)
-      }
-    } catch (err) {
-      console.error('Tracking Error:', err)
-      setError(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    loadOrder()
-    const interval = setInterval(loadOrder, 10000); // Polling every 10s
-    return () => clearInterval(interval);
+    if (!id) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+
+    // Real-time listener for order updates
+    const unsub = onSnapshot(doc(db, 'orders', id), (snap) => {
+      if (snap.exists()) {
+        setOrder({ id: snap.id, ...snap.data() });
+        setError(false);
+      } else {
+        setError(true);
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error('Tracking Error:', err);
+      setError(true);
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, [id])
+
+  const openChat = () => {
+    setShowChat(true);
+    markMessagesAsRead(id, 'customer');
+  };
 
   if (loading) {
     return (
@@ -84,7 +86,22 @@ export default function OrderTracking() {
   const orderType = order.mode || 'delivery'
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '100px' }}>
+    <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '100px', position: 'relative' }}>
+      
+      {/* Chat Modal */}
+      {showChat && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '500px', height: '80vh' }}>
+            <ChatWindow 
+              orderId={id} 
+              role="customer" 
+              senderId={id} // Using orderId as ID for guest customers
+              onClose={() => setShowChat(false)} 
+            />
+          </div>
+        </div>
+      )}
+
       {/* Premium Header */}
       <div style={{ background: 'var(--green-dark)', padding: '60px 0 40px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=1800)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.1 }} />
@@ -98,7 +115,7 @@ export default function OrderTracking() {
                 <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '18px', fontWeight: 600 }}>ID: <span style={{ color: 'white' }}>#{order.id?.slice(-8)}</span> · {(order.items || []).length} Items</p>
              </div>
              <div style={{ background: 'rgba(255,255,255,0.1)', padding: '20px 40px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', textAlign: 'center' }}>
-                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{activeStep >= 5 ? 'Arrived!' : 'Preparing'}</div>
+                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{steps[activeStep]?.label}</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Current Status</div>
              </div>
           </div>
@@ -192,12 +209,28 @@ export default function OrderTracking() {
 
            {/* Actions */}
            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <button 
-                onClick={() => window.open(`https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=Hi, I am checking on my order #${id}`, '_blank')}
-                style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }}
-              >
-                 <MessageSquare size={20} /> Chat with Shop
-              </button>
+              {order.chatEnabled && (
+                <button 
+                  onClick={openChat}
+                  style={{ 
+                    width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--gold)', color: 'var(--green-dark)', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(212,175,55,0.2)', position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' 
+                  }}
+                >
+                  <MessageCircle size={22} />
+                  Chat with STM Support
+                  {order.unreadCustomer > 0 && (
+                    <div style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', fontSize: '12px', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold', border: '2px solid white', animation: 'bounce 1s infinite' }}>
+                      {order.unreadCustomer} NEW
+                    </div>
+                  )}
+                </button>
+              )}
+              <WhatsAppChatButton 
+                message={`Hi STM Salam, I want to check my order status for order #${id}`} 
+                type="button" 
+                label="Check Status on WhatsApp" 
+                style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }} 
+              />
               <button 
                 onClick={() => navigate('/menu')}
                 style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'white', color: 'var(--green-dark)', border: '2px solid var(--green-dark)', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}

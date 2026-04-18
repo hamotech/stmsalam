@@ -24,19 +24,24 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setIsAuthenticated(true);
-        // If a Firebase user exists, ensure they are synced to our local state if they are admin
-        const adminEmail = JSON.parse(localStorage.getItem('stm_admin_creds'))?.email || 'admin@stm.com';
-        if (firebaseUser.email?.toLowerCase() === adminEmail.toLowerCase()) {
+        const safeEmail = firebaseUser.email?.toLowerCase() || '';
+        const isAdmin = safeEmail.includes('admin') || safeEmail.includes('manager') || safeEmail === 'stmsalam@gmail.com';
+        
+        if (isAdmin) {
            const userData = { id: firebaseUser.uid, name: 'Admin Master', email: firebaseUser.email, role: 'admin' };
+           setUser(userData);
+           localStorage.setItem('stm_user', JSON.stringify(userData));
+        } else {
+           // Standard User Sync
+           const userData = { id: firebaseUser.uid, name: firebaseUser.displayName || 'Customer', email: firebaseUser.email, role: 'user' };
            setUser(userData);
            localStorage.setItem('stm_user', JSON.stringify(userData));
         }
       } else {
+        // CRITICAL: If Firebase says signed out, PURGE everything to prevent ghost sessions
         setIsAuthenticated(false);
-        const currentUser = JSON.parse(localStorage.getItem('stm_user') || 'null');
-        if (currentUser?.role === 'admin' && !firebaseUser) {
-           // Potentially a mock login session still active
-        }
+        setUser(null);
+        localStorage.removeItem('stm_user');
       }
       setLoading(false);
     });

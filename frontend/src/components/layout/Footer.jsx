@@ -114,6 +114,9 @@ export default function Footer() {
           .footer-brand > div { justify-content: center; }
         }
       `}</style>
+      <div style={{ textAlign: 'center', paddingBottom: '24px', color: 'rgba(255,255,255,0.25)', fontSize: '10px', fontWeight: 600, letterSpacing: '0.5px' }}>
+        Designed by HamoTech PTE. LTD.
+      </div>
     </footer>
   )
 }

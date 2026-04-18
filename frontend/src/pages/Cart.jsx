@@ -5,6 +5,7 @@ import { menuItems, shopInfo, promos } from '../data/menuData'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
+import WhatsAppChatButton from '../components/WhatsAppChatButton'
 
 export default function Cart() {
   const { cartItems, updateQty, removeFromCart, subtotal, totalItems, clearCart } = useCart()
@@ -153,6 +154,13 @@ export default function Cart() {
                 style={{ width: '100%', padding: '20px', fontSize: '18px', borderRadius: '18px', justifyContent: 'center', boxShadow: 'var(--shadow-gold)' }}>
                 Proceed to Checkout <ChevronRight size={20} />
               </button>
+
+              <WhatsAppChatButton 
+                message="Hi STM Salam, I need help with my cart." 
+                type="button" 
+                label="Help with Order?" 
+                style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--cream)', color: 'var(--green-dark)', boxShadow: 'none' }} 
+              />
             </div>
           </div>
         </div>

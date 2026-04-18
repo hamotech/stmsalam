@@ -11,6 +11,7 @@ import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { placeOrder } from '../admin/services/dataService'
 import { motion, AnimatePresence } from 'framer-motion'
+import WhatsAppChatButton from '../components/WhatsAppChatButton'
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -282,9 +283,21 @@ export default function Checkout() {
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>GST (9%)</span><span>${tax.toFixed(2)}</span></div>
                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22px', fontWeight: 950, color: 'var(--green-dark)', marginTop: '4px' }}><span>Total</span><span>${total.toFixed(2)}</span></div>
             </div>
-            <button onClick={handlePlaceOrder} disabled={processing} style={{ width: '100%', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 950, fontSize: '18px', cursor: processing ? 'wait' : 'pointer', boxShadow: '0 8px 24px rgba(1,50,32,0.2)' }}>
+            <button 
+              onClick={handlePlaceOrder} 
+              disabled={processing} 
+              style={{ width: '100%', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', fontSize: '17px', animation: 'pulse 2s infinite' }}
+            >
               {processing ? 'Processing...' : (isGuest ? 'Order via WhatsApp' : 'Confirm Order')}
             </button>
+            
+            <WhatsAppChatButton 
+              message="Hi STM Salam, I want help with payment." 
+              type="button" 
+              label="Payment Help?" 
+              style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--gold-tint)', color: 'var(--green-dark)', boxShadow: 'none' }} 
+            />
+
             <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', color: '#94a3b8' }}>
               <Lock size={14} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Secure End-to-End Encryption</span>
             </div>

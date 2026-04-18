@@ -5,8 +5,16 @@ import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
 import { API_URL } from '../config/api'
 import { validateRequired, validateEmail, validatePhone, validatePasswordStrength, validateConfirmPassword, validateFullName } from '../utils/validators'
-import { auth } from '../lib/firebase'
-import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { auth, db } from '../lib/firebase'
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile, 
+  sendEmailVerification,
+  setPersistence, 
+  browserLocalPersistence 
+} from 'firebase/auth'
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'guest'
@@ -54,39 +62,67 @@ export default function Login() {
     const safeEmail = formData.email.trim().toLowerCase()
 
     try {
-      // --- MOCK PERSISTENCE LAYER ---
-      const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]')
-      if (mockDb.find(u => u.email?.toLowerCase() === safeEmail)) {
-        throw new Error('Email already registered.')
+      // 1. Create the user in Firebase Auth using Client SDK
+      const authResult = await createUserWithEmailAndPassword(auth, safeEmail, formData.password);
+      const user = authResult.user;
+
+      // 2. Send verification email (non-blocking)
+      try {
+        await sendEmailVerification(user);
+      } catch (vErr) {
+        console.warn('[Verification Email] Could not send:', vErr.message);
       }
 
-      const newUser = {
-        id: 'USR-' + Math.random().toString(36).substr(2, 9),
-        name: formData.name,
-        email: safeEmail,
-        phone: formData.phone,
-        password: formData.password, // In a real app, this would be hashed
-        createdAt: new Date().toISOString()
+      // 3. Update the user profile with their name
+      await updateProfile(user, {
+        displayName: formData.name
+      });
+
+      // 4. Save metadata to Firestore (with existence check)
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          name: formData.name,
+          email: safeEmail,
+          phone: formData.phone,
+          role: 'user',
+          createdAt: serverTimestamp() // Use server-side time
+        });
       }
 
-      mockDb.push(newUser)
-      localStorage.setItem('stm_mock_db', JSON.stringify(mockDb))
-
-      // Auto-login after registration
-      const { password, ...userWithoutPass } = newUser
-      login(userWithoutPass)
-      setSuccess('Account created! Welcome to STM Salam.')
-      setTimeout(() => navigate(redirectPath), 1200)
-
-      // Optionally still try to hit API if it exists
-      fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser)
-      }).catch(e => console.log('API Fallback ignored'))
+      setSuccess('Account created! A verification link has also been sent to your email.');
+      
+      // Auto-login after registration (Maintains existing flow)
+      login({ id: user.uid, name: formData.name, email: safeEmail, role: 'user' });
+      
+      setTimeout(() => navigate(redirectPath), 2000);
 
     } catch (err) {
-      setError(err.message)
+      console.error('[Registration Error]', err.code, err.message);
+      
+      // Improved Error Handling
+      switch (err.code) {
+        case 'auth/email-already-in-use':
+          setError('This email is already registered. Try logging in instead.');
+          break;
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address.');
+          break;
+        case 'auth/weak-password':
+          setError('Password is too weak. It must be at least 6 characters.');
+          break;
+        case 'auth/operation-not-allowed':
+          setError('Email/password accounts are not enabled. Contact support.');
+          break;
+        case 'auth/network-request-failed':
+          setError('Connection error. Please check your internet and try again.');
+          break;
+        default:
+          setError(err.message || 'Signup failed. Please try again later.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -116,40 +152,32 @@ export default function Login() {
       const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
       const fbUser = firebaseResult.user;
 
-      // 2. Clear success/redirect based on role
-      if (safeEmail === 'admin@stm.com') {
+      // 2. Sync session based on role derived from email
+      const isAdminEmail = safeEmail.includes('admin') || safeEmail.includes('manager') || safeEmail === 'stmsalam@gmail.com';
+      
+      if (isAdminEmail) {
         login({ id: fbUser.uid, name: 'Admin Master', email: safeEmail, role: 'admin' });
-        setSuccess('Admin authenticated! Redirecting...');
+        setSuccess('Admin authenticated! Accessing Command Center...');
         setTimeout(() => navigate('/admin'), 1200);
       } else {
-        login({ id: fbUser.uid, name: fbUser.displayName || 'Guest', email: safeEmail, role: 'user' });
+        login({ id: fbUser.uid, name: fbUser.displayName || 'Customer', email: safeEmail, role: 'user' });
         setSuccess('Welcome back! Redirecting...');
         setTimeout(() => navigate(redirectPath), 1200);
       }
     } catch (err) {
       console.error('[Auth Error]', err.code, err.message);
       
-      // Handle Firebase Auth Errors specifically
+      // Clear specific error messages for the user
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email' || err.code === 'auth/invalid-credential') {
-        setError('Email or password incorrect.');
+        setError('Invalid account or credentials. Please try again.');
       } else if (err.code === 'auth/wrong-password') {
         setError('Incorrect password. Please try again.');
       } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please try again later.');
+        setError('Too many failed attempts. Account temporarily locked.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Network error. Please check your internet connection.');
       } else {
-        // Fallback check: If it was a mock user from before (not in Firebase yet)
-        const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]');
-        const userMatch = mockDb.find(u => u.email?.toLowerCase() === safeEmail && u.password === formData.password);
-        
-        if (userMatch && safeEmail !== 'admin@stm.com') {
-          login(userMatch);
-          setSuccess('Login successful (Local session).');
-          setTimeout(() => navigate(redirectPath), 1200);
-        } else {
-          setError(safeEmail === 'admin@stm.com' 
-            ? 'Access Denied: Admin account not found or invalid credentials.' 
-            : 'Login failed. Please check your connection.');
-        }
+        setError('Firebase login failed. Please sign in with a valid admin account.');
       }
     } finally {
       setIsSubmitting(false);

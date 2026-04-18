@@ -5,6 +5,7 @@ import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
+import WhatsAppChatButton from './components/WhatsAppChatButton'
 
 const Home = lazy(() => import('./pages/Home'))
 const Menu = lazy(() => import('./pages/Menu'))
@@ -61,6 +62,7 @@ function Shell() {
         </Suspense>
       </AnimatePresence>
       {!hide && <Footer />}
+      {!hide && <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />}
     </>
   )
 }

@@ -8,9 +8,9 @@ import { createClient } from '@supabase/supabase-js';
 // Firebase Admin
 import { db, firebaseReady } from './lib/firebase.js';
 
-// Menu data & Parser
-import dynamicMenu from '../frontend/src/data/dynamicMenu.js';
-import { menuItems, categories, shopInfo, outlets } from '../frontend/src/data/menuData.js';
+// Menu data & Parser (Now using local standalone copies for production)
+import dynamicMenu from './data/dynamicMenu.js';
+import { menuItems, categories, shopInfo, outlets } from './data/menuData.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -77,7 +77,21 @@ if (supabaseUrl && supabaseKey) {
   console.log('✅ Supabase Connection: Active (Cloud Persistence)');
 }
 
-app.use(cors());
+// Configured CORS for production and development
+const allowedOrigins = ['https://stmsalam.sg', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin === process.env.ALLOWED_ORIGIN) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -351,4 +365,4 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`\n🚀 STM Backend (Firestore) Listening on PORT ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`\n🚀 STM Backend (Firestore) Listening on PORT ${PORT}`));

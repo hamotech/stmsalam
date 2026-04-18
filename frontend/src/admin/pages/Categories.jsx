@@ -6,8 +6,10 @@ import {
   deleteCategory,
 } from '../services/dataService';
 import { Plus, Edit, Trash2, ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const Categories = () => {
+  const { isAuthenticated } = useAuth();
   const [categories, setCategories] = useState([]);
   const [view, setView] = useState('list'); // list | add | edit
   const [currentCategory, setCurrentCategory] = useState(null);

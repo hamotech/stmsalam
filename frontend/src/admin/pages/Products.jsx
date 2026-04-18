@@ -9,8 +9,10 @@ import {
 import { storage } from '../../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Plus, Edit, Trash2, ArrowLeft, Image as ImageIcon, Star, CheckCircle, XCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const Products = () => {
+  const { isAuthenticated } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [view, setView] = useState('list'); // list | add | edit

@@ -50,9 +50,16 @@ export const updateCategory = (id, updatedCat) => {
   if (!auth.currentUser) throw new Error("Authentication required to update categories.");
   return updateDoc(doc(db, 'categories', id), updatedCat);
 };
-export const deleteCategory = (id) => {
+export const deleteCategory = async (id) => {
   if (!auth.currentUser) throw new Error("Authentication required to delete categories.");
-  return deleteDoc(doc(db, 'categories', id));
+  try {
+    await deleteDoc(doc(db, 'categories', id));
+  } catch (err) {
+    if (err.code === 'permission-denied') {
+      throw new Error(`Permission Denied: Your account (${auth.currentUser?.email}) is NOT authorized in Firestore rules to delete categories.`);
+    }
+    throw err;
+  }
 };
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
@@ -114,11 +121,15 @@ export const deleteProduct = async (id) => {
         }
       }
     }
+    console.log(`[Delete Product] Requesting delete for ${id} by user: ${auth.currentUser?.email}`);
     await deleteDoc(docRef);
     console.log('✅ Deleted Firestore document (Product)');
     return true;
   } catch (err) {
-    console.error('Delete Product Error:', err);
+    console.error('Delete Product Error:', err.code, err.message);
+    if (err.code === 'permission-denied') {
+      throw new Error(`Permission Denied: You (${auth.currentUser?.email || 'unauthenticated'}) do not have rights to delete products.`);
+    }
     throw err;
   }
 };
@@ -128,7 +139,16 @@ export const deleteProduct = async (id) => {
 export const placeOrder = async (orderPayload) => {
   try {
     const orderId = `STM-${Date.now()}`;
-    const newOrder = { ...orderPayload, id: orderId, createdAt: new Date().toISOString() };
+    const newOrder = { 
+      ...orderPayload, 
+      id: orderId, 
+      createdAt: new Date().toISOString(),
+      status: orderPayload.status || 'Pending',
+      isNewForAdmin: true,
+      chatEnabled: false,
+      unreadAdmin: 1,
+      unreadCustomer: 0
+    };
     await setDoc(doc(db, 'orders', orderId), newOrder);
     localStorage.setItem('stm_last_order_id', orderId);
     return newOrder;
@@ -171,8 +191,75 @@ export const fetchOrderById = async (id) => {
   }
 };
 
-export const updateOrderStatus = (id, status) => updateDoc(doc(db, 'orders', id), { status, order_status: status.toLowerCase(), updatedAt: new Date().toISOString() });
-export const deleteOrder = (id) => deleteDoc(doc(db, 'orders', id));
+export const updateOrderStatus = (id, status) => {
+  if (!auth.currentUser) throw new Error("Authentication required to update order status.");
+  return updateDoc(doc(db, 'orders', id), { status, order_status: status.toLowerCase(), updatedAt: new Date().toISOString() });
+};
+
+export const deleteOrder = async (id) => {
+  if (!auth.currentUser) throw new Error("Authentication required to delete orders.");
+  console.log(`[Delete Order] Requesting delete for ${id} by user: ${auth.currentUser?.email}`);
+  try {
+    await deleteDoc(doc(db, 'orders', id));
+    console.log('✅ Deleted Firestore document (Order)');
+  } catch (err) {
+    console.error('Delete Order Error:', err.code, err.message);
+    if (err.code === 'permission-denied') {
+      throw new Error(`Permission Denied: You (${auth.currentUser?.email || 'unauthenticated'}) do not have rights to delete orders.`);
+    }
+    throw err;
+  }
+};
+
+// ─── ORDER CHAT & NOTIFICATIONS ──────────────────────────────────────────────
+
+export const sendMessage = async (orderId, message) => {
+  const msgId = `msg-${Date.now()}`;
+  const msgDoc = doc(collection(db, 'orders', orderId, 'messages'), msgId);
+  const msgData = {
+    ...message,
+    id: msgId,
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  
+  await setDoc(msgDoc, msgData);
+  
+  // Update unread count on the order
+  const orderRef = doc(db, 'orders', orderId);
+  const snap = await getDoc(orderRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    if (message.senderRole === 'admin') {
+      await updateDoc(orderRef, { unreadCustomer: (data.unreadCustomer || 0) + 1 });
+    } else {
+      await updateDoc(orderRef, { unreadAdmin: (data.unreadAdmin || 0) + 1 });
+    }
+  }
+  return msgData;
+};
+
+export const subscribeMessages = (orderId, callback) => {
+  const q = query(collection(db, 'orders', orderId, 'messages'), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+};
+
+export const markMessagesAsRead = async (orderId, role) => {
+  const orderRef = doc(db, 'orders', orderId);
+  if (role === 'admin') {
+    await updateDoc(orderRef, { unreadAdmin: 0 });
+  } else {
+    await updateDoc(orderRef, { unreadCustomer: 0 });
+  }
+};
+
+export const markOrderAsSeen = async (orderId) => {
+  if (!auth.currentUser) return;
+  const orderRef = doc(db, 'orders', orderId);
+  await updateDoc(orderRef, { isNewForAdmin: false, unreadAdmin: 0 });
+};
 
 // ─── GALLERY ────────────────────────────────────────────────────────────────
 export const fetchGallery = async () => {
@@ -226,18 +313,36 @@ export const deleteGalleryItem = async (id) => {
         }
       }
     }
+    console.log(`[Delete Gallery] Requesting delete for ${id} by user: ${auth.currentUser?.email}`);
     await deleteDoc(docRef);
     console.log('✅ Deleted Firestore document (Gallery)');
     return true;
   } catch (err) {
-    console.error('Delete Gallery Item Error:', err);
+    console.error('Delete Gallery Item Error:', err.code, err.message);
+    if (err.code === 'permission-denied') {
+      throw new Error(`Permission Denied: You (${auth.currentUser?.email || 'unauthenticated'}) do not have rights to delete gallery items.`);
+    }
     throw err;
   }
 };
 
 // ─── LOCAL STORAGE MIGRATION ────────────────────────────────────────────────
 
+export const getLocalStorageSnapshot = () => {
+  try {
+    return {
+      categories: JSON.parse(localStorage.getItem('stm_categories') || '[]'),
+      products: JSON.parse(localStorage.getItem('stm_products') || '[]'),
+      orders: JSON.parse(localStorage.getItem('stm_orders') || '[]'),
+      gallery: JSON.parse(localStorage.getItem('stm_gallery') || '[]'),
+    };
+  } catch (e) {
+    return { categories: [], products: [], orders: [], gallery: [] };
+  }
+};
+
 export const seedFromLocalStorage = async (forceRewrite = false) => {
+  if (!auth.currentUser) throw new Error("Authentication required to seed data.");
   console.log('Smart Seeding: Syncing items to Cloud...');
   
   const existingProdsSnap = await getDocs(collection(db, 'products'));
@@ -383,4 +488,8 @@ export const dataService = {
   fetchOrderById,
   getDashboardStats: fetchDashboardStats,
   seedFromLocalStorage,
+  sendMessage,
+  subscribeMessages,
+  markMessagesAsRead,
+  markOrderAsSeen,
 };

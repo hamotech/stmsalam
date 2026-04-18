@@ -15,6 +15,7 @@ import { dataService } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
 import { useData } from '../context/DataContext'
 import { Plus, Minus, Image as ImageIcon, PlayCircle } from 'lucide-react'
+import WhatsAppChatButton from '../components/WhatsAppChatButton'
 // static data removed
 
 /* ── tiny floating food component ── */
@@ -264,16 +265,16 @@ export default function Home() {
             <h1 style={{ color: 'white', fontSize: 'clamp(38px, 6vw, 72px)', fontWeight: 900, lineHeight: 1.2, letterSpacing: '-1.5px', marginBottom: '28px' }}>
               Authentic Drinks and Warm Comfort Food <span style={{ color: 'var(--gold)', letterSpacing: '-0.5px' }}>Delivered Fresh</span>
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 'clamp(16px, 2vw, 19px)', fontWeight: 500, maxWidth: '600px', marginBottom: '40px', lineHeight: 1.6 }}>
-              Enjoy signature Teh Tarik, comforting hot beverages, crispy snacks, and satisfying meals — prepared fresh and delivered with care.
-            </p>
             <div className="hero-buttons" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <Link to="/menu" className="btn btn-gold" style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Link to="/menu" className="btn btn-gold" style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
                 <ShoppingBag size={20} color="var(--green-dark)" /> Order Now
               </Link>
-              <Link to="/menu" className="btn" style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', textDecoration: 'none' }}>
-                View Menu
-              </Link>
+              <WhatsAppChatButton 
+                message="Hi STM Salam, I want to know more about your menu." 
+                type="button" 
+                label="Chat with Admin"
+                style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} 
+              />
             </div>
           </motion.div>
         </div>

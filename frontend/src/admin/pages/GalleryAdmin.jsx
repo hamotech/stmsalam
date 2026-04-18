@@ -8,8 +8,10 @@ import {
 import { storage } from '../../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Plus, Edit, Trash2, ArrowLeft, Image as ImageIcon, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const GalleryAdmin = () => {
+  const { isAuthenticated } = useAuth();
   const [items, setItems] = useState([]);
   const [view, setView] = useState('list'); // list | add | edit
   const [currentItem, setCurrentItem] = useState(null);
