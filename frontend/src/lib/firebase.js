@@ -3,7 +3,7 @@
 // Replace .env values with your Firebase project config
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 
@@ -32,6 +32,16 @@ if (missingVars.length > 0) {
 const app = initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
+
+// Enable multi-tab offline persistence
+enableMultiTabIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Firestore persistence failed: Multiple tabs open (already handled by multi-tab sync)');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Firestore persistence failed: Browser not supported');
+  }
+});
+
 export const storage = getStorage(app);
 export const auth = getAuth(app);
 export default app;

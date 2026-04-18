@@ -26,22 +26,34 @@ const AdminLayout = ({ children }) => {
 };
 
 export default function Admin() {
-  const { user } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     // Basic Security: Protect /admin route. Redirect to login if user is not authenticated.
-    // Assuming user needs to log in at /login. In a production app, verify admin role as well.
-    if (!user) {
+    if (!loading && !user) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
-  // Prevent rendering admin interface if not logged in
+  // Prevent rendering admin interface if loading or not logged in
+  if (loading) return (
+    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: 'var(--green-dark)', fontWeight: 'bold' }}>
+       Verifying Admin Session...
+    </div>
+  );
   if (!user) return null;
 
   return (
     <AdminLayout>
+      {!isAuthenticated && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', padding: '12px 24px', borderRadius: '12px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: '#991b1b' }}>
+          <div style={{ background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>AUTH SYNC FAILED</div>
+          <p style={{ fontSize: '13px', fontWeight: '600', margin: 0 }}>
+            Firestore permissions are currently locked. Please ensure <strong>admin@stm.com</strong> exists and Email/Pass is enabled in Firebase Console.
+          </p>
+        </div>
+      )}
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/products" element={<Products />} />

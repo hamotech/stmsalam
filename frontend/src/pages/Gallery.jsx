@@ -2,18 +2,12 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, X, ZoomIn, Maximize2, Image as ImageIcon, Film } from 'lucide-react'
 import { dataService } from '../admin/services/dataService'
+import { useData } from '../context/DataContext'
 
 export default function Gallery() {
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [filter, setFilter] = useState('all')
-  const [mediaItems, setMediaItems] = useState([])
-
-  React.useEffect(() => {
-    const unsub = dataService.subscribeGallery((data) => {
-      setMediaItems(data.filter(item => item.active !== false))
-    })
-    return () => unsub()
-  }, [])
+  const { gallery: mediaItems } = useData()
 
   const filteredMedia = filter === 'all' 
     ? mediaItems 
@@ -106,6 +100,7 @@ export default function Gallery() {
                       src={item.url} 
                       muted
                       loop
+                      preload="metadata"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
                       onMouseOver={e => e.target.play()}
                       onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}

@@ -23,10 +23,10 @@ const DataSeedPage = lazy(() => import('./pages/DataSeedPage'))
 function PageWrapper({ children }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {children}
     </motion.div>
@@ -40,7 +40,7 @@ function Shell() {
   return (
     <>
       {!hide && <Navbar />}
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><div style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTopColor: 'var(--green-dark)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /></div>}>
           <Routes location={location} key={location.pathname}>
             <Route path="/"         element={<PageWrapper><Home /></PageWrapper>} />
@@ -65,14 +65,18 @@ function Shell() {
   )
 }
 
+import { DataProvider } from './context/DataContext'
+
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <BrowserRouter>
-          <Shell />
-        </BrowserRouter>
-      </CartProvider>
+      <DataProvider>
+        <CartProvider>
+          <BrowserRouter>
+            <Shell />
+          </BrowserRouter>
+        </CartProvider>
+      </DataProvider>
     </AuthProvider>
   )
 }

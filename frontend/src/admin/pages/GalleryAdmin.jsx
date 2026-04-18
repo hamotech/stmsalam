@@ -240,9 +240,11 @@ const GalleryAdmin = () => {
                 <button onClick={() => { setCurrentItem(item); setView('edit'); }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
                   <Edit size={16} /> Edit
                 </button>
-                <button onClick={() => setDeleteModal({ show: true, id: item.id })} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <Trash2 size={18} />
-                </button>
+                {isAuthenticated && (
+                  <button onClick={() => setDeleteModal({ show: true, id: item.id })} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
             </div>
           </div>

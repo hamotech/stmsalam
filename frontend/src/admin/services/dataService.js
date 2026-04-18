@@ -1,5 +1,6 @@
-import { db } from '../../lib/firebase';
+import { db, storage, auth } from '../../lib/firebase';
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { ref, deleteObject } from 'firebase/storage';
 import dynamicMenu from '../../data/dynamicMenu';
 import { categories as defaultCategories } from '../../data/menuData';
 
@@ -14,8 +15,8 @@ export const testConnection = async () => {
     console.error('❌ Firebase connection test failed. Please verify your Firestore rules and .env configuration:', err);
   }
 };
-// Run the connection test when the app initializes this service
-testConnection();
+// Run the connection test when the app initializes this service (Disabled for production speed)
+// testConnection();
 
 // ─── CATEGORIES ─────────────────────────────────────────────────────────────
 
@@ -40,12 +41,19 @@ export const subscribeCategories = (callback) => {
 };
 
 export const addCategory = async (categoryObj) => {
+  if (!auth.currentUser) throw new Error("Authentication required to add categories.");
   const id = categoryObj.id || `cat-${Date.now()}`;
   await setDoc(doc(db, 'categories', id), { ...categoryObj, id });
   return categoryObj;
 };
-export const updateCategory = (id, updatedCat) => updateDoc(doc(db, 'categories', id), updatedCat);
-export const deleteCategory = (id) => deleteDoc(doc(db, 'categories', id));
+export const updateCategory = (id, updatedCat) => {
+  if (!auth.currentUser) throw new Error("Authentication required to update categories.");
+  return updateDoc(doc(db, 'categories', id), updatedCat);
+};
+export const deleteCategory = (id) => {
+  if (!auth.currentUser) throw new Error("Authentication required to delete categories.");
+  return deleteDoc(doc(db, 'categories', id));
+};
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
@@ -63,6 +71,7 @@ export const subscribeProducts = (callback, activeCategoryId = null) => {
   const q = query(collection(db, 'products'));
   const unsub = onSnapshot(q, (snap) => {
     let prods = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // If we get an empty snapshot from a live listener, it means data was deleted
     if (activeCategoryId && activeCategoryId !== 'all') {
       prods = prods.filter(p => p.categoryId === activeCategoryId);
     }
@@ -74,12 +83,45 @@ export const subscribeProducts = (callback, activeCategoryId = null) => {
 };
 
 export const addProduct = async (product) => {
+  if (!auth.currentUser) throw new Error("Authentication required to add products.");
   const id = product.id || `prod-${Date.now()}`;
-  await setDoc(doc(db, 'products', id), { ...product, id });
-  return product;
+  const newProduct = { ...product, id, createdAt: new Date().toISOString() };
+  await setDoc(doc(db, 'products', id), newProduct);
+  return newProduct;
 };
-export const updateProduct = (id, updatedProduct) => updateDoc(doc(db, 'products', id), updatedProduct);
-export const deleteProduct = (id) => deleteDoc(doc(db, 'products', id));
+
+export const updateProduct = (id, updatedProduct) => {
+  if (!auth.currentUser) throw new Error("Authentication required to update products.");
+  return updateDoc(doc(db, 'products', id), { ...updatedProduct, updatedAt: new Date().toISOString() });
+};
+
+export const deleteProduct = async (id) => {
+  if (!auth.currentUser) throw new Error("Authentication required to delete products.");
+  try {
+    const docRef = doc(db, 'products', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const imageUrl = data.image || data.img;
+      // If it's a Firebase Storage URL, delete the file too
+      if (imageUrl && (imageUrl.includes('firebasestorage.googleapis.com') || imageUrl.startsWith('gs://'))) {
+        try {
+          const imageRef = ref(storage, imageUrl);
+          await deleteObject(imageRef);
+          console.log('✅ Deleted associated image from Storage (Product)');
+        } catch (err) {
+          console.warn('⚠️ Storage image delete failed (Product):', err.message);
+        }
+      }
+    }
+    await deleteDoc(docRef);
+    console.log('✅ Deleted Firestore document (Product)');
+    return true;
+  } catch (err) {
+    console.error('Delete Product Error:', err);
+    throw err;
+  }
+};
 
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
@@ -155,22 +197,48 @@ export const subscribeGallery = (callback) => {
 };
 
 export const addGalleryItem = async (item) => {
+  if (!auth.currentUser) throw new Error("Authentication required to manage gallery.");
   const id = item.id || `gallery-${Date.now()}`;
   const newItem = { ...item, id, createdAt: new Date().toISOString() };
   await setDoc(doc(db, 'gallery', id), newItem);
   return newItem;
 };
 
-export const updateGalleryItem = (id, updatedItem) => updateDoc(doc(db, 'gallery', id), { ...updatedItem, updatedAt: new Date().toISOString() });
-export const deleteGalleryItem = (id) => deleteDoc(doc(db, 'gallery', id));
-
-// ─── LOCAL STORAGE MIGRATION ────────────────────────────────────────────────
-export const getLocalStorageSnapshot = () => {
-  return { categories: defaultCategories, products: [], orders: [] };
+export const updateGalleryItem = (id, updatedItem) => {
+  if (!auth.currentUser) throw new Error("Authentication required to manage gallery.");
+  return updateDoc(doc(db, 'gallery', id), { ...updatedItem, updatedAt: new Date().toISOString() });
 };
 
-export const seedFromLocalStorage = async () => {
-  console.log('Smart Seeding: Syncing missing items to Cloud...');
+export const deleteGalleryItem = async (id) => {
+  if (!auth.currentUser) throw new Error("Authentication required to manage gallery.");
+  try {
+    const docRef = doc(db, 'gallery', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.url && (data.url.includes('firebasestorage.googleapis.com') || data.url.startsWith('gs://'))) {
+        try {
+          const imageRef = ref(storage, data.url);
+          await deleteObject(imageRef);
+          console.log('✅ Deleted associated image from Storage (Gallery)');
+        } catch (err) {
+          console.warn('⚠️ Storage file delete failed (Gallery):', err.message);
+        }
+      }
+    }
+    await deleteDoc(docRef);
+    console.log('✅ Deleted Firestore document (Gallery)');
+    return true;
+  } catch (err) {
+    console.error('Delete Gallery Item Error:', err);
+    throw err;
+  }
+};
+
+// ─── LOCAL STORAGE MIGRATION ────────────────────────────────────────────────
+
+export const seedFromLocalStorage = async (forceRewrite = false) => {
+  console.log('Smart Seeding: Syncing items to Cloud...');
   
   const existingProdsSnap = await getDocs(collection(db, 'products'));
   const existingProdIds = new Set(existingProdsSnap.docs.map(d => d.id));
@@ -206,6 +274,8 @@ export const seedFromLocalStorage = async () => {
       const realFolderPath = folderCasingMap[categoryKey] || categoryKey;
 
       const pId = `stm-prod-${categoryKey.substring(0,3).toLowerCase()}-${i}`;
+      // CRITICAL: We only seed if the item was NEVER there. 
+      // This prevents deleted items from coming back.
       if (!existingProdIds.has(pId)) {
         prods.push({
           id: pId, name, price, categoryId: catId,
@@ -231,27 +301,19 @@ export const seedFromLocalStorage = async () => {
     }
   }
 
-  // 2. Seed Products (Only if missing)
+  // 2. Seed Products
   for (const prod of prods) {
     await setDoc(doc(db, 'products', prod.id), { ...prod, createdAt: new Date().toISOString() });
   }
 
-  // 3. Seed Gallery (Sync logic)
+  // 3. Seed Gallery
   let gCount = 0;
   try {
     const { galleryMedia } = await import('../../data/galleryData');
-    const incomingSeedIds = new Set(galleryMedia.map((_, i) => `gallery-seed-${i}`));
-
-    // A. Clean up orphaned seeds (if they were deleted from local but exist in cloud)
-    for (const d of existingGallerySnap.docs) {
-      if (d.id.startsWith('gallery-seed-') && !incomingSeedIds.has(d.id)) {
-        await deleteDoc(doc(db, 'gallery', d.id));
-      }
-    }
-
-    // B. Add missing seeds
     for (const [i, file] of galleryMedia.entries()) {
       const gId = `gallery-seed-${i}`;
+      // Only add if it's not already in cloud. 
+      // If admin deleted it, we respect that and don't re-add.
       if (!existingGalleryIds.has(gId)) {
         const isVideo = file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.mov');
         await setDoc(doc(db, 'gallery', gId), {
@@ -286,13 +348,13 @@ let _cachedProducts   = [];
 let _cachedOrders     = [];
 let _cachedGallery    = [];
 
-// Trigger a custom event when data updates to easily notify React components
 const notifyDataUpdated = () => window.dispatchEvent(new Event('stm_data_updated'));
 
+// Start global listeners
 subscribeCategories(cats => { _cachedCategories = cats; notifyDataUpdated(); });
-subscribeProducts(prods => { _cachedProducts = prods; notifyDataUpdated(); });
-subscribeOrders(ords => { _cachedOrders = ords; });
-subscribeGallery(items => { _cachedGallery = items; notifyDataUpdated(); });
+subscribeProducts(prods   => { _cachedProducts   = prods; notifyDataUpdated(); });
+subscribeOrders(ords      => { _cachedOrders     = ords; });
+subscribeGallery(items    => { _cachedGallery    = items; notifyDataUpdated(); });
 
 export const dataService = {
   getCategories: () => [..._cachedCategories],
@@ -320,19 +382,5 @@ export const dataService = {
   subscribeGallery,
   fetchOrderById,
   getDashboardStats: fetchDashboardStats,
+  seedFromLocalStorage,
 };
-
-// ─── AUTOLOAD / AUTO-SEED FAILSAFE ───────────────────────────────────────────
-(async () => {
-  try {
-    const pSnap = await getDocs(collection(db, 'products'));
-    const cSnap = await getDocs(collection(db, 'categories'));
-    if (pSnap.empty || cSnap.empty) {
-      console.log('Failsafe: Empty Database Detected. Auto-running original data migration...');
-      await seedFromLocalStorage();
-      console.log('Failsafe: Original data successfully restored to cloud.');
-    }
-  } catch(e) {
-    console.error('Failsafe Check Error:', e);
-  }
-})();

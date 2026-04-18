@@ -4,6 +4,7 @@ import { Search, SlidersHorizontal, Star, ShoppingBag, Plus, Minus, Timer, Clock
 import { shopInfo } from '../data/menuData'
 import { subscribeProducts, subscribeCategories } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
+import { useData } from '../context/DataContext'
 
 function MenuItemRow({ item }) {
   const { addToCart, updateQty, cartItems = [] } = useCart() || {}
@@ -71,11 +72,9 @@ function MenuItemRow({ item }) {
 export default function Menu() {
   const [params] = useSearchParams()
   const { totalItems = 0, subtotal = 0 } = useCart() || {}
+  const { products: items, categories: dynamicCategories, loading } = useData()
   const [activeCategory, setActiveCategory] = useState(params.get('cat') || 'all')
   const [search, setSearch] = useState('')
-  const [items, setItems] = useState([])
-  const [dynamicCategories, setDynamicCategories] = useState([])
-  const [loading, setLoading] = useState(true)
   const scrollRef = useRef(null)
 
   const scroll = (direction) => {
@@ -85,20 +84,7 @@ export default function Menu() {
     }
   }
 
-  useEffect(() => {
-    const unsubProducts = subscribeProducts((prods) => {
-      setItems(prods.filter(p => p.active !== false));
-      setLoading(false);
-    });
-    const unsubCategories = subscribeCategories((cats) => {
-      setDynamicCategories(cats);
-    });
-    
-    return () => {
-      if (typeof unsubProducts === 'function') unsubProducts();
-      if (typeof unsubCategories === 'function') unsubCategories();
-    }
-  }, [])
+  // Data is now handled by useData hook globally
 
   const filtered = items.filter(item => {
     const matchCat = activeCategory === 'all' || item.categoryId === activeCategory

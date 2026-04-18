@@ -13,8 +13,9 @@ import { shopInfo, outlets, menuItems } from '../data/menuData'
 import { API_URL } from '../config/api'
 import { dataService } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
+import { useData } from '../context/DataContext'
 import { Plus, Minus, Image as ImageIcon, PlayCircle } from 'lucide-react'
-import { galleryMedia } from '../data/galleryData'
+// static data removed
 
 /* ── tiny floating food component ── */
 function FloatingFood({ emoji, delay, left, size }) {
@@ -115,44 +116,28 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
 }
 
 export default function Home() {
+  const { products: dynamicProducts, gallery: dynamicGallery } = useData()
   const [heroIdx, setHeroIdx] = useState(0)
-  const heroImages = [
+  const defaultHeroImages = [
     '/aboutusimage/tehtarik_premium.png', 
     '/aboutusimage/burger_bg.png', 
     '/aboutusimage/juice_bg.png', 
     '/aboutusimage/tea_snacks_bg.png'
   ]
+  const heroImages = dynamicGallery.length > 0 
+    ? dynamicGallery.slice(0, 4).map(item => item.url) 
+    : defaultHeroImages;
   const { cartItems, subtotal, addToCart, updateQty } = useCart()
   const navigate = useNavigate()
   const scrollRef = useRef(null)
   const [weatherAlert, setWeatherAlert] = useState(true)
   const [showQR, setShowQR] = useState(false)
   const [showPayNow, setShowPayNow] = useState(false)
-  const [dynamicProducts, setDynamicProducts] = useState([])
-  const [dynamicGallery, setDynamicGallery] = useState([])
-
-  useEffect(() => {
-    // We now subscribe directly to Firestore to keep the homepage favorites hot-synced
-    const unsubscribeProducts = dataService.subscribeProducts((products) => {
-      const activeProducts = products.filter(p => p.active !== false);
-      setDynamicProducts(activeProducts.length > 0 ? activeProducts : menuItems);
-    });
-
-    const unsubscribeGallery = dataService.subscribeGallery((items) => {
-      setDynamicGallery(items.filter(i => i.active !== false).slice(0, 4));
-    });
-    
-    return () => {
-      unsubscribeProducts();
-      unsubscribeGallery();
-    };
-  }, [])
-
 
   useEffect(() => {
     const timer = setInterval(() => setHeroIdx(i => (i + 1) % heroImages.length), 8000)
     return () => clearInterval(timer)
-  }, [])
+  }, [heroImages.length])
 
 
   const scroll = (d) => {
@@ -258,13 +243,15 @@ export default function Home() {
       {/* ══════════ HERO SECTION ══════════ */}
       <section style={{ position: 'relative', height: '85vh', minHeight: '600px', overflow: 'hidden', background: 'var(--green-dark)' }}>
         <AnimatePresence mode="wait">
-          <motion.div
+          <motion.img
             key={heroIdx}
+            src={heroImages[heroIdx]}
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 0.4, scale: 1 }}
             exit={{ opacity: 0.1 }}
             transition={{ duration: 1.5 }}
-            style={{ position: 'absolute', inset: 0, backgroundImage: `url(${heroImages[heroIdx]})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            loading={heroIdx === 0 ? "eager" : "lazy"}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </AnimatePresence>
 
@@ -503,24 +490,15 @@ export default function Home() {
               </div>
             </div>
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px' }}>
-              {dynamicProducts.filter(p => p.badge === 'bestseller').slice(0, 2).map((p, i) => (
+              {(dynamicProducts.filter(p => p.featured || p.badge === 'bestseller').length > 0 
+                ? dynamicProducts.filter(p => p.featured || p.badge === 'bestseller')
+                : dynamicProducts
+              ).slice(0, 2).map((p, i) => (
                 <div key={p.id} style={{ position: 'relative', width: '140px', height: '140px', transform: i === 0 ? 'translateY(10px)' : 'translateY(-10px)' }}>
-                  <img loading="lazy" src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                  <img loading="lazy" src={p.image || p.img || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
                   <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                 </div>
               ))}
-              {dynamicProducts.filter(p => p.badge === 'bestseller').length < 2 && (
-                <>
-                  <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(10px)' }}>
-                    <img loading="lazy" src="/aboutusimage/juice_bg.png" alt="Special Drink" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
-                    <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Special Drink</div>
-                  </div>
-                  <div style={{ position: 'relative', width: '140px', height: '140px', transform: 'translateY(-10px)' }}>
-                    <img loading="lazy" src="/aboutusimage/tea_snacks_bg.png" alt="Snack Platter" style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
-                    <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>Snack Platter</div>
-                  </div>
-                </>
-              )}
             </div>
           </motion.div>
         </section>
@@ -548,20 +526,11 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '32px', marginBottom: '56px' }}>
-            {dynamicProducts
-              .filter(item => {
-                const catObj = item.category;
-                const cat = (typeof catObj === 'string' ? catObj : catObj?.name || '').toLowerCase();
-                const name = (item.name || '').toLowerCase();
-                
-                // Broad matching for user-requested favorites: tea, sugarcane juice, burgers
-                const isTea = (cat.includes('drink') || cat.includes('tea')) && name.includes('tea');
-                const isSugarcaneOrJuice = cat.includes('sugarcane') || name.includes('sugarcane') || name.includes('juice') || name.includes('sugar');
-                const isBurger = cat.includes('burger') || name.includes('burger');
-                
-                return isTea || isSugarcaneOrJuice || isBurger;
-              })
-              .sort((a, b) => (b.badge === 'bestseller' ? 1 : 0) - (a.badge === 'bestseller' ? 1 : 0)) // Show bestsellers first
+            {(dynamicProducts.filter(p => p.featured || p.badge === 'bestseller').length > 0
+                ? dynamicProducts.filter(p => p.featured || p.badge === 'bestseller')
+                : dynamicProducts.slice(0, 8)
+              )
+              .sort((a, b) => (b.featured ? 2 : (b.badge === 'bestseller' ? 1 : 0)) - (a.featured ? 2 : (a.badge === 'bestseller' ? 1 : 0)))
               .slice(0, 8) // Show up to 8 items in the grid
               .map((item, idx) => (
                 <FavoriteItemCard 
@@ -714,40 +683,47 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
-            {dynamicGallery.map((item, i) => {
-              const isVideo = item.type === 'video';
-              return (
-                <motion.div
-                  key={item.id}
-                  whileHover={{ scale: 0.98 }}
-                  onClick={() => navigate('/gallery')}
-                  style={{ 
-                    position: 'relative', 
-                    borderRadius: '24px', 
-                    overflow: 'hidden', 
-                    aspectRatio: '1/1',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-                    cursor: 'pointer',
-                    background: '#000'
-                  }}
-                >
-                  {isVideo ? (
-                    <video 
-                      src={item.url} 
-                      muted 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
-                      onMouseOver={e => e.target.play()}
-                      onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
-                    />
-                  ) : (
-                    <img loading="lazy" src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  )}
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
-                    {isVideo && <PlayCircle size={40} color="white" style={{ opacity: 0.8 }} />}
-                  </div>
-                </motion.div>
-              );
-            })}
+            {dynamicGallery.length > 0 ? (
+              dynamicGallery.map((item, i) => {
+                const isVideo = item.type === 'video';
+                return (
+                  <motion.div
+                    key={item.id}
+                    whileHover={{ scale: 0.98 }}
+                    onClick={() => navigate('/gallery')}
+                    style={{ 
+                      position: 'relative', 
+                      borderRadius: '24px', 
+                      overflow: 'hidden', 
+                      aspectRatio: '1/1',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+                      cursor: 'pointer',
+                      background: '#000'
+                    }}
+                  >
+                    {isVideo ? (
+                      <video 
+                        src={item.url} 
+                        muted 
+                        preload="none"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
+                        onMouseOver={e => e.target.play()}
+                        onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
+                      />
+                    ) : (
+                      <img loading="lazy" src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
+                      {isVideo && <PlayCircle size={40} color="white" style={{ opacity: 0.8 }} />}
+                    </div>
+                  </motion.div>
+                );
+              })
+            ) : (
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: 'var(--cream)', borderRadius: '24px', border: '1px dashed #cbd5e1' }}>
+                 <p style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '15px' }}>Check back soon for latest moments at STM Salam!</p>
+              </div>
+            )}
           </div>
         </section>
 

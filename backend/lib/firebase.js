@@ -19,7 +19,8 @@ if (!admin.apps.length) {
       console.log(`✅ Firebase Admin initialized with Service Account for: ${projectId}`);
     } else {
       admin.initializeApp({ projectId });
-      console.warn(`⚠️ Firebase Admin initialized WITHOUT Service Account (Project: ${projectId}). Firestore calls may fail without local authentication.`);
+      console.warn(`⚠️ Firebase Admin initialized WITHOUT Service Account.`);
+      console.warn(`👉 To fix 'Insufficient Permissions' on backend, place your 'service-account.json' in /backend or run 'gcloud auth application-default login'.`);
     }
   } catch (error) {
     console.error('❌ Firebase Admin init error:', error.message);

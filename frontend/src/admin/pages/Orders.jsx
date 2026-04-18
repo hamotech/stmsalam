@@ -185,12 +185,14 @@ const Orders = () => {
                        >
                           <MessageSquare size={18} />
                        </button>
-                       <button
-                         onClick={() => setDeleteModal({ show: true, id: order.id })}
-                         style={{ background: '#fef2f2', border: 'none', padding: '10px', borderRadius: '10px', color: '#ef4444', cursor: 'pointer' }}
-                       >
-                          <Trash2 size={18} />
-                       </button>
+                       {isAuthenticated && (
+                         <button
+                           onClick={() => setDeleteModal({ show: true, id: order.id })}
+                           style={{ background: '#fef2f2', border: 'none', padding: '10px', borderRadius: '10px', color: '#ef4444', cursor: 'pointer' }}
+                         >
+                            <Trash2 size={18} />
+                         </button>
+                       )}
                     </div>
                   </td>
                 </tr>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, Clock, MapPin, Phone, Users, Scroll, ChefHat, Heart, Award, Star, ArrowRight, Play, X, Maximize2 } from 'lucide-react'
-import { galleryMedia } from '../data/galleryData'
+import { useData } from '../context/DataContext'
 import { Link } from 'react-router-dom'
 import { shopInfo, outlets } from '../data/menuData'
 
@@ -19,18 +19,12 @@ const RevealSection = ({ children, delay = 0 }) => (
 
 export default function AboutUs() {
   const [selectedMedia, setSelectedMedia] = useState(null)
+  const { gallery: dynamicGallery } = useData()
 
-  const mediaItems = galleryMedia.map(file => {
-    const isVideo = file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.mov')
-    return {
-      url: `/aboutusimage/${file}`,
-      type: isVideo ? 'video' : 'image',
-      name: file
-    }
-  })
+  const mediaItems = dynamicGallery.length > 0 ? dynamicGallery : [];
 
-  // Use the search result to find a good hero video
-  const heroVideo = mediaItems.find(m => m.type === 'video')?.url || '/bg1.jpeg'
+  // Use the first video if available
+  const heroVideo = mediaItems.find(m => m.type === 'video')?.url || '/aboutusimage/tea_snacks_bg.png'
   
   const values = [
     { title: '100% Halal Certified', icon: <Award size={32} />, desc: 'Strictly adhered to Halal standards since our very first day.' },
@@ -47,7 +41,15 @@ export default function AboutUs() {
       {/* ── SECTION 1: HERO ABOUT ── */}
       <section style={{ height: '90vh', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-          <video src={heroVideo} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <video 
+            src={heroVideo} 
+            autoPlay 
+            muted 
+            loop 
+            playsInline 
+            poster="/aboutusimage/tea_snacks_bg.png"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+          />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(1,50,32,0.6), rgba(1,50,32,0.3), #fffaf5)' }} />
         </div>
         

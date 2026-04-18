@@ -6,7 +6,7 @@ import {
   ArrowLeft, ReceiptText, Lock, QrCode, ArrowRight, PlayCircle, XCircle 
 } from 'lucide-react'
 import { shopInfo } from '../data/menuData';
-import payScanner from '../assets/payscanner.png';
+import payScanner from '../assets/payscanner_real.png';
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { placeOrder } from '../admin/services/dataService'

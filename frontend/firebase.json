@@ -15,8 +15,13 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css)",
-        "headers": [{ "key": "Cache-Control", "value": "max-age=31536000" }]
+        "source": "**/*.@(js|css|woff|woff2|ttf)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000, immutable"
+          }
+        ]
       },
       {
         "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|ico)",

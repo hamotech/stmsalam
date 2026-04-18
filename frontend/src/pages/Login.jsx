@@ -5,6 +5,8 @@ import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
 import { API_URL } from '../config/api'
 import { validateRequired, validateEmail, validatePhone, validatePasswordStrength, validateConfirmPassword, validateFullName } from '../utils/validators'
+import { auth } from '../lib/firebase'
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth'
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'guest'
@@ -90,9 +92,10 @@ export default function Login() {
     }
   }
 
+
   const handleLogin = async (e) => {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError('');
 
     const errors = {};
     errors.email = validateEmail(formData.email);
@@ -105,50 +108,49 @@ export default function Login() {
     }
 
     setIsSubmitting(true);
-    const safeEmail = formData.email.trim().toLowerCase()
+    const safeEmail = formData.email.trim().toLowerCase();
 
     try {
-      // --- MOCK DATABASE CHECK ---
-      const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]')
-      const userMatch = mockDb.find(u => u.email?.toLowerCase() === safeEmail && u.password === formData.password)
+      // 1. Attempt to sync with real Firebase Auth first
+      await setPersistence(auth, browserLocalPersistence);
+      const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
+      const fbUser = firebaseResult.user;
 
-      const defaultAdmin = { email: 'admin@stm.com', password: 'admin123' };
-      const adminCreds = JSON.parse(localStorage.getItem('stm_admin_creds')) || defaultAdmin;
-
-      if (safeEmail === adminCreds.email.toLowerCase() && formData.password === adminCreds.password) {
-         login({ id: 'ADMIN-001', name: 'Admin Master', email: adminCreds.email, role: 'admin' })
-         setSuccess('Admin login successful! Redirecting...')
-         setTimeout(() => navigate('/admin'), 1200)
-         setIsSubmitting(false);
-         return
+      // 2. Clear success/redirect based on role
+      if (safeEmail === 'admin@stm.com') {
+        login({ id: fbUser.uid, name: 'Admin Master', email: safeEmail, role: 'admin' });
+        setSuccess('Admin authenticated! Redirecting...');
+        setTimeout(() => navigate('/admin'), 1200);
+      } else {
+        login({ id: fbUser.uid, name: fbUser.displayName || 'Guest', email: safeEmail, role: 'user' });
+        setSuccess('Welcome back! Redirecting...');
+        setTimeout(() => navigate(redirectPath), 1200);
       }
-
-      if (userMatch) {
-         const { password, ...userWithoutPass } = userMatch
-         login(userWithoutPass)
-         setSuccess('Welcome back! Redirecting...')
-         setTimeout(() => navigate(redirectPath), 1200)
-         setIsSubmitting(false);
-         return
-      }
-
-      // Fallback to real API if not in mock or if API is primary
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: safeEmail,
-          password: formData.password
-        })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Invalid credentials')
-
-      login(data.user)
-      setSuccess('Welcome back! Redirecting...')
-      setTimeout(() => navigate(redirectPath), 1200)
     } catch (err) {
-      setError(err.message)
+      console.error('[Auth Error]', err.code, err.message);
+      
+      // Handle Firebase Auth Errors specifically
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email' || err.code === 'auth/invalid-credential') {
+        setError('Email or password incorrect.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password. Please try again.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else {
+        // Fallback check: If it was a mock user from before (not in Firebase yet)
+        const mockDb = JSON.parse(localStorage.getItem('stm_mock_db') || '[]');
+        const userMatch = mockDb.find(u => u.email?.toLowerCase() === safeEmail && u.password === formData.password);
+        
+        if (userMatch && safeEmail !== 'admin@stm.com') {
+          login(userMatch);
+          setSuccess('Login successful (Local session).');
+          setTimeout(() => navigate(redirectPath), 1200);
+        } else {
+          setError(safeEmail === 'admin@stm.com' 
+            ? 'Access Denied: Admin account not found or invalid credentials.' 
+            : 'Login failed. Please check your connection.');
+        }
+      }
     } finally {
       setIsSubmitting(false);
     }

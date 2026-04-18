@@ -307,9 +307,11 @@ const Products = () => {
                       <button onClick={() => { setCurrentProduct(product); setView('edit'); }} style={{ backgroundColor: '#f1f5f9', color: '#0ea5e9', border: 'none', padding: '10px', borderRadius: '10px', cursor: 'pointer', transition: '0.2s' }}>
                         <Edit size={18} />
                       </button>
-                      <button onClick={() => handleDelete(product.id)} style={{ backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '10px', cursor: 'pointer', transition: '0.2s' }}>
-                        <Trash2 size={18} />
-                      </button>
+                      {isAuthenticated && (
+                        <button onClick={() => handleDelete(product.id)} style={{ backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '10px', cursor: 'pointer', transition: '0.2s' }}>
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -195,7 +195,7 @@ const Categories = () => {
                     <button onClick={() => { setCurrentCategory(cat); setView('edit'); }} style={{ backgroundColor: '#f1f5f9', color: '#0ea5e9', border: 'none', padding: '10px', borderRadius: '10px', cursor: 'pointer', transition: '0.2s' }}>
                       <Edit size={18} />
                     </button>
-                    {cat.id !== 'cat-uncategorized' && (
+                    {cat.id !== 'cat-uncategorized' && isAuthenticated && (
                       <button onClick={() => handleDelete(cat.id)} style={{ backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '10px', cursor: 'pointer', transition: '0.2s' }}>
                         <Trash2 size={18} />
                       </button>
