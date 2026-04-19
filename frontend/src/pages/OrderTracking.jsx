@@ -4,14 +4,15 @@ import { onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db, storage } from '../lib/firebase'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import ChatWindow from '../components/ChatWindow'
+import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { markMessagesAsRead } from '../admin/services/dataService'
-import { Plus, CheckCircle, Clock, Package, Truck, ReceiptText, ArrowLeft, MessageCircle, FileCheck, Paperclip, RefreshCw, Loader } from 'lucide-react'
+import { Plus, CircleCheck, Clock, Package, Truck, ReceiptText, ArrowLeft, MessageCircle, FileCheck, Paperclip, RefreshCw, Loader } from 'lucide-react'
 
 export default function OrderTracking() {
-  const { orderId: id } = useParams()
+  const { orderId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const tokenFromUrl = searchParams.get('token')
+  const token = searchParams.get('token') || ''
   
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -21,7 +22,7 @@ export default function OrderTracking() {
 
   const handleUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || !id) return;
+    if (!file || !orderId) return;
     setUploading(true);
     try {
       const compressedDataURL = await new Promise((resolve) => {
@@ -44,14 +45,14 @@ export default function OrderTracking() {
       });
 
       const blob = await (await fetch(compressedDataURL)).blob();
-      const fileRef = storageRef(storage, `proofs/${id}_${Date.now()}.webp`);
+      const fileRef = storageRef(storage, `proofs/${orderId}_${Date.now()}.webp`);
       await uploadBytes(fileRef, blob, { contentType: 'image/webp' });
       const url = await getDownloadURL(fileRef);
-      await updateDoc(doc(db, 'orders', id), { payment_screenshot: url });
+      await updateDoc(doc(db, 'orders', orderId), { payment_screenshot: url });
       
       // Step 5 Final Fix: Sync safe boolean (No URL exposure)
       try {
-        await updateDoc(doc(db, 'public_tracking', id), { paymentProofSubmitted: true });
+        await updateDoc(doc(db, 'public_tracking', orderId), { paymentProofSubmitted: true });
       } catch (e) {}
 
       alert('Proof of payment submitted!');
@@ -65,11 +66,11 @@ export default function OrderTracking() {
 
   const steps = [
     { id: 'pending', label: 'Order Placed', desc: 'We have received your order', icon: <Plus size={20} /> },
-    { id: 'confirmed', label: 'Confirmed', desc: 'Kitchen has accepted your order', icon: <CheckCircle size={20} /> },
+    { id: 'confirmed', label: 'Confirmed', desc: 'Kitchen has accepted your order', icon: <CircleCheck size={20} /> },
     { id: 'preparing', label: 'Preparing', desc: 'Our chefs are grilling your kebabs', icon: <Clock size={20} /> },
     { id: 'ready', label: 'Food Ready', desc: 'Order is packed and ready', icon: <Package size={20} /> },
     { id: 'delivering', label: 'Out for Delivery', desc: 'Driver is on the way', icon: <Truck size={20} /> },
-    { id: 'delivered', label: 'Delivered', desc: 'Enjoy your meal!', icon: <CheckCircle size={20} /> }
+    { id: 'delivered', label: 'Delivered', desc: 'Enjoy your meal!', icon: <CircleCheck size={20} /> }
   ]
 
   const getActiveStep = (status) => {
@@ -79,14 +80,14 @@ export default function OrderTracking() {
   }
 
   useEffect(() => {
-    if (!id) {
+    if (!orderId) {
       setError(true);
       setLoading(false);
       return;
     }
 
     // Step 5 Secure Fix: Real-time listener from safe PUBLIC_TRACKING collection
-    const unsub = onSnapshot(doc(db, 'public_tracking', id), (snap) => {
+    const unsub = onSnapshot(doc(db, 'public_tracking', orderId), (snap) => {
       if (snap.exists()) {
         setOrder({ id: snap.id, ...snap.data() });
         setError(false);
@@ -102,40 +103,21 @@ export default function OrderTracking() {
     });
 
     return () => unsub();
-  }, [id])
+  }, [orderId])
 
   const openChat = () => {
     setShowChat(true);
-    markMessagesAsRead(id, 'customer', tokenFromUrl);
+    markMessagesAsRead(orderId, 'customer', token);
   };
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '20px', background: '#f8fafc' }}>
-        <Loader size={48} className="spin" color="var(--gold)" />
-        <h2 style={{ fontWeight: 800, color: 'var(--green-dark)' }}>Connecting to Kitchen...</h2>
-        <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
+  if (!orderId) return <div>Invalid Order</div>
+  if (loading) return <div>Loading tracking...</div>
+  if (error || !order) return <div>Order not found</div>
 
-  if (error || !order) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '24px', textAlign: 'center', padding: '20px' }}>
-        <div style={{ width: '80px', height: '80px', background: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ReceiptText size={40} color="#ef4444" />
-        </div>
-        <div>
-            <h2 style={{ fontSize: '28px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '12px' }}>Order Not Found</h2>
-            <p style={{ color: '#64748b', maxWidth: '400px' }}>We couldn't find an order with ID: <strong>{id}</strong>. Please check your order history or link.</p>
-        </div>
-        <button onClick={() => navigate('/profile')} className="btn btn-gold" style={{ padding: '16px 32px', borderRadius: '16px' }}>View My Orders</button>
-      </div>
-    )
-  }
-
-  const activeStep = getActiveStep(order.status || order.stage || 'pending')
-  const orderType = order.mode || 'delivery'
+  const activeStep = getActiveStep(order?.status || order?.stage || 'pending')
+  const orderType = order?.mode || 'delivery'
+  const items = order?.items || []
+  const total = Number(order?.total || 0)
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '100px', position: 'relative' }}>
@@ -145,10 +127,10 @@ export default function OrderTracking() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '500px', height: '80vh' }}>
             <ChatWindow 
-              orderId={id} 
+              orderId={orderId} 
               role="customer" 
-              senderId={id}
-              token={tokenFromUrl}
+              senderId={orderId}
+              token={token}
               onClose={() => setShowChat(false)} 
             />
           </div>
@@ -165,14 +147,14 @@ export default function OrderTracking() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '24px' }}>
              <div>
                 <h1 style={{ color: 'white', fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 900, letterSpacing: '-2px', marginBottom: '8px' }}>Your Order Status</h1>
-                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '18px', fontWeight: 600 }}>ID: <span style={{ color: 'white' }}>#{order.id?.slice(-8)}</span> · {(order.items || []).length} Items</p>
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '18px', fontWeight: 600 }}>ID: <span style={{ color: 'white' }}>#{order?.id?.slice(-8) || ''}</span> · {(items || []).length} Items</p>
              </div>
              <div style={{ background: 'rgba(255,255,255,0.1)', padding: '20px 40px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', textAlign: 'center' }}>
-                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{steps[activeStep]?.label}</div>
+                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{steps[activeStep]?.label || ''}</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Current Status</div>
              </div>
           </div>
-           {order.paymentProofSubmitted && (
+           {order?.paymentProofSubmitted && (
              <div style={{ background: 'rgba(34, 197, 94, 0.2)', padding: '10px 20px', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.3)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, marginTop: '16px', alignSelf: 'flex-start' }}>
                 <FileCheck size={16} /> Payment proof submitted
              </div>
@@ -210,7 +192,7 @@ export default function OrderTracking() {
                              display: 'flex', alignItems: 'center', justifyContent: 'center',
                              transition: 'all 0.3s'
                            }}>
-                             {isCompleted ? <CheckCircle size={24} /> : step.icon}
+                             {isCompleted ? <CircleCheck size={24} /> : step.icon}
                            </div>
                            <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 900, fontSize: '18px', color: isCompleted || isActive ? '#0f172a' : '#94a3b8' }}>{step.label}</div>
@@ -248,7 +230,7 @@ export default function OrderTracking() {
               </div>
               <div style={{ padding: '32px' }}>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                    {(order.items || []).map((item, idx) => (
+                    {(items || []).map((item, idx) => (
                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                              <span style={{ fontWeight: 900, fontSize: '14px', background: 'var(--cream)', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.qty}</span>
@@ -260,14 +242,14 @@ export default function OrderTracking() {
                  </div>
                  <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 800, fontSize: '18px', color: '#64748b' }}>Total Paid</span>
-                    <span style={{ fontWeight: 950, fontSize: '28px', color: 'var(--green-dark)', letterSpacing: '-1px' }}>${order.total}</span>
+                    <span style={{ fontWeight: 950, fontSize: '28px', color: 'var(--green-dark)', letterSpacing: '-1px' }}>${total > 0 ? total.toFixed(2) : order?.total || '0.00'}</span>
                  </div>
               </div>
            </div>
 
            {/* Actions */}
            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {!order.paymentProofSubmitted && (
+              {!order?.paymentProofSubmitted && (
                 <label style={{ 
                   width: '100%', borderRadius: '20px', padding: '20px', background: '#f8fafc', 
                   color: 'var(--green-dark)', border: '2.5px dashed var(--border)', fontWeight: 950, 
@@ -279,7 +261,7 @@ export default function OrderTracking() {
                   <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} disabled={uploading} />
                 </label>
               )}
-              {tokenFromUrl && (
+              {token && (
                 <button 
                   onClick={openChat}
                   style={{ 
@@ -288,15 +270,15 @@ export default function OrderTracking() {
                 >
                   <MessageCircle size={22} />
                   Send Note to Kitchen
-                  {order.unreadCustomer > 0 && (
+                  {order?.unreadCustomer > 0 && (
                     <div style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', fontSize: '12px', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold', border: '2px solid white', animation: 'bounce 1s infinite' }}>
-                      {order.unreadCustomer} NEW
+                      {order?.unreadCustomer} NEW
                     </div>
                   )}
                 </button>
               )}
               <WhatsAppChatButton 
-                message={`Hi STM Salam, I want to check my order status for order #${id}`} 
+                message={`Hi STM Salam, I want to check my order status for order #${orderId}`} 
                 type="button" 
                 label="Check Status on WhatsApp" 
                 style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }} 

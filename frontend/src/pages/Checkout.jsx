@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { 
   MapPin, CreditCard, Banknote, Wallet, Phone, Home, Bike, 
   ShieldCheck, ChevronDown, Check, User, Mail, MessageSquare, 
-  ArrowLeft, ReceiptText, Lock, QrCode, ArrowRight, PlayCircle, XCircle 
+  ArrowLeft, ReceiptText, Lock, QrCode, ArrowRight, CirclePlay, CircleX,
+  CircleCheck, RefreshCw, Paperclip 
 } from 'lucide-react'
 import { shopInfo } from '../data/menuData';
 import payScanner from '../assets/payscanner_real.png';
@@ -15,7 +16,6 @@ import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { storage, db } from '../lib/firebase'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updateDoc, doc } from 'firebase/firestore'
-import { RefreshCw, Paperclip } from 'lucide-react'
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -423,7 +423,7 @@ export default function Checkout() {
                   border: screenshotUrl ? '2px solid #16a34a' : '2px dashed #cbd5e1',
                   borderRadius: '12px', cursor: 'pointer', transition: '0.2s'
                 }}>
-                  {uploadingScreenshot ? <RefreshCw className="animate-spin" size={18} /> : (screenshotUrl ? <CheckCircle size={18} color="#16a34a" /> : <Paperclip size={18} color="#64748b" />)}
+                  {uploadingScreenshot ? <RefreshCw className="animate-spin" size={18} /> : (screenshotUrl ? <CircleCheck size={18} color="#16a34a" /> : <Paperclip size={18} color="#64748b" />)}
                   <span style={{ fontWeight: 800, fontSize: '13px', color: screenshotUrl ? '#166534' : '#64748b' }}>
                     {uploadingScreenshot ? 'Uploading...' : (screenshotUrl ? 'Screenshot Attached' : 'Tap to Upload Receipt')}
                   </span>
@@ -433,6 +433,7 @@ export default function Checkout() {
 
               <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
                 <button onClick={() => {
+                  if (!orderDetails?.id) return;
                   const itemsList = (cartItems || []).map(item => `* ${item.name} x${item.qty}`).join('\n');
                   const addressLine = mode === 'delivery' ? `\nAddress: ${formData.address}` : '\nOption: Store Pickup';
                   const message = `*New STM Order*\nOrder ID: ${orderDetails.id}\nCustomer: ${formData.name}\nPhone: ${formData.phone}\n\n*Items:*\n${itemsList}\n\n*Total: SGD ${(total || 0).toFixed(2)}*${addressLine}`;

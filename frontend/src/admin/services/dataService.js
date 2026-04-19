@@ -137,6 +137,12 @@ export const deleteProduct = async (id) => {
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
 export const placeOrder = async (orderPayload) => {
+  // Step 6 Debug: Log Firebase Config
+  console.log('[DEBUG] Active Firebase Config:', {
+    projectId: auth.app.options.projectId,
+    authDomain: auth.app.options.authDomain
+  });
+
   try {
     const orderId = `STM-${Date.now()}`;
     const trackingToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -152,7 +158,22 @@ export const placeOrder = async (orderPayload) => {
       unreadAdmin: 0,
       unreadCustomer: 0
     };
-    await setDoc(doc(db, 'orders', orderId), newOrder);
+
+    // DEBUG: Write #1 - Primary Order
+    console.log('[DEBUG] Attempting Write #1: /orders/' + orderId);
+    console.log('[DEBUG] Payload #1:', JSON.stringify(newOrder, null, 2));
+    
+    try {
+      await setDoc(doc(db, 'orders', orderId), newOrder);
+      console.log('[DEBUG] Write #1 SUCCESS');
+    } catch (err1) {
+      console.error('[DEBUG] Write #1 FAILED:', {
+        code: err1.code,
+        message: err1.message,
+        path: '/orders/' + orderId
+      });
+      throw err1; // Propagate to outer catch
+    }
 
     const publicData = {
       id: orderId,
@@ -162,12 +183,27 @@ export const placeOrder = async (orderPayload) => {
       total: newOrder.total,
       paymentProofSubmitted: false
     };
-    await setDoc(doc(db, 'public_tracking', orderId), publicData);
+
+    // DEBUG: Write #2 - Public Tracking
+    console.log('[DEBUG] Attempting Write #2: /public_tracking/' + orderId);
+    console.log('[DEBUG] Payload #2:', JSON.stringify(publicData, null, 2));
+
+    try {
+      await setDoc(doc(db, 'public_tracking', orderId), publicData);
+      console.log('[DEBUG] Write #2 SUCCESS');
+    } catch (err2) {
+      console.error('[DEBUG] Write #2 FAILED:', {
+        code: err2.code,
+        message: err2.message,
+        path: '/public_tracking/' + orderId
+      });
+      throw err2; // Propagate to outer catch
+    }
 
     localStorage.setItem('stm_last_order_id', orderId);
     return newOrder;
   } catch (err) {
-    console.error('Failed to place order:', err);
+    console.error('[DEBUG] placeOrder General Error:', err);
     throw new Error('Failed to place order: ' + err.message);
   }
 };
