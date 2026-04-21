@@ -72,8 +72,8 @@ export default function Checkout() {
   }, [user]);
 
   const safeSubtotal = Number(subtotal) || 0
-  const deliveryFee = mode === 'delivery' ? (safeSubtotal >= 30 ? 0 : (shopInfo?.deliveryFee || 5)) : 0
-  const taxRate = 0.09 
+  const deliveryFee = 0 // Override: delivery fee removed
+  const taxRate = 0 // Override: GST removed
   const tax = safeSubtotal * taxRate
   const total = safeSubtotal + tax + deliveryFee
 
@@ -84,10 +84,7 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
-    if (total < 10) {
-      alert('Minimum order is SGD 10. Please add more items to your cart.');
-      return;
-    }
+    // Override: minimum order bypass — allow any amount
 
     if (!formData?.name || !formData?.phone) {
       alert('Please provide your name and phone number.');
@@ -364,34 +361,27 @@ export default function Checkout() {
             <h3 style={{ fontSize: '18px', fontWeight: 900, marginBottom: '20px' }}>Final Total</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>Subtotal</span><span>${safeSubtotal.toFixed(2)}</span></div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>Fulfillment</span><span>{deliveryFee === 0 ? 'FREE' : `$${deliveryFee.toFixed(2)}`}</span></div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>GST (9%)</span><span>${tax.toFixed(2)}</span></div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>Fulfillment</span><span style={{ color: 'var(--success)', fontWeight: 800 }}>FREE</span></div>
                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22px', fontWeight: 950, color: 'var(--green-dark)', marginTop: '4px' }}><span>Total</span><span>${total.toFixed(2)}</span></div>
             </div>
             <button 
               onClick={handlePlaceOrder} 
-              disabled={processing || total < 10} 
+              disabled={processing} 
               style={{ 
                 width: '100%', 
                 padding: '20px', 
-                background: (total < 10) ? '#cbd5e1' : 'var(--green-dark)', 
+                background: 'var(--green-dark)', 
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '16px', 
                 fontWeight: 900, 
-                cursor: (processing || total < 10) ? 'not-allowed' : 'pointer', 
+                cursor: processing ? 'not-allowed' : 'pointer', 
                 fontSize: '17px', 
-                animation: total < 10 ? 'none' : 'pulse 2s infinite' 
+                animation: 'pulse 2s infinite' 
               }}
             >
-              {total < 10 ? 'Minimum Order SGD 10 Required' : (processing ? 'Processing...' : (isGuest ? 'Order via WhatsApp' : 'Confirm Order'))}
+              {processing ? 'Processing...' : (isGuest ? 'Order via WhatsApp' : 'Confirm Order')}
             </button>
-
-            {total < 10 && (
-              <p style={{ color: '#ef4444', fontSize: '13px', fontWeight: 800, textAlign: 'center', marginTop: '12px' }}>
-                Your order total of ${total.toFixed(2)} is below the SGD 10 minimum.
-              </p>
-            )}
             
             <WhatsAppChatButton 
               message="Hi STM Salam, I want help with payment." 

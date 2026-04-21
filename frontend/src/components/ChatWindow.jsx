@@ -23,8 +23,6 @@ const ChatWindow = ({ orderId, role, senderId, token = null, onClose }) => {
         ...doc.data()
       }));
       setMessages(msgs);
-      // Mark as read when messages arrive
-      markMessagesAsRead(orderId, role, token);
     });
 
     return () => unsub();

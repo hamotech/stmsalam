@@ -35,18 +35,15 @@ export default function Cart() {
     }
   }
 
-  const deliveryFee = subtotal >= 30 ? 0 : shopInfo.deliveryFee
+  const deliveryFee = 0 // Override: delivery fee removed
   const discount = activePromo ? (activePromo.code === 'SALAM10' ? subtotal * 0.10 : 0) : 0
-  const taxRate = 0.09 // 9% GST
+  const taxRate = 0 // Override: GST removed
   const taxableAmount = subtotal - discount
   const tax = taxableAmount * taxRate
   const total = taxableAmount + tax + deliveryFee
 
   const handleProceed = () => {
-    if (total < 10) {
-      alert('Minimum order is SGD 10. Please add more items to your cart.');
-      return;
-    }
+    // Override: minimum order bypass — allow any amount
     if (user) navigate('/checkout')
     else setShowGuestModal(true)
   }
@@ -150,13 +147,9 @@ export default function Cart() {
                     <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Subtotal</span>
                     <span style={{ fontWeight: 800 }}>${subtotal.toFixed(2)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
-                    <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Tax (GST 9%)</span>
-                    <span style={{ fontWeight: 800 }}>${tax.toFixed(2)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
                     <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Delivery Fee</span>
-                    <span style={{ fontWeight: 800, color: deliveryFee === 0 ? 'var(--success)' : 'inherit' }}>{deliveryFee === 0 ? 'FREE' : `$${deliveryFee.toFixed(2)}`}</span>
+                    <span style={{ fontWeight: 800, color: 'var(--success)' }}>FREE</span>
                   </div>
                 </div>
               </div>
@@ -169,25 +162,18 @@ export default function Cart() {
               <button 
                 onClick={handleProceed} 
                 className="btn btn-gold" 
-                disabled={total < 10}
                 style={{ 
                   width: '100%', 
                   padding: '20px', 
                   fontSize: '18px', 
                   borderRadius: '18px', 
                   justifyContent: 'center', 
-                  boxShadow: total < 10 ? 'none' : 'var(--shadow-gold)',
-                  background: total < 10 ? '#cbd5e1' : 'var(--gold)',
-                  cursor: total < 10 ? 'not-allowed' : 'pointer'
+                  boxShadow: 'var(--shadow-gold)',
+                  background: 'var(--gold)',
+                  cursor: 'pointer'
                 }}>
-                {total < 10 ? 'Minimum Order SGD 10' : 'Proceed to Checkout'} <ChevronRight size={20} />
+                Proceed to Checkout <ChevronRight size={20} />
               </button>
-
-              {total < 10 && (
-                <p style={{ color: '#ef4444', fontSize: '13px', fontWeight: 800, textAlign: 'center', marginTop: '12px' }}>
-                  Please add SGD ${(10 - total).toFixed(2)} more to reach the minimum order.
-                </p>
-              )}
 
               <WhatsAppChatButton 
                 message="Hi STM Salam, I need help with my cart." 

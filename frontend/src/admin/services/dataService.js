@@ -152,7 +152,7 @@ export const placeOrder = async (orderPayload) => {
       id: orderId, 
       trackingToken,
       createdAt: new Date().toISOString(),
-      status: orderPayload.status || 'Pending',
+      status: (orderPayload.status || 'PENDING').toUpperCase(),
       isNewForAdmin: true,
       chatEnabled: true,
       unreadAdmin: 0,
@@ -177,7 +177,7 @@ export const placeOrder = async (orderPayload) => {
 
     const publicData = {
       id: orderId,
-      status: newOrder.status || 'pending',
+      status: newOrder.status || 'PENDING',
       items: newOrder.items || [],
       total: newOrder.total || 0,
       mode: newOrder.mode || 'delivery',
@@ -242,18 +242,19 @@ export const fetchOrderById = async (id) => {
   }
 };
 
-export const updateOrderStatus = async (id, status) => {
-  if (!auth.currentUser) throw new Error("Authentication required to update order status.");
-  const updatedAt = new Date().toISOString();
-  
-  // Update main order
-  await updateDoc(doc(db, 'orders', id), { status, order_status: status.toLowerCase(), updatedAt });
-  
-  // Sync status to public tracking
+export const updateOrderStatus = async (orderId, newStatus) => {
+  const normalizedStatus = (newStatus || 'PENDING').toUpperCase();
   try {
-    await updateDoc(doc(db, 'public_tracking', id), { status, updatedAt });
-  } catch (e) {
-    console.warn('Public tracking sync failed - document might not exist for old order.');
+    await Promise.all([
+      updateDoc(doc(db, "orders", orderId), {
+        status: normalizedStatus
+      }),
+      updateDoc(doc(db, "public_tracking", orderId), {
+        status: normalizedStatus
+      })
+    ]);
+  } catch (error) {
+    console.error("Status update failed:", error);
   }
 };
 

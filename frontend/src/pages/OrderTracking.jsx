@@ -6,63 +6,26 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import ChatWindow from '../components/ChatWindow'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { markMessagesAsRead } from '../admin/services/dataService'
-import { Plus, CircleCheck, Clock, Package, Truck, ReceiptText, ArrowLeft, MessageCircle, FileCheck, Paperclip, RefreshCw, Loader } from 'lucide-react'
+import {
+  Plus, CircleCheck, Clock, Package, Truck,
+  ReceiptText, ArrowLeft, MessageCircle,
+  FileCheck, Paperclip, RefreshCw
+} from 'lucide-react'
 
 export default function OrderTracking() {
-  const { orderId } = useParams()
+  const params = useParams()
+  const rawOrderId = params.orderId || '';
+  const cleanOrderId = decodeURIComponent(rawOrderId).split(',')[0].trim();
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+
   const token = searchParams.get('token') || ''
-  
+
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [uploading, setUploading] = useState(false)
-
-  const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !orderId) return;
-    setUploading(true);
-    try {
-      const compressedDataURL = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (re) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1000;
-            let width = img.width;
-            let height = img.height;
-            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-            canvas.width = width; canvas.height = height;
-            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/webp', 0.8));
-          };
-          img.src = re.target.result;
-        };
-        reader.readAsDataURL(file);
-      });
-
-      const blob = await (await fetch(compressedDataURL)).blob();
-      const fileRef = storageRef(storage, `proofs/${orderId}_${Date.now()}.webp`);
-      await uploadBytes(fileRef, blob, { contentType: 'image/webp' });
-      const url = await getDownloadURL(fileRef);
-      await updateDoc(doc(db, 'orders', orderId), { payment_screenshot: url });
-      
-      // Step 5 Final Fix: Sync safe boolean (No URL exposure)
-      try {
-        await updateDoc(doc(db, 'public_tracking', orderId), { paymentProofSubmitted: true });
-      } catch (e) {}
-
-      alert('Proof of payment submitted!');
-    } catch (err) {
-      console.error('Upload error:', err);
-      alert('Upload failed.');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const steps = [
     { id: 'pending', label: 'Order Placed', desc: 'We have received your order', icon: <Plus size={20} /> },
@@ -74,47 +37,129 @@ export default function OrderTracking() {
   ]
 
   const getActiveStep = (status) => {
-    if (!status) return 0;
-    const idx = steps.findIndex(s => s.id === status.toLowerCase())
-    return idx === -1 ? 0 : idx
+    const s = (status || "").toUpperCase()
+    switch (s) {
+      case 'PENDING': return 0
+      case 'CONFIRMED': return 1
+      case 'PREPARING': return 2
+      case 'READY': return 3
+      case 'OUT_FOR_DELIVERY':
+      case 'DELIVERING': return 4
+      case 'DELIVERED': return 5
+      default: return 0
+    }
   }
 
-  useEffect(() => {
-    if (!orderId) {
-      setError(true);
-      setLoading(false);
-      return;
-    }
+  // ✅ FIXED REAL-TIME LISTENER
+useEffect(() => {
+  console.log("TRACKING ORDER ID:", cleanOrderId);
 
-    // Step 5 Secure Fix: Real-time listener from safe PUBLIC_TRACKING collection
-    const unsub = onSnapshot(doc(db, 'public_tracking', orderId), (snap) => {
+  // ❌ guard (prevents Firestore crash)
+  if (!cleanOrderId) {
+    setError(true);
+    setLoading(false);
+    return;
+  }
+
+  const ref = doc(db, 'public_tracking', cleanOrderId);
+
+  const unsub = onSnapshot(
+    ref,
+    (snap) => {
       if (snap.exists()) {
         setOrder({ id: snap.id, ...snap.data() });
         setError(false);
       } else {
-        // Fallback or error if not found in public collection
         setError(true);
       }
       setLoading(false);
-    }, (err) => {
-      console.error('Tracking Error:', err);
+    },
+    (err) => {
+      console.error("Tracking Error:", err);
       setError(true);
       setLoading(false);
-    });
+    }
+  );
 
-    return () => unsub();
-  }, [orderId])
+  return () => unsub();
+}, [cleanOrderId]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file || !cleanOrderId) return
+
+    setUploading(true)
+
+    try {
+      const reader = new FileReader()
+
+      const compressedDataURL = await new Promise((resolve) => {
+        reader.onload = (re) => {
+          const img = new Image()
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const MAX_WIDTH = 1000
+
+            let width = img.width
+            let height = img.height
+
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width
+              width = MAX_WIDTH
+            }
+
+            canvas.width = width
+            canvas.height = height
+
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+
+            resolve(canvas.toDataURL('image/webp', 0.8))
+          }
+          img.src = re.target.result
+        }
+        reader.readAsDataURL(file)
+      })
+
+      const blob = await (await fetch(compressedDataURL)).blob()
+
+      const fileRef = storageRef(storage, `proofs/${cleanOrderId}_${Date.now()}.webp`)
+      await uploadBytes(fileRef, blob, { contentType: 'image/webp' })
+
+      const url = await getDownloadURL(fileRef)
+
+      // public_tracking write: guest-permitted path
+      await updateDoc(doc(db, 'public_tracking', cleanOrderId), {
+        paymentProofSubmitted: true
+      })
+
+      // orders write: may require admin permissions — isolated so it never blocks UX
+      try {
+        await updateDoc(doc(db, 'orders', cleanOrderId), {
+          payment_screenshot: url
+        })
+      } catch (ordersErr) {
+        console.warn('orders write skipped (permissions):', ordersErr.message)
+      }
+
+      alert('Uploaded successfully!')
+    } catch (err) {
+      console.error(err)
+      alert('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const openChat = () => {
-    setShowChat(true);
-    markMessagesAsRead(orderId, 'customer', token);
-  };
+    setShowChat(true)
+    markMessagesAsRead(cleanOrderId, 'customer', token)
+  }
 
-  if (!orderId) return <div>Invalid Order</div>
+  if (!cleanOrderId) return <div>Invalid Order</div>
   if (loading) return <div>Loading tracking...</div>
   if (error || !order) return <div>Order not found</div>
 
-  const activeStep = getActiveStep(order?.status || order?.stage || 'pending')
+  const activeStep = getActiveStep(order?.status || 'PENDING')
   const orderType = order?.mode || 'delivery'
   const items = order?.items || []
   const total = Number(order?.total || 0)
@@ -127,9 +172,9 @@ export default function OrderTracking() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '500px', height: '80vh' }}>
             <ChatWindow 
-              orderId={orderId} 
+              orderId={cleanOrderId} 
               role="customer" 
-              senderId={orderId}
+              senderId={cleanOrderId}
               token={token}
               onClose={() => setShowChat(false)} 
             />
@@ -270,7 +315,7 @@ export default function OrderTracking() {
                 >
                   <MessageCircle size={22} />
                   Send Note to Kitchen
-                  {order?.unreadCustomer > 0 && (
+                  {!showChat && order?.unreadCustomer > 0 && (
                     <div style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', fontSize: '12px', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold', border: '2px solid white', animation: 'bounce 1s infinite' }}>
                       {order?.unreadCustomer} NEW
                     </div>
@@ -278,7 +323,7 @@ export default function OrderTracking() {
                 </button>
               )}
               <WhatsAppChatButton 
-                message={`Hi STM Salam, I want to check my order status for order #${orderId}`} 
+                message={`Hi STM Salam, I want to check my order status for order #${cleanOrderId}`} 
                 type="button" 
                 label="Check Status on WhatsApp" 
                 style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }} 
