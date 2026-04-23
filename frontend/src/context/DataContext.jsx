@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { subscribeProducts, subscribeCategories, subscribeGallery } from '../admin/services/dataService';
+import { API_URL } from '../config/api';
+import { galleryMedia } from '../data/galleryData';
 
 const DataContext = createContext();
 
@@ -39,9 +41,50 @@ export function DataProvider({ children }) {
       checkLoading();
     });
 
+    const buildFallbackGallery = () => {
+      return galleryMedia.map((file, index) => {
+        const isVideo = file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.mov');
+        return {
+          id: `fallback-gallery-${index}`,
+          url: `/aboutusimage/${file}`,
+          type: isVideo ? 'video' : 'image',
+          name: file,
+          active: true,
+        };
+      });
+    };
+
+    const applyFallbackData = async () => {
+      try {
+        const [menuRes, categoriesRes] = await Promise.all([
+          fetch(`${API_URL}/menu`),
+          fetch(`${API_URL}/categories`),
+        ]);
+
+        if (menuRes.ok) {
+          const menuData = await menuRes.json();
+          if (Array.isArray(menuData) && menuData.length > 0) {
+            setProducts((prev) => (prev.length > 0 ? prev : menuData.filter((p) => p.active !== false)));
+          }
+        }
+
+        if (categoriesRes.ok) {
+          const categoriesData = await categoriesRes.json();
+          if (Array.isArray(categoriesData) && categoriesData.length > 0) {
+            setCategories((prev) => (prev.length > 0 ? prev : categoriesData));
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('Fallback API load failed:', fallbackErr);
+      }
+
+      setGallery((prev) => (prev.length > 0 ? prev : buildFallbackGallery()));
+      setLoading(false);
+    };
+
     // Timeout failsafe to stop loading spinner if something hangs
     const timeout = setTimeout(() => {
-      setLoading(false);
+      applyFallbackData();
     }, 5000);
 
     return () => {

@@ -1,11 +1,13 @@
 // src/lib/firebase.js
-// Firebase initialization for STM Salam Teh Tarik App
-// Replace .env values with your Firebase project config
+// Firebase initialization for STM Salam Teh Tarik App (Vite setup)
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  enableMultiTabIndexedDbPersistence,
+} from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,32 +19,27 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate config on startup
-const missingVars = Object.entries(firebaseConfig)
-  .filter(([, v]) => !v || v.includes('your_'))
-  .map(([k]) => k);
-
-if (missingVars.length > 0) {
-  console.warn(
-    '[Firebase] Missing or placeholder config vars:',
-    missingVars,
-    '\nPlease fill in your .env file with real Firebase values.'
-  );
-}
-
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+// Services
 export const db = getFirestore(app);
-
-// Enable multi-tab offline persistence
-enableMultiTabIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Firestore persistence failed: Multiple tabs open (already handled by multi-tab sync)');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Firestore persistence failed: Browser not supported');
-  }
-});
-
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+
+// 🔥 Safer persistence (prevents app crash in unsupported cases)
+try {
+  enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    if (err.code === "failed-precondition") {
+      console.warn("Firestore persistence: multiple tabs open");
+    } else if (err.code === "unimplemented") {
+      console.warn("Firestore persistence: not supported");
+    } else {
+      console.warn("Firestore persistence error:", err.code);
+    }
+  });
+} catch (error) {
+  console.warn("Persistence setup skipped:", error);
+}
+
 export default app;

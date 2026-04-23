@@ -4,6 +4,7 @@ frontend/node_modules/
 .env
 frontend/.env
 backend/.env
+backend/config/serviceAccountKey.json
 
 # Build and Temp folders
 frontend/dist/
