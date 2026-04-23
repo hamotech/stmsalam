@@ -79,12 +79,22 @@ if (supabaseUrl && supabaseKey) {
 
 // Configured CORS for production and development
 const allowedOrigins = ['https://stmsalam.sg', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+const envOrigins = (process.env.ALLOWED_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || origin === process.env.ALLOWED_ORIGIN) {
+
+    const isLocalhostDev = /^http:\/\/localhost:\d+$/.test(origin);
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      envOrigins.includes(origin) ||
+      isLocalhostDev;
+
+    if (isAllowed) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));

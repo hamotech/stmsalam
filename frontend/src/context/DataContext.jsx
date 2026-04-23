@@ -24,19 +24,30 @@ export function DataProvider({ children }) {
     };
 
     const unsubProducts = subscribeProducts((data) => {
-      setProducts(data.filter(p => p.active !== false));
+      const nextProducts = data.filter((p) => p.active !== false);
+      setProducts((prev) => {
+        if (nextProducts.length === 0 && prev.length > 0) return prev;
+        return nextProducts;
+      });
       prodsLoaded = true;
       checkLoading();
     });
 
     const unsubCategories = subscribeCategories((data) => {
-      setCategories(data);
+      setCategories((prev) => {
+        if (data.length === 0 && prev.length > 0) return prev;
+        return data;
+      });
       catsLoaded = true;
       checkLoading();
     });
 
     const unsubGallery = subscribeGallery((data) => {
-      setGallery(data.filter(i => i.active !== false));
+      const nextGallery = data.filter((i) => i.active !== false);
+      setGallery((prev) => {
+        if (nextGallery.length === 0 && prev.length > 0) return prev;
+        return nextGallery;
+      });
       galleryLoaded = true;
       checkLoading();
     });
