@@ -1,5 +1,17 @@
 import { registerRootComponent } from "expo";
-import AppV2 from "../src_v2/AppV2";
 
-// Registers AppV2 as the root for native/web Expo runtime.
-registerRootComponent(AppV2);
+// Flip this flag for controlled rollout.
+const USE_NEW_APP = true;
+
+if (USE_NEW_APP) {
+  try {
+    // Guarded load for migration safety.
+    const AppV2 = require("../src_v2/AppV2").default;
+    registerRootComponent(AppV2);
+  } catch (error) {
+    console.error("AppV2 failed to load. Falling back to legacy app.", error);
+    require("expo-router/entry");
+  }
+} else {
+  require("expo-router/entry");
+}
