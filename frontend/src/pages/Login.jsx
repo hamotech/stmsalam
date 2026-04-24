@@ -15,6 +15,7 @@ import {
   browserLocalPersistence 
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { resolveUserRole } from '../config/adminAccess'
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'guest'
@@ -160,11 +161,14 @@ export default function Login() {
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
           const profile = userSnap.data();
-          role = profile.role === 'admin' ? 'admin' : 'user';
+          role = resolveUserRole(safeEmail, profile.role);
           profileName = profile.name || profileName;
+        } else {
+          role = resolveUserRole(safeEmail, null);
         }
       } catch (profileErr) {
         console.warn('Failed to read user profile for role:', profileErr);
+        role = resolveUserRole(safeEmail, null);
       }
 
       if (role === 'admin') {

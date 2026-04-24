@@ -35,14 +35,11 @@ const Orders = () => {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      // Logic: If status changed from pending, count as "Confirmed" enough to enable chat
       const chatEnabled = newStatus !== 'pending';
-      const orderRef = doc(db, 'orders', id);
-      await updateDoc(orderRef, { 
-        status: newStatus, 
-        order_status: newStatus.toLowerCase(), 
+      await updateOrderStatus(id, newStatus, {
+        order_status: newStatus.toLowerCase(),
         updatedAt: new Date().toISOString(),
-        chatEnabled: chatEnabled
+        chatEnabled
       });
       showToast(`Order status updated to ${newStatus}`);
     } catch (err) {

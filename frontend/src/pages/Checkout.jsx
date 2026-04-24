@@ -91,6 +91,23 @@ export default function Checkout() {
       return;
     }
 
+    const normalizedPhone = String(formData.phone || '').replace(/\s|-/g, '')
+    const isValidSgPhone = /^(?:\+65)?[689]\d{7}$/.test(normalizedPhone)
+
+    if ((payment === 'stripe' || payment === 'paypal') && !isValidSgPhone) {
+      alert('Please enter a valid Singapore phone number before online payment.')
+      return
+    }
+
+    if (payment === 'stripe' && !import.meta.env.VITE_STRIPE_CHECKOUT_URL) {
+      alert('Stripe not configured')
+      return
+    }
+    if (payment === 'paypal' && !import.meta.env.VITE_PAYPAL_CHECKOUT_URL) {
+      alert('PayPal not configured')
+      return
+    }
+
     setProcessing(true)
     try {
       const newOrder = await placeOrder({
@@ -110,6 +127,14 @@ export default function Checkout() {
       
       if (payment === 'paynow') {
         setShowPaymentModal(true)
+      } else if (payment === 'stripe' || payment === 'paypal') {
+        const base = payment === 'stripe'
+          ? import.meta.env.VITE_STRIPE_CHECKOUT_URL
+          : import.meta.env.VITE_PAYPAL_CHECKOUT_URL
+        const sep = base.includes('?') ? '&' : '?'
+        const url = `${base}${sep}amount=${encodeURIComponent((total || 0).toFixed(2))}&currency=SGD&invoice=${encodeURIComponent(newOrder.id)}&note=${encodeURIComponent(`phone:${normalizedPhone}`)}`
+        window.open(url, '_blank', 'noopener,noreferrer')
+        finalizeSuccess(newOrder)
       } else {
         finalizeSuccess(newOrder)
       }
@@ -204,6 +229,8 @@ export default function Checkout() {
   }
 
   const [locating, setLocating] = useState(false)
+  const missingStripeEnv = !import.meta.env.VITE_STRIPE_CHECKOUT_URL
+  const missingPaypalEnv = !import.meta.env.VITE_PAYPAL_CHECKOUT_URL
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -344,13 +371,23 @@ export default function Checkout() {
                 Payment Method
               </h2>
               <div style={{ display: 'grid', gap: '10px' }}>
-                {[{ id: 'paynow', icon: <QrCode size={18} />, title: 'PayNow SGQR' }, { id: 'cash', icon: <Banknote size={18} />, title: 'Cash' }].map(p => (
+                {[{ id: 'paynow', icon: <QrCode size={18} />, title: 'PayNow SGQR' }, { id: 'stripe', icon: <CreditCard size={18} />, title: 'Pay with Stripe' }, { id: 'paypal', icon: <Wallet size={18} />, title: 'Pay with PayPal' }, { id: 'cash', icon: <Banknote size={18} />, title: 'Cash' }].map(p => (
                   <button key={p.id} onClick={() => setPayment(p.id)} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: `2.5px solid ${payment === p.id ? 'var(--green-mid)' : '#f1f5f9'}`, background: payment === p.id ? 'var(--green-tint)' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left' }}>
                     <div style={{ color: payment === p.id ? 'var(--green-mid)' : '#64748b' }}>{p.icon}</div>
                     <span style={{ fontWeight: 800, color: '#0f172a' }}>{p.title}</span>
                   </button>
                 ))}
               </div>
+              {(payment === 'stripe' && missingStripeEnv) && (
+                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontSize: '12px', fontWeight: 700 }}>
+                  Stripe checkout is not configured. Missing <code>VITE_STRIPE_CHECKOUT_URL</code>.
+                </div>
+              )}
+              {(payment === 'paypal' && missingPaypalEnv) && (
+                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontSize: '12px', fontWeight: 700 }}>
+                  PayPal checkout is not configured. Missing <code>VITE_PAYPAL_CHECKOUT_URL</code>.
+                </div>
+              )}
             </section>
           )}
         </div>

@@ -6,6 +6,7 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import 'react-native-reanimated';
 
 // Initialise Firebase on app boot (side-effect import is enough)
@@ -15,24 +16,41 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-export default function RootLayout() {
+const stripePk = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
+
+function NavigationTree() {
   return (
     <>
       <Stack>
         {/* Bottom-tabs group */}
-        <Stack.Screen name="(tabs)"    options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
         {/* Full-screen tracking detail */}
         <Stack.Screen
           name="tracking/[orderId]"
           options={{
-            headerShown:    false,
-            presentation:   'card',
-            animation:      'slide_from_right',
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right',
           }}
         />
+
+        <Stack.Screen name="checkout" options={{ headerShown: false, presentation: 'card' }} />
+        <Stack.Screen name="payment/scan-pay" options={{ headerShown: false, presentation: 'card' }} />
+        <Stack.Screen name="payment/success" options={{ headerShown: false, presentation: 'card' }} />
       </Stack>
       <StatusBar style="light" />
     </>
   );
+}
+
+export default function RootLayout() {
+  if (stripePk) {
+    return (
+      <StripeProvider publishableKey={stripePk}>
+        <NavigationTree />
+      </StripeProvider>
+    );
+  }
+  return <NavigationTree />;
 }

@@ -21,6 +21,12 @@ const Admin = lazy(() => import('./pages/Admin'))
 const DriverPanel = lazy(() => import('./pages/DriverPanel'))
 const DataSeedPage = lazy(() => import('./pages/DataSeedPage'))
 
+// Sandbox Pages
+const CheckoutSandbox = lazy(() => import('./sandbox/CheckoutSandbox'))
+const PaymentLoadingSandbox = lazy(() => import('./sandbox/PaymentLoadingSandbox'))
+const SuccessSandbox = lazy(() => import('./sandbox/SuccessSandbox'))
+const CancelSandbox = lazy(() => import('./sandbox/CancelSandbox'))
+
 function PageWrapper({ children }) {
   return (
     <motion.div
@@ -36,7 +42,7 @@ function PageWrapper({ children }) {
 
 function Shell() {
   const location = useLocation()
-  const hide = ['/admin', '/driver', '/login', '/order-success'].some(p => location.pathname.startsWith(p))
+  const hide = ['/admin', '/driver', '/login', '/order-success', '/sandbox'].some(p => location.pathname.startsWith(p))
   
   return (
     <>
@@ -58,6 +64,12 @@ function Shell() {
             <Route path="/admin/*"    element={<PageWrapper><Admin /></PageWrapper>} />
             <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
             <Route path="/seed"     element={<PageWrapper><DataSeedPage /></PageWrapper>} />
+
+            {/* Sandbox Flow */}
+            <Route path="/sandbox/checkout" element={<PageWrapper><CheckoutSandbox /></PageWrapper>} />
+            <Route path="/sandbox/payment-loading" element={<PageWrapper><PaymentLoadingSandbox /></PageWrapper>} />
+            <Route path="/sandbox/success" element={<PageWrapper><SuccessSandbox /></PageWrapper>} />
+            <Route path="/sandbox/cancel" element={<PageWrapper><CancelSandbox /></PageWrapper>} />
           </Routes>
         </Suspense>
       </AnimatePresence>

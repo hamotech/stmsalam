@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { resolveUserRole } from '../config/adminAccess';
 
 const AuthContext = createContext();
 
@@ -33,11 +34,14 @@ export function AuthProvider({ children }) {
           const profileSnap = await getDoc(profileRef);
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
-            role = profileData.role === 'admin' ? 'admin' : 'user';
+            role = resolveUserRole(firebaseUser.email, profileData.role);
             name = profileData.name || name;
+          } else {
+            role = resolveUserRole(firebaseUser.email, null);
           }
         } catch (profileErr) {
           console.warn('Failed to fetch user profile role:', profileErr);
+          role = resolveUserRole(firebaseUser.email, null);
         }
 
         const userData = {
@@ -62,6 +66,7 @@ export function AuthProvider({ children }) {
 
   const login = (userData) => {
     setUser(userData);
+    setIsAuthenticated(true);
     setIsGuest(false);
     localStorage.setItem('stm_user', JSON.stringify(userData));
     localStorage.removeItem('stm_guest');

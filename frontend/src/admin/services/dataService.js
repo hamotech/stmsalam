@@ -242,11 +242,12 @@ export const fetchOrderById = async (id) => {
   }
 };
 
-export const updateOrderStatus = async (orderId, newStatus) => {
+export const updateOrderStatus = async (orderId, newStatus, extraOrderFields = {}) => {
   const normalizedStatus = (newStatus || 'PENDING').toUpperCase();
   try {
     await Promise.all([
       updateDoc(doc(db, "orders", orderId), {
+        ...extraOrderFields,
         status: normalizedStatus
       }),
       updateDoc(doc(db, "public_tracking", orderId), {
@@ -255,6 +256,7 @@ export const updateOrderStatus = async (orderId, newStatus) => {
     ]);
   } catch (error) {
     console.error("Status update failed:", error);
+    throw error;
   }
 };
 

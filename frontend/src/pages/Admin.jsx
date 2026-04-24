@@ -45,25 +45,24 @@ export default function Admin() {
        Verifying Admin Session...
     </div>
   );
-  if (!user) return null;
+
+  const allowed = user && isAuthenticated && user.role === 'admin';
+  if (!allowed) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b', fontWeight: 700, padding: 24, textAlign: 'center' }}>
+        {user && !isAuthenticated
+          ? 'Syncing your session with Firebase…'
+          : 'Redirecting to sign in…'}
+      </div>
+    );
+  }
 
   return (
     <AdminLayout>
-      {!isAuthenticated && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', padding: '12px 24px', borderRadius: '12px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: '#991b1b' }}>
-          <div style={{ background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>AUTH SYNC FAILED</div>
-          <p style={{ fontSize: '13px', fontWeight: '600', margin: 0 }}>
-            Firestore permissions are currently locked. Your browser session is not synced with Firebase Auth. Try logging out and back in.
-          </p>
-        </div>
-      )}
-      
-      {isAuthenticated && (
-        <div style={{ background: '#f0f9ff', border: '1px solid #e0f2fe', padding: '10px 20px', borderRadius: '10px', marginBottom: '20px', fontSize: '12px', color: '#0369a1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span><strong>Auth Connected:</strong> Verified as <code>{user?.email || 'unknown'}</code></span>
-          <span style={{ opacity: 0.7 }}>Permissions active for current session</span>
-        </div>
-      )}
+      <div style={{ background: '#f0f9ff', border: '1px solid #e0f2fe', padding: '10px 20px', borderRadius: '10px', marginBottom: '20px', fontSize: '12px', color: '#0369a1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span><strong>Auth Connected:</strong> Verified as <code>{user?.email || 'unknown'}</code></span>
+        <span style={{ opacity: 0.7 }}>Permissions active for current session</span>
+      </div>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/products" element={<Products />} />
