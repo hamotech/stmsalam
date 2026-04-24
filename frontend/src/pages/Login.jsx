@@ -152,15 +152,27 @@ export default function Login() {
       const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
       const fbUser = firebaseResult.user;
 
-      // 2. Sync session based on role derived from email
-      const isAdminEmail = safeEmail.includes('admin') || safeEmail.includes('manager') || safeEmail === 'stmsalam@gmail.com';
-      
-      if (isAdminEmail) {
-        login({ id: fbUser.uid, name: 'Admin Master', email: safeEmail, role: 'admin' });
+      // 2. Resolve role from Firestore profile (source of truth)
+      let role = 'user';
+      let profileName = fbUser.displayName || 'Customer';
+      try {
+        const userRef = doc(db, 'users', fbUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const profile = userSnap.data();
+          role = profile.role === 'admin' ? 'admin' : 'user';
+          profileName = profile.name || profileName;
+        }
+      } catch (profileErr) {
+        console.warn('Failed to read user profile for role:', profileErr);
+      }
+
+      if (role === 'admin') {
+        login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
         setSuccess('Admin authenticated! Accessing Command Center...');
         setTimeout(() => navigate('/admin'), 1200);
       } else {
-        login({ id: fbUser.uid, name: fbUser.displayName || 'Customer', email: safeEmail, role: 'user' });
+        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'user' });
         setSuccess('Welcome back! Redirecting...');
         setTimeout(() => navigate(redirectPath), 1200);
       }

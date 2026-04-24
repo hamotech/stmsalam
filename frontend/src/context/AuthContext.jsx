@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -21,22 +22,32 @@ export function AuthProvider({ children }) {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setIsAuthenticated(true);
-        const safeEmail = firebaseUser.email?.toLowerCase() || '';
-        const isAdmin = safeEmail.includes('admin') || safeEmail.includes('manager') || safeEmail === 'stmsalam@gmail.com';
-        
-        if (isAdmin) {
-           const userData = { id: firebaseUser.uid, name: 'Admin Master', email: firebaseUser.email, role: 'admin' };
-           setUser(userData);
-           localStorage.setItem('stm_user', JSON.stringify(userData));
-        } else {
-           // Standard User Sync
-           const userData = { id: firebaseUser.uid, name: firebaseUser.displayName || 'Customer', email: firebaseUser.email, role: 'user' };
-           setUser(userData);
-           localStorage.setItem('stm_user', JSON.stringify(userData));
+        let role = 'user';
+        let name = firebaseUser.displayName || 'Customer';
+
+        try {
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            role = profileData.role === 'admin' ? 'admin' : 'user';
+            name = profileData.name || name;
+          }
+        } catch (profileErr) {
+          console.warn('Failed to fetch user profile role:', profileErr);
         }
+
+        const userData = {
+          id: firebaseUser.uid,
+          name: role === 'admin' ? (name || 'Admin Master') : name,
+          email: firebaseUser.email,
+          role,
+        };
+        setUser(userData);
+        localStorage.setItem('stm_user', JSON.stringify(userData));
       } else {
         // CRITICAL: If Firebase says signed out, PURGE everything to prevent ghost sessions
         setIsAuthenticated(false);
