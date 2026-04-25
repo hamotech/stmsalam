@@ -14,7 +14,7 @@ import {
   TouchableOpacity, ActivityIndicator,
   Platform, StatusBar,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import {
   subscribeOrderTracking,
   PublicOrder,
@@ -74,7 +74,11 @@ export default function TrackingScreen() {
   const activeStep  = getActiveStep(order.status);
   const currentStep = STATUS_STEPS[activeStep];
   const accent      = statusColor(order.status);
-  const shortId     = order.id.slice(-8).toUpperCase();
+  const lineItems    = order.items ?? [];
+  const shortId     = String(order.id || '').slice(-8).toUpperCase() || '—';
+  const totalNum    = Number(order.total ?? 0);
+  const canPayNow =
+    !order.paymentProofSubmitted && totalNum > 0 && order.status !== 'DELIVERED';
 
   return (
     <ScrollView
@@ -92,7 +96,7 @@ export default function TrackingScreen() {
         </TouchableOpacity>
 
         <Text style={styles.heroTitle}>Order Status</Text>
-        <Text style={styles.heroOrderId}>#{shortId} · {order.items.length} items</Text>
+        <Text style={styles.heroOrderId}>#{shortId} · {lineItems.length} items</Text>
 
         {/* Big status bubble */}
         <View style={[styles.statusBubble, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
@@ -129,19 +133,21 @@ export default function TrackingScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Order Summary</Text>
 
-        {order.items.map((item, i) => (
+        {lineItems.map((item, i) => (
           <View key={i} style={styles.itemRow}>
             <View style={styles.qtyBadge}>
-              <Text style={styles.qtyText}>{item.qty}</Text>
+              <Text style={styles.qtyText}>{item.qty ?? 0}</Text>
             </View>
-            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.itemPrice}>${((item.price ?? 0) * (item.qty ?? 1)).toFixed(2)}</Text>
+            <Text style={styles.itemName} numberOfLines={1}>{item.name ?? '—'}</Text>
+            <Text style={styles.itemPrice}>
+              ${((Number(item.price) || 0) * (Number(item.qty) || 0)).toFixed(2)}
+            </Text>
           </View>
         ))}
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total Paid</Text>
-          <Text style={styles.totalAmount}>${order.total.toFixed(2)}</Text>
+          <Text style={styles.totalAmount}>${totalNum.toFixed(2)}</Text>
         </View>
 
         <View style={styles.modeRow}>
@@ -160,6 +166,24 @@ export default function TrackingScreen() {
       </View>
 
       {/* ── CTA ── */}
+      {canPayNow && (
+        <View style={styles.payNowWrap}>
+          <TouchableOpacity
+            style={styles.payNowBtn}
+            onPress={() =>
+              router.push(
+                `/checkout?orderId=${encodeURIComponent(order.id)}&amount=${encodeURIComponent(
+                  String(totalNum)
+                )}&customerName=${encodeURIComponent('Customer')}` as Href
+              )
+            }
+            activeOpacity={0.85}
+          >
+            <Text style={styles.payNowBtnText}>Pay This Order</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.ctaGroup}>
         <TouchableOpacity
           style={styles.ctaSecondary}
@@ -310,6 +334,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   proofText: { fontSize: 13, fontWeight: '700', color: '#16A34A' },
+
+  payNowWrap: {
+    marginHorizontal: 16,
+    marginTop: 20,
+  },
+  payNowBtn: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  payNowBtnText: {
+    color: '#013220',
+    fontWeight: '900',
+    fontSize: 15,
+  },
 
   ctaGroup: {
     flexDirection: 'row',

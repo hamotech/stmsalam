@@ -5,14 +5,15 @@
  * Customer can filter by status and tap→navigate to the Tracking screen.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator,
   Platform, StatusBar, TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { subscribeRecentOrders, PublicOrder, OrderStatus } from '../services/orderService';
+import { subscribeRecentOrders, PublicOrder, getLocalOrderIds } from '../services/orderService';
 import OrderCard from '../components/OrderCard';
 
 const FILTERS: { label: string; value: string }[] = [
@@ -28,12 +29,28 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState('ALL');
   const [search,  setSearch]  = useState('');
+  const [localIds, setLocalIds] = useState<string[]>([]);
+  const [listError, setListError] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      getLocalOrderIds().then(setLocalIds);
+    }, [])
+  );
 
   useEffect(() => {
-    const unsub = subscribeRecentOrders((data) => {
-      setOrders(data);
-      setLoading(false);
-    });
+    const unsub = subscribeRecentOrders(
+      (data) => {
+        setOrders(data);
+        setListError(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('[OrdersScreen]', err);
+        setListError('Could not load orders. Pull to retry or check your connection.');
+        setLoading(false);
+      }
+    );
     return unsub;
   }, []);
 
@@ -49,6 +66,14 @@ export default function OrdersScreen() {
 
     return matchStatus && matchSearch;
   });
+
+  const sorted = useMemo(() => {
+    const rank = (id: string) => {
+      const i = localIds.indexOf(id);
+      return i === -1 ? 10_000 : i;
+    };
+    return [...filtered].sort((a, b) => rank(a.id) - rank(b.id));
+  }, [filtered, localIds]);
 
   return (
     <View style={styles.screen}>
@@ -89,9 +114,13 @@ export default function OrdersScreen() {
       {/* ── List ── */}
       {loading ? (
         <ActivityIndicator color={GREEN} style={{ marginTop: 48 }} size="large" />
+      ) : listError ? (
+        <View style={styles.errWrap}>
+          <Text style={styles.errTxt}>{listError}</Text>
+        </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={sorted}
           keyExtractor={o => o.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -163,4 +192,7 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '900', color: '#475569', marginBottom: 6 },
   emptySub:   { fontSize: 13, color: '#94A3B8', fontWeight: '500' },
+
+  errWrap: { padding: 24, marginTop: 24 },
+  errTxt:  { color: '#B91C1C', fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 });

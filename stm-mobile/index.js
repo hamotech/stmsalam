@@ -1,7 +1,8 @@
 import { registerRootComponent } from "expo";
 
-// Flip this flag for controlled rollout.
-const USE_NEW_APP = true;
+// false = full Expo Router app (Home + Menu + Orders + Checkout), like the web customer shell.
+// true = load src_v2 AppV2 (order-engine demo only).
+const USE_NEW_APP = false;
 
 if (USE_NEW_APP) {
   try {

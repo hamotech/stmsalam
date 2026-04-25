@@ -82,7 +82,6 @@ export default function OrderCard({ order, onTrack }: Props) {
 }
 
 const GREEN = '#013220';
-const GOLD  = '#D4AF37';
 
 const styles = StyleSheet.create({
   card: {

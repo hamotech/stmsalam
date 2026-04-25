@@ -1,18 +1,16 @@
 /**
  * src/services/menuService.ts
  *
- * Real-time subscription to the shared `products` and `categories` collections.
- * Read-only from the mobile app — writing is exclusively admin-side.
+ * Menu catalog = Firestore `products` + `categories` (same as web admin).
+ * There is no separate `menu_items` collection in this project.
  */
 
 import {
   collection,
   onSnapshot,
   query,
-  orderBy,
   where,
   Unsubscribe,
-  DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -37,6 +35,7 @@ export interface Product {
   categoryId: string;
   category?: string;
   active?: boolean;
+  description?: string;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -53,6 +52,7 @@ export const subscribeCategories = (
   );
 };
 
+/** Filters by `categoryId` — same field as web Menu (`frontend/src/pages/Menu.jsx`). */
 export const subscribeProducts = (
   onData: (products: Product[]) => void,
   onError?: (err: Error) => void,

@@ -1,31 +1,61 @@
 /**
- * app/_layout.tsx
- * Root layout — registers all routes and global providers.
+ * Root — providers, auth gate, stack (tabs + menu + checkout + tracking).
  */
 
-import React from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StripeProvider } from '@stripe/stripe-react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 
-// Initialise Firebase on app boot (side-effect import is enough)
 import '@/src/services/firebase';
+import { StripeProviderWrapper } from '@/src/providers/StripeProviderWrapper';
+import { AuthProvider, useAuth } from '@/src/context/AuthContext';
+import { CartProvider } from '@/src/context/CartContext';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
-const stripePk = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { authReady, user, isGuest } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authReady) return;
+    SplashScreen.hideAsync().catch(() => {});
+  }, [authReady]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    const inAuth = segments[0] === '(auth)';
+    const ok = Boolean(user || isGuest);
+    if (!ok && !inAuth) {
+      router.replace('/(auth)' as Href);
+    } else if (ok && inAuth) {
+      router.replace('/(tabs)/home' as Href);
+    }
+  }, [authReady, user, isGuest, segments, router]);
+
+  if (!authReady) return null;
+
+  return <>{children}</>;
+}
 
 function NavigationTree() {
   return (
     <>
       <Stack>
-        {/* Bottom-tabs group */}
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-        {/* Full-screen tracking detail */}
+        <Stack.Screen
+          name="menu/[category]"
+          options={{ headerShown: false, animation: 'slide_from_right' }}
+        />
         <Stack.Screen
           name="tracking/[orderId]"
           options={{
@@ -34,10 +64,10 @@ function NavigationTree() {
             animation: 'slide_from_right',
           }}
         />
-
         <Stack.Screen name="checkout" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="payment/scan-pay" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="payment/success" options={{ headerShown: false, presentation: 'card' }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="light" />
     </>
@@ -45,12 +75,17 @@ function NavigationTree() {
 }
 
 export default function RootLayout() {
-  if (stripePk) {
-    return (
-      <StripeProvider publishableKey={stripePk}>
-        <NavigationTree />
-      </StripeProvider>
-    );
-  }
-  return <NavigationTree />;
+  return (
+    <SafeAreaProvider>
+      <AuthProvider>
+        <CartProvider>
+          <StripeProviderWrapper>
+            <AuthGate>
+              <NavigationTree />
+            </AuthGate>
+          </StripeProviderWrapper>
+        </CartProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
 }

@@ -132,7 +132,21 @@ export default function Checkout() {
           ? import.meta.env.VITE_STRIPE_CHECKOUT_URL
           : import.meta.env.VITE_PAYPAL_CHECKOUT_URL
         const sep = base.includes('?') ? '&' : '?'
-        const url = `${base}${sep}amount=${encodeURIComponent((total || 0).toFixed(2))}&currency=SGD&invoice=${encodeURIComponent(newOrder.id)}&note=${encodeURIComponent(`phone:${normalizedPhone}`)}`
+        const origin = window.location.origin
+        const successUrl = `${origin}/sandbox/success?orderId=${encodeURIComponent(newOrder.id)}`
+        const cancelUrl = `${origin}/sandbox/cancel?orderId=${encodeURIComponent(newOrder.id)}`
+        const trackingUrl = `${origin}/tracking/${encodeURIComponent(newOrder.id)}`
+        const url =
+          `${base}${sep}` +
+          `amount=${encodeURIComponent((total || 0).toFixed(2))}` +
+          `&currency=SGD` +
+          `&invoice=${encodeURIComponent(newOrder.id)}` +
+          `&note=${encodeURIComponent(`phone:${normalizedPhone}`)}` +
+          // Common gateway callback param names (ignored safely if unsupported).
+          `&success_url=${encodeURIComponent(successUrl)}` +
+          `&cancel_url=${encodeURIComponent(cancelUrl)}` +
+          `&return_url=${encodeURIComponent(trackingUrl)}` +
+          `&redirect_url=${encodeURIComponent(trackingUrl)}`
         window.open(url, '_blank', 'noopener,noreferrer')
         finalizeSuccess(newOrder)
       } else {

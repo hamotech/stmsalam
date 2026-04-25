@@ -1,0 +1,16 @@
+node_modules/
+**/node_modules/
+.expo/
+.git/
+dist/
+build/
+coverage/
+.gradle/
+.idea/
+.vscode/
+*.log
+*.tmp
+.cache
+.DS_Store
+android/
+ios/

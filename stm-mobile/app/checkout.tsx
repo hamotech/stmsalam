@@ -1,7 +1,5 @@
 /**
- * Checkout route — payment section is composed in CheckoutScreen.
+ * Checkout stack route — place order into existing `orders` + `public_tracking`.
  */
 
-import CheckoutScreen from '@/src/screens/checkout/CheckoutScreen';
-
-export default CheckoutScreen;
+export { default } from '@/src/screens/delivery/CheckoutFlowScreen';

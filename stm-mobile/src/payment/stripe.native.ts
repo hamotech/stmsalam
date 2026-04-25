@@ -1,7 +1,8 @@
 /**
- * Stripe Payment Sheet — isolated service.
- * Requires a small backend that returns PaymentSheet secrets (never ship secret keys in the app).
- * Configure EXPO_PUBLIC_STRIPE_PAYMENT_SHEET_ENDPOINT to enable.
+ * Native (iOS/Android) Stripe PaymentSheet implementation.
+ * This file is ONLY bundled on native targets — Metro resolves `./stripe`
+ * to this file when Platform.OS !== 'web'. Never import this path directly
+ * from shared code; always go through `src/payment` (the barrel).
  */
 
 import {
@@ -56,9 +57,6 @@ async function fetchSheetSecrets(
   }
 }
 
-/**
- * Initialise Stripe Payment Sheet for this order/amount.
- */
 export async function initPaymentSheet(
   orderId: string,
   amount: number
@@ -89,9 +87,6 @@ export async function initPaymentSheet(
   return { ok: true };
 }
 
-/**
- * Present the sheet (call after successful {@link initPaymentSheet}).
- */
 export async function presentPaymentSheet(): Promise<{ ok: boolean; error?: string }> {
   const { error } = await stripePresentPaymentSheet();
   if (error) {

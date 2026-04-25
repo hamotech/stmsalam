@@ -15,7 +15,7 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { initPaymentSheet, presentPaymentSheet } from '@/src/services/payment/stripeService';
+import { initPaymentSheet, presentPaymentSheet } from '@/src/payment';
 import { updateOrderStatus } from '@/src/services/payment/updateOrderStatus';
 
 const GREEN = '#013220';

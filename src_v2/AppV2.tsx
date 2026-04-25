@@ -4,13 +4,13 @@
 import React from "react";
 import { AppContainerProvider } from "./core/di/AppContainerProvider";
 import { AppStoreProvider } from "./hooks/useAppStore";
-import { AppNavigator } from "./navigation/AppNavigator";
+import AppV2Navigator from "./navigation/AppV2Navigator";
 
 export default function AppV2() {
   return (
     <AppContainerProvider>
       <AppStoreProvider>
-        <AppNavigator />
+        <AppV2Navigator />
       </AppStoreProvider>
     </AppContainerProvider>
   );

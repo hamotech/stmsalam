@@ -1,0 +1,21 @@
+# NOTE: ESLint v9 flat config uses the `ignores` array in eslint.config.js.
+# This file is kept for IDE/editor integrations that still read .eslintignore
+# and as documentation of what should never be scanned.
+node_modules
+.expo
+.expo-shared
+dist
+web-build
+build
+coverage
+android
+ios
+.cache
+scripts
+components
+hooks
+constants
+assets
+*.config.js
+*.config.cjs
+expo-env.d.ts
