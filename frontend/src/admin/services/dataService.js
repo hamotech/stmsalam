@@ -1,8 +1,48 @@
-import { db, storage, auth } from '../../lib/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { db, storage, auth, functions } from '../../lib/firebase';
+import { signInAnonymously } from 'firebase/auth';
+import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
+import { httpsCallable } from 'firebase/functions';
 import dynamicMenu from '../../data/dynamicMenu';
 import { categories as defaultCategories } from '../../data/menuData';
+import {
+  normalizeGrabOrderStatus,
+  canTransitionTo,
+  paymentAllowsConfirm,
+  toLegacyTrackingStatus,
+} from '../orderPipeline.js';
+import { getSupportBotReply } from '../../utils/supportBotReply';
+
+const IMAGE_PATH_RE = /^(\/|https?:\/\/)/i;
+const toSafeCategoryFolder = (folderName) => String(folderName || '').replace(/\s+/g, '_');
+
+const toTitleCase = (value = '') =>
+  value
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+
+const sanitizeImagePath = (rawPath) => {
+  const path = typeof rawPath === 'string' ? rawPath.trim() : '';
+  return IMAGE_PATH_RE.test(path) ? path : '';
+};
+
+// Expected filename format: productName_price.ext  (split by "_")
+const parseProductFromFileName = (fileName) => {
+  const extRemoved = String(fileName || '').replace(/\.[^.]+$/, '');
+  const segments = extRemoved.split('_').filter(Boolean);
+  const rawName = (segments[0] || 'Menu Item').replace(/[-]+/g, ' ').trim();
+  const rawPrice = segments.length > 1 ? segments[1] : '';
+  const name = toTitleCase(rawName || 'Menu Item');
+  const price = Number.parseFloat(String(rawPrice).replace(/[^0-9.]/g, ''));
+
+  return {
+    name,
+    price: Number.isFinite(price) ? price : 0,
+  };
+};
 
 // ─── CONNECTION TEST ────────────────────────────────────────────────────────
 export const testConnection = async () => {
@@ -92,14 +132,16 @@ export const subscribeProducts = (callback, activeCategoryId = null) => {
 export const addProduct = async (product) => {
   if (!auth.currentUser) throw new Error("Authentication required to add products.");
   const id = product.id || `prod-${Date.now()}`;
-  const newProduct = { ...product, id, createdAt: new Date().toISOString() };
+  const syncedImage = sanitizeImagePath(product.image || product.img || '');
+  const newProduct = { ...product, image: syncedImage, img: syncedImage, id, createdAt: new Date().toISOString() };
   await setDoc(doc(db, 'products', id), newProduct);
   return newProduct;
 };
 
 export const updateProduct = (id, updatedProduct) => {
   if (!auth.currentUser) throw new Error("Authentication required to update products.");
-  return updateDoc(doc(db, 'products', id), { ...updatedProduct, updatedAt: new Date().toISOString() });
+  const syncedImage = sanitizeImagePath(updatedProduct.image || updatedProduct.img || '');
+  return updateDoc(doc(db, 'products', id), { ...updatedProduct, image: syncedImage, img: syncedImage, updatedAt: new Date().toISOString() });
 };
 
 export const deleteProduct = async (id) => {
@@ -134,6 +176,44 @@ export const deleteProduct = async (id) => {
   }
 };
 
+/**
+ * Calls secure Cloud Function to repair broken product images in Firestore.
+ * Example usage:
+ *   const result = await repairProductImages();
+ *   // Console logs response payload from callable.
+ */
+export const repairProductImages = async () => {
+  if (!auth.currentUser) throw new Error('Authentication required to repair product images.');
+  const callable = httpsCallable(functions, 'repairProductImages');
+  const response = await callable({});
+  console.log('[repairProductImages callable result]', response.data);
+  return response.data;
+};
+
+export const deleteCustomerAccount = async (uid) => {
+  if (!auth.currentUser) throw new Error('Authentication required.');
+  const callable = httpsCallable(functions, 'deleteCustomerAccount');
+  const response = await callable({ uid });
+  return response.data;
+};
+
+export const migrateProductImagePaths = async ({ dryRun = true, previewLimit = 100 } = {}) => {
+  if (!auth.currentUser) throw new Error('Authentication required.');
+  const callable = httpsCallable(functions, 'migrateProductImagePaths');
+  const response = await callable({ dryRun, previewLimit });
+  return response.data;
+};
+
+export const bootstrapAdminClaim = async (uid) => {
+  if (!auth.currentUser) throw new Error('Authentication required.');
+  const targetUid = String(uid || auth.currentUser.uid || '').trim();
+  if (!targetUid) throw new Error('Missing uid.');
+  const callable = httpsCallable(functions, 'makeUserAdmin');
+  const response = await callable({ uid: targetUid });
+  await auth.currentUser.getIdToken(true);
+  return response.data;
+};
+
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
 export const placeOrder = async (orderPayload) => {
@@ -144,19 +224,65 @@ export const placeOrder = async (orderPayload) => {
   });
 
   try {
+    let uid = auth.currentUser?.uid;
+    if (!uid) {
+      const cred = await signInAnonymously(auth);
+      uid = cred.user.uid;
+    }
+
+    const items = Array.isArray(orderPayload.items) ? orderPayload.items : [];
+    if (items.length === 0) {
+      throw new Error('Order requires items');
+    }
+
+    const rawTotal = orderPayload.total;
+    const totalAmount =
+      typeof rawTotal === 'number'
+        ? rawTotal
+        : parseFloat(String(rawTotal ?? '0').replace(/[^0-9.]/g, '')) || 0;
+
+    const statusRaw =
+      orderPayload.status || orderPayload.order_status || orderPayload.orderStatus || 'PENDING';
+    const status = String(statusRaw).toUpperCase();
+
+    const payRaw = orderPayload.paymentStatus ?? orderPayload.payment_status;
+    const paymentStatus = typeof payRaw === 'string' ? payRaw : String(payRaw ?? '');
+
+    const {
+      userId: _ignoreUserId,
+      total: _total,
+      totalAmount: _dropTam,
+      order_status: _os,
+      orderStatus: _oS,
+      status: _st,
+      payment_status: _ps,
+      paymentStatus: _pS,
+      items: _it,
+      ...restExtras
+    } = orderPayload;
+
     const orderId = `STM-${Date.now()}`;
     const trackingToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
-    const newOrder = { 
-      ...orderPayload, 
-      id: orderId, 
+
+    const cleanExtras = { ...restExtras };
+    delete cleanExtras.order_status;
+    delete cleanExtras.orderStatus;
+
+    const newOrder = {
+      ...cleanExtras,
+      userId: uid,
+      items,
+      totalAmount,
+      status,
+      paymentStatus,
+      payment_status: paymentStatus,
+      id: orderId,
       trackingToken,
       createdAt: new Date().toISOString(),
-      status: (orderPayload.status || 'PENDING').toUpperCase(),
       isNewForAdmin: true,
       chatEnabled: true,
       unreadAdmin: 0,
-      unreadCustomer: 0
+      unreadCustomer: 0,
     };
 
     // DEBUG: Write #1 - Primary Order
@@ -175,31 +301,7 @@ export const placeOrder = async (orderPayload) => {
       throw err1; // Propagate to outer catch
     }
 
-    const publicData = {
-      id: orderId,
-      status: newOrder.status || 'PENDING',
-      items: newOrder.items || [],
-      total: newOrder.total || 0,
-      mode: newOrder.mode || 'delivery',
-      paymentProofSubmitted: false,
-      createdAt: new Date()
-    };
-
-    // DEBUG: Write #2 - Public Tracking
-    console.log('[DEBUG] Attempting Write #2: /public_tracking/' + orderId);
-    console.log('[DEBUG] Payload #2:', JSON.stringify(publicData, null, 2));
-
-    try {
-      await setDoc(doc(db, 'public_tracking', orderId), publicData);
-      console.log('[DEBUG] Write #2 SUCCESS');
-    } catch (err2) {
-      console.error('[DEBUG] Write #2 FAILED:', {
-        code: err2.code,
-        message: err2.message,
-        path: '/public_tracking/' + orderId
-      });
-      throw err2; // Propagate to outer catch
-    }
+    // public_tracking is mirrored from orders via Cloud Functions (deploy: firebase deploy --only functions).
 
     localStorage.setItem('stm_last_order_id', orderId);
     return newOrder;
@@ -245,45 +347,116 @@ export const fetchOrderById = async (id) => {
 export const updateOrderStatus = async (orderId, newStatus, extraOrderFields = {}) => {
   const normalizedStatus = (newStatus || 'PENDING').toUpperCase();
   try {
-    await Promise.all([
-      updateDoc(doc(db, "orders", orderId), {
-        ...extraOrderFields,
-        status: normalizedStatus
-      }),
-      updateDoc(doc(db, "public_tracking", orderId), {
-        status: normalizedStatus
-      })
-    ]);
+    await updateDoc(doc(db, "orders", orderId), {
+      ...extraOrderFields,
+      status: normalizedStatus
+    });
   } catch (error) {
     console.error("Status update failed:", error);
     throw error;
   }
 };
 
+/** Strict pipeline + payment gate (Stripe/QR must be PAID before CONFIRMED). */
+export const advanceOrderPipeline = async (orderId, order, nextStatus) => {
+  if (!auth.currentUser) throw new Error('Authentication required');
+  const next = String(nextStatus || '')
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+  const current = normalizeGrabOrderStatus(order);
+  if (next === 'CONFIRMED' && current === 'PLACED') {
+    const gate = paymentAllowsConfirm(order);
+    if (!gate.ok) throw new Error(gate.reason);
+  }
+  if (!canTransitionTo(current, next)) {
+    throw new Error(`Invalid transition: ${current} → ${next}. Advance one stage only.`);
+  }
+  const legacy = toLegacyTrackingStatus(next);
+  await updateDoc(doc(db, 'orders', orderId), {
+    orderStatus: next,
+    status: legacy,
+    order_status: next.toLowerCase(),
+    updatedAt: new Date().toISOString(),
+    chatEnabled: next !== 'PLACED' && next !== 'CANCELLED',
+  });
+};
+
+export const assignRiderToOrder = async (orderId, riderPayload) => {
+  if (!auth.currentUser) throw new Error('Authentication required');
+  const orderRef = doc(db, 'orders', orderId);
+  const snap = await getDoc(orderRef);
+  if (!snap.exists()) throw new Error('Order not found');
+  const data = snap.data();
+  const st = normalizeGrabOrderStatus(data);
+  if (st !== 'READY') throw new Error('Assign rider only when order is READY');
+  const name = (riderPayload?.name || '').trim();
+  if (!name) throw new Error('Rider name required');
+  const ts = new Date().toISOString();
+  await updateDoc(orderRef, {
+    rider: {
+      id: riderPayload?.id || null,
+      name,
+      phone: (riderPayload?.phone || '').trim(),
+      legStatus: 'OFFERED',
+      assignedAt: ts,
+      acceptedAt: null,
+      pickedUpAt: null,
+      deliveredAt: null,
+    },
+    updatedAt: ts,
+  });
+};
+
+/** Proxy for future rider app: accept → OUT_FOR_DELIVERY, pickup, deliver → DELIVERED. */
+export const advanceRiderLeg = async (orderId, leg) => {
+  if (!auth.currentUser) throw new Error('Authentication required');
+  const orderRef = doc(db, 'orders', orderId);
+  const snap = await getDoc(orderRef);
+  if (!snap.exists()) throw new Error('Order not found');
+  const data = snap.data();
+  const st = normalizeGrabOrderStatus(data);
+  const rider = data.rider || {};
+  const ts = new Date().toISOString();
+
+  if (leg === 'accept') {
+    if (st !== 'READY') throw new Error('Rider accept only when order is READY');
+    if (rider.legStatus !== 'OFFERED') throw new Error('Assign a rider first');
+    await updateDoc(orderRef, {
+      orderStatus: 'OUT_FOR_DELIVERY',
+      status: toLegacyTrackingStatus('OUT_FOR_DELIVERY'),
+      order_status: 'out_for_delivery',
+      rider: { ...rider, legStatus: 'ACCEPTED', acceptedAt: ts },
+      updatedAt: ts,
+    });
+    return;
+  }
+  if (leg === 'pickup') {
+    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Pick up only when OUT_FOR_DELIVERY');
+    await updateDoc(orderRef, {
+      rider: { ...rider, legStatus: 'PICKED_UP', pickedUpAt: ts },
+      updatedAt: ts,
+    });
+    return;
+  }
+  if (leg === 'deliver') {
+    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Deliver only when OUT_FOR_DELIVERY');
+    await updateDoc(orderRef, {
+      orderStatus: 'DELIVERED',
+      status: toLegacyTrackingStatus('DELIVERED'),
+      order_status: 'delivered',
+      rider: { ...rider, legStatus: 'COMPLETED', deliveredAt: ts },
+      updatedAt: ts,
+    });
+    return;
+  }
+  throw new Error('Unknown rider action');
+};
+
 export const deleteOrder = async (id) => {
-  const allowedAdmins = [
-    'stmsalam@gmail.com',
-    'admin@stmsalam.com',
-    'admin@stm.com'
-  ];
-
   if (!auth.currentUser) throw new Error("Authentication required to delete orders.");
-  
-  if (!allowedAdmins.includes(auth.currentUser.email)) {
-    throw new Error(`Permission Denied: You (${auth.currentUser.email}) do not have rights to delete orders.`);
-  }
-
-  console.log(`[Delete Order] Requesting delete for ${id} by user: ${auth.currentUser?.email}`);
-  try {
-    await deleteDoc(doc(db, 'orders', id));
-    console.log('✅ Deleted Firestore document (Order)');
-  } catch (err) {
-    console.error('Delete Order Error:', err.code, err.message);
-    if (err.code === 'permission-denied') {
-      throw new Error(`Permission Denied: You (${auth.currentUser?.email || 'unauthenticated'}) do not have rights to delete orders.`);
-    }
-    throw err;
-  }
+  const callable = httpsCallable(functions, 'deleteOrderByAdmin');
+  const response = await callable({ orderId: id });
+  return response.data;
 };
 
 // ─── ORDER CHAT & NOTIFICATIONS ──────────────────────────────────────────────
@@ -347,6 +520,102 @@ export const markOrderAsSeen = async (orderId) => {
   if (!auth.currentUser) return;
   const orderRef = doc(db, 'orders', orderId);
   await updateDoc(orderRef, { isNewForAdmin: false, unreadAdmin: 0 });
+};
+
+// ─── SITE SUPPORT CHAT (customer ↔ admin, separate from order threads) ──────
+
+const preview140 = (s) => String(s || '').trim().slice(0, 140);
+
+async function writeSupportChatDoc(chatRef, senderRole, trimmed) {
+  const p = preview140(trimmed);
+  if (senderRole === 'customer') {
+    await setDoc(
+      chatRef,
+      {
+        updatedAt: serverTimestamp(),
+        lastPreview: p,
+        lastMessage: p,
+        lastSenderRole: senderRole,
+        unreadByAdmin: true,
+        unreadByUser: false,
+      },
+      { merge: true }
+    );
+  } else if (senderRole === 'admin') {
+    await setDoc(
+      chatRef,
+      {
+        updatedAt: serverTimestamp(),
+        lastPreview: p,
+        lastMessage: p,
+        lastSenderRole: senderRole,
+        unreadByUser: true,
+        unreadByAdmin: false,
+        resolved: false,
+      },
+      { merge: true }
+    );
+  } else if (senderRole === 'bot') {
+    await setDoc(
+      chatRef,
+      {
+        updatedAt: serverTimestamp(),
+        lastPreview: p,
+        lastMessage: p,
+        lastSenderRole: 'bot',
+      },
+      { merge: true }
+    );
+  }
+}
+
+export const sendSupportChatMessage = async (conversationId, { text, senderRole }, options = {}) => {
+  const trimmed = (text || '').trim();
+  if (!trimmed || !conversationId) throw new Error('Invalid support message');
+  const chatRef = doc(db, 'support_chats', conversationId);
+  await writeSupportChatDoc(chatRef, senderRole, trimmed);
+  await addDoc(collection(db, 'support_chats', conversationId, 'messages'), {
+    text: trimmed,
+    senderRole,
+    createdAt: serverTimestamp(),
+  });
+  if (senderRole === 'customer' && !options.skipBot) {
+    const botText = getSupportBotReply(trimmed);
+    if (botText) {
+      await sendSupportChatMessage(conversationId, { text: botText, senderRole: 'bot' }, { skipBot: true });
+    }
+  }
+};
+
+export const subscribeSupportChatMessages = (conversationId, callback) => {
+  if (!conversationId) return () => {};
+  const q = query(
+    collection(db, 'support_chats', conversationId, 'messages'),
+    orderBy('createdAt', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => console.error('Support chat messages subscription:', err)
+  );
+};
+
+/** Admin inbox: all support conversation heads, newest first */
+export const subscribeSupportInbox = (callback) => {
+  const q = query(collection(db, 'support_chats'), orderBy('updatedAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('Support inbox subscription:', err);
+      callback([]);
+    }
+  );
+};
+
+export const markSupportChatReadByAdmin = async (conversationId) => {
+  if (!conversationId) return;
+  await setDoc(doc(db, 'support_chats', conversationId), { unreadByAdmin: false }, { merge: true });
 };
 
 // ─── GALLERY ────────────────────────────────────────────────────────────────
@@ -452,10 +721,9 @@ export const seedFromLocalStorage = async (forceRewrite = false) => {
 
   Object.keys(dynamicMenu).forEach(categoryKey => {
     dynamicMenu[categoryKey].forEach((filename, i) => {
-      const cleanName = filename.replace('.png', '').replace('.jpg', '').replace(/_/g, ' ');
-      const priceMatch = cleanName.match(/SGD\s*(\d+(\.\d+)?)/i);
-      const price = priceMatch ? parseFloat(priceMatch[1]) : 5.0;
-      let name = cleanName.replace(/SGD\s*\d+(\.\d+)?/i, '').trim() || 'Menu Item';
+      const parsed = parseProductFromFileName(filename);
+      const name = parsed.name;
+      const price = parsed.price;
       
       const categoryIdMap = {
         'SNACKS': 'snacks', 'BURGER KABABAB': 'burgers-kebabs', 'DINOSAUR': 'dinosaur',
@@ -470,11 +738,14 @@ export const seedFromLocalStorage = async (forceRewrite = false) => {
       // CRITICAL: We only seed if the item was NEVER there. 
       // This prevents deleted items from coming back.
       if (!existingProdIds.has(pId)) {
+        const imagePath = sanitizeImagePath(encodeURI(`/assets/SMT_FOOD/${toSafeCategoryFolder(realFolderPath)}/${filename}`));
         prods.push({
           id: pId, name, price, categoryId: catId,
           category: matchedCat ? matchedCat.name : categoryKey,
           badge: i % 5 === 0 ? 'bestseller' : '',
-          active: true, img: `/SMT FOOD/SMT FOOD/${realFolderPath}/${filename}`,
+          active: true,
+          image: imagePath,
+          img: imagePath,
         });
       }
     });
@@ -562,6 +833,8 @@ export const dataService = {
   addProduct,
   updateProduct,
   deleteProduct,
+  repairProductImages,
+  bootstrapAdminClaim,
   placeOrder,
   updateOrderStatus,
   deleteOrder,
@@ -580,4 +853,8 @@ export const dataService = {
   subscribeMessages,
   markMessagesAsRead,
   markOrderAsSeen,
+  sendSupportChatMessage,
+  subscribeSupportChatMessages,
+  subscribeSupportInbox,
+  markSupportChatReadByAdmin,
 };

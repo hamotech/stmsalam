@@ -5,10 +5,12 @@ import {
   addProduct,
   updateProduct,
   deleteProduct,
+  migrateProductImagePaths,
+  bootstrapAdminClaim,
 } from '../services/dataService';
-import { storage } from '../../lib/firebase';
+import { auth, storage } from '../../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Plus, Edit, Trash2, ArrowLeft, Image as ImageIcon, Star, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, ArrowLeft, Image as ImageIcon, Star, CheckCircle, XCircle, Wand2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Products = () => {
@@ -22,6 +24,18 @@ const Products = () => {
   const [deleteModal, setDeleteModal] = useState({ show: false, id: null });
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [dryRunCompleted, setDryRunCompleted] = useState(false);
+  const [migrationReport, setMigrationReport] = useState(null);
+
+  const tryBootstrapAdminAndRetry = async (retryAction) => {
+    const uid = auth.currentUser?.uid || '';
+    if (!uid) throw new Error('Authentication required.');
+    await bootstrapAdminClaim(uid);
+    showToast('Admin claim granted. Retrying now...');
+    return retryAction();
+  };
 
   // ── Real-time Firestore subscriptions ──────────────────────────────────────
   useEffect(() => {
@@ -60,34 +74,123 @@ const Products = () => {
 
   const handleDelete = (id) => setDeleteModal({ show: true, id });
 
+  const handleDryRunImageFix = async () => {
+    if (migrationLoading) return;
+    setMigrationLoading(true);
+    setRepairing(true);
+    try {
+      const result = await migrateProductImagePaths({ dryRun: true, previewLimit: 100 });
+      setMigrationReport(result);
+      setDryRunCompleted(true);
+      const brokenFound = Number(result?.brokenCount ?? 0);
+      if (brokenFound === 0) {
+        showToast('All products already have valid images. Nothing to repair.');
+      } else {
+        showToast(`Dry run complete: ${brokenFound} broken images found. Review table below.`);
+      }
+      console.log('[ImageFix DryRun]', result);
+    } catch (err) {
+      const code = err?.code || '';
+      if (code === 'functions/permission-denied') {
+        try {
+          const result = await tryBootstrapAdminAndRetry(() =>
+            migrateProductImagePaths({ dryRun: true, previewLimit: 100 })
+          );
+          setMigrationReport(result);
+          setDryRunCompleted(true);
+          showToast(`Dry run complete: ${Number(result?.brokenCount ?? 0)} broken images found.`);
+          console.log('[ImageFix DryRun Retry]', result);
+        } catch (retryErr) {
+          showToast(retryErr.message || 'Repair denied: your account is missing admin custom claim.', 'error');
+        }
+      } else if (code === 'functions/unauthenticated') {
+        showToast('Please sign in again before running repair.', 'error');
+      } else {
+        showToast(err.message || 'Failed to repair images.', 'error');
+      }
+    } finally {
+      setMigrationLoading(false);
+      setRepairing(false);
+    }
+  };
+
+  const handleApplyImageFix = async () => {
+    if (!dryRunCompleted || migrationLoading) return;
+    const ok = window.confirm('Apply image fixes to all broken entries from dry run?');
+    if (!ok) return;
+    setMigrationLoading(true);
+    setRepairing(true);
+    try {
+      const result = await migrateProductImagePaths({ dryRun: false, previewLimit: 100 });
+      setMigrationReport(result);
+      showToast(`Applied image fix: ${result.updatedCount} updated, ${result.validCount} already valid.`);
+      console.log('[ImageFix Apply]', result);
+    } catch (err) {
+      const code = err?.code || '';
+      if (code === 'functions/permission-denied') {
+        try {
+          const result = await tryBootstrapAdminAndRetry(() =>
+            migrateProductImagePaths({ dryRun: false, previewLimit: 100 })
+          );
+          setMigrationReport(result);
+          showToast(`Applied image fix: ${result.updatedCount} updated, ${result.validCount} already valid.`);
+          console.log('[ImageFix Apply Retry]', result);
+        } catch (retryErr) {
+          showToast(retryErr.message || 'Failed to apply image fix.', 'error');
+        }
+      } else {
+        showToast(err.message || 'Failed to apply image fix.', 'error');
+      }
+    } finally {
+      setMigrationLoading(false);
+      setRepairing(false);
+    }
+  };
+
   // Upload image to Firebase Storage, get download URL
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setUploadingImage(true);
     let compressedDataURL;
+    const uploadToStorage = async (blob, originalName) => {
+      const fileRef = storageRef(storage, `products/${Date.now()}_${originalName}`);
+      const uploadPromise = uploadBytes(fileRef, blob, { contentType: 'image/webp' });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firebase Storage upload timed out')), 3000)
+      );
+      await Promise.race([uploadPromise, timeoutPromise]);
+      return getDownloadURL(fileRef);
+    };
     try {
       // Compress image via canvas first
       compressedDataURL = await compressImage(file);
       const blob = await (await fetch(compressedDataURL)).blob();
-      const fileRef = storageRef(storage, `products/${Date.now()}_${file.name}`);
-      
-      // Setup a 3-second timeout for uploadBytes in case Firebase Storage hangs
-      const uploadPromise = uploadBytes(fileRef, blob, { contentType: 'image/webp' });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firebase Storage upload timed out')), 3000)
-      );
-      
-      await Promise.race([uploadPromise, timeoutPromise]);
-      const url = await getDownloadURL(fileRef);
-      setCurrentProduct(prev => ({ ...prev, image: url }));
+      const url = await uploadToStorage(blob, file.name);
+      setCurrentProduct(prev => ({ ...prev, image: url, img: url }));
       showToast('Image uploaded to Firebase Storage ✓');
     } catch (err) {
+      const code = String(err?.code || '');
+      // If claim is stale, bootstrap admin and retry upload once.
+      if (code === 'storage/unauthorized') {
+        try {
+          await tryBootstrapAdminAndRetry(async () => {
+            const blob = await (await fetch(compressedDataURL)).blob();
+            const url = await uploadToStorage(blob, file.name);
+            setCurrentProduct((prev) => ({ ...prev, image: url, img: url }));
+            return true;
+          });
+          showToast('Image uploaded to Firebase Storage ✓');
+          return;
+        } catch (retryErr) {
+          console.warn('[Storage] Upload retry failed after admin bootstrap:', retryErr?.message || retryErr);
+        }
+      }
+
       console.warn('[Storage] Upload failed, falling back to local base64:', err.message);
-      // Fallback: use the highly-compressed base64 data
       if (compressedDataURL) {
-        setCurrentProduct(prev => ({ ...prev, image: compressedDataURL }));
-        showToast('Image saved locally (Firebase Storage is offline)', 'success');
+        setCurrentProduct(prev => ({ ...prev, image: compressedDataURL, img: compressedDataURL }));
+        showToast('Image saved locally (Firebase Storage unavailable)', 'success');
       } else {
         showToast('Failed to process image.', 'error');
       }
@@ -127,11 +230,16 @@ const Products = () => {
     }
     setSaving(true);
     try {
+      const payload = {
+        ...currentProduct,
+        image: currentProduct.image || currentProduct.img || '',
+        img: currentProduct.image || currentProduct.img || '',
+      };
       if (view === 'add') {
-        await addProduct(currentProduct);
+        await addProduct(payload);
         showToast('Product added successfully.');
       } else {
-        await updateProduct(currentProduct.id, currentProduct);
+        await updateProduct(currentProduct.id, payload);
         showToast('Product updated successfully.');
       }
       setView('list');
@@ -258,13 +366,80 @@ const Products = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a' }}>Products Management</h2>
-        <div style={{ display: 'flex', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
           <input type="text" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '600', outline: 'none' }} />
+          <button
+            onClick={handleDryRunImageFix}
+            disabled={migrationLoading}
+            title="Preview broken image paths without writing"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              backgroundColor: migrationLoading ? '#94a3b8' : '#f59e0b',
+              color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px',
+              fontWeight: 'bold', cursor: migrationLoading ? 'wait' : 'pointer',
+              boxShadow: '0 4px 12px rgba(245,158,11,0.25)'
+            }}
+          >
+            <Wand2 size={18} /> {migrationLoading ? 'Running…' : 'Dry Run Image Fix'}
+          </button>
+          <button
+            onClick={handleApplyImageFix}
+            disabled={!dryRunCompleted || migrationLoading}
+            title="Apply image path fixes to broken entries"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              backgroundColor: (!dryRunCompleted || migrationLoading) ? '#94a3b8' : '#0f766e',
+              color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px',
+              fontWeight: 'bold', cursor: (!dryRunCompleted || migrationLoading) ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 12px rgba(15,118,110,0.25)'
+            }}
+          >
+            <Wand2 size={18} /> Apply Image Fix
+          </button>
           <button onClick={() => { setCurrentProduct(getEmptyProduct()); setView('add'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--green-dark)', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(1,50,32,0.2)' }}>
             <Plus size={18} /> Add Product
           </button>
         </div>
       </div>
+
+      {migrationReport && (
+        <div style={{ marginBottom: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '16px' }}>
+          <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '13px', fontWeight: 800, color: '#334155', marginBottom: '12px' }}>
+            <span>Total: {migrationReport.totalProductsScanned}</span>
+            <span>Broken: {migrationReport.brokenCount}</span>
+            <span>Valid: {migrationReport.validCount}</span>
+            <span>Preview Limit: {migrationReport.previewLimitUsed}</span>
+            <span>Updated: {migrationReport.updatedCount}</span>
+            <span>Mode: {migrationReport.dryRun ? 'Dry Run' : 'Apply'}</span>
+          </div>
+          {Array.isArray(migrationReport.brokenEntries) && migrationReport.brokenEntries.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', background: '#f8fafc' }}>
+                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0' }}>Product</th>
+                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0' }}>Category</th>
+                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0' }}>Current</th>
+                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0' }}>Proposed</th>
+                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0' }}>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {migrationReport.brokenEntries.map((entry) => (
+                    <tr key={entry.productId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '8px' }}>{entry.productName || entry.productId}</td>
+                      <td style={{ padding: '8px' }}>{entry.category || '-'}</td>
+                      <td style={{ padding: '8px', color: '#64748b' }}>{entry.currentImage || '-'}</td>
+                      <td style={{ padding: '8px', color: '#0f766e' }}>{entry.proposedReplacementImage}</td>
+                      <td style={{ padding: '8px', color: '#b45309' }}>{entry.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.03)', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.02)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -280,6 +455,17 @@ const Products = () => {
           <tbody>
             {filteredProducts.map(product => {
               const matchedCat = categories.find(c => c.id === product.categoryId);
+              const fallbackCategoryName = String(product.category || product.categoryId || '').trim();
+              const matchedByName = !matchedCat && fallbackCategoryName
+                ? categories.find((c) => String(c.name || '').toLowerCase() === fallbackCategoryName.toLowerCase())
+                : null;
+              const categoryLabel = matchedCat
+                ? `${matchedCat.icon || '📦'} ${matchedCat.name || 'Uncategorized'}`
+                : matchedByName
+                  ? `${matchedByName.icon || '📦'} ${matchedByName.name || 'Uncategorized'}`
+                  : fallbackCategoryName
+                    ? `📦 ${fallbackCategoryName}`
+                    : '📦 Uncategorized';
               return (
                 <tr key={product.id} style={{ borderBottom: '1px solid #f1f5f9', transition: '0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -295,7 +481,7 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '20px', color: '#64748b' }}>
                     <span style={{ backgroundColor: '#f1f5f9', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', color: '#475569' }}>
-                      {matchedCat ? `${matchedCat.icon} ${matchedCat.name}` : '📦 Uncategorized'}
+                      {categoryLabel}
                     </span>
                   </td>
                   <td style={{ padding: '20px', fontWeight: '900', color: 'var(--green-dark)', fontSize: '16px' }}>${product.price ? parseFloat(product.price).toFixed(2) : '0.00'}</td>
