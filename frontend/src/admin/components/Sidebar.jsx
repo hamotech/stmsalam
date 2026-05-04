@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users, Image as ImageIcon, Settings } from 'lucide-react';
-import { subscribeOrders } from '../services/dataService';
+import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users, Image as ImageIcon, Settings, MessageSquare, ChefHat, Bike, CreditCard, BarChart3 } from 'lucide-react';
+import { subscribeOrders, subscribeSupportInbox } from '../services/dataService';
 
 const Sidebar = () => {
   const [newOrdersCount, setNewOrdersCount] = useState(0);
+  const [supportThreadCount, setSupportThreadCount] = useState(0);
 
   useEffect(() => {
     const unsub = subscribeOrders((orders) => {
@@ -14,11 +15,24 @@ const Sidebar = () => {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = subscribeSupportInbox((threads) => {
+      const n = threads.filter((t) => t.lastSenderRole === 'customer').length;
+      setSupportThreadCount(n);
+    });
+    return () => unsub();
+  }, []);
+
   const navItems = [
     { name: 'Dashboard', path: '/admin', icon: <LayoutDashboard size={20} />, exact: true },
     { name: 'Products', path: '/admin/products', icon: <PackageSearch size={20} /> },
     { name: 'Categories', path: '/admin/categories', icon: <Tags size={20} /> },
     { name: 'Orders', path: '/admin/orders', icon: <ShoppingBag size={20} />, badge: newOrdersCount },
+    { name: 'Kitchen', path: '/admin/kitchen', icon: <ChefHat size={20} /> },
+    { name: 'Riders', path: '/admin/riders', icon: <Bike size={20} /> },
+    { name: 'Payments', path: '/admin/payments', icon: <CreditCard size={20} /> },
+    { name: 'Analytics', path: '/admin/analytics', icon: <BarChart3 size={20} /> },
+    { name: 'Customer chat', path: '/admin/support', icon: <MessageSquare size={20} />, badge: supportThreadCount },
     { name: 'Gallery', path: '/admin/gallery', icon: <ImageIcon size={20} /> },
     { name: 'Customers', path: '/admin/customers', icon: <Users size={20} /> },
     { name: 'Settings', path: '/admin/settings', icon: <Settings size={20} /> }

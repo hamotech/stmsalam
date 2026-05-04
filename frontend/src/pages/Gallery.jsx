@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Play, X, ZoomIn, Maximize2, Image as ImageIcon, Film } from 'lucide-react'
 import { dataService } from '../admin/services/dataService'
 import { useData } from '../context/DataContext'
+import SmartImage from '../components/common/SmartImage'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 export default function Gallery() {
   const [selectedMedia, setSelectedMedia] = useState(null)
@@ -97,7 +99,7 @@ export default function Gallery() {
                 {item.type === 'video' ? (
                   <div style={{ width: '100%', height: '100%', background: '#000' }}>
                     <video 
-                      src={item.url} 
+                      src={resolveImageUrl(item.url)} 
                       muted
                       loop
                       preload="metadata"
@@ -112,7 +114,7 @@ export default function Gallery() {
                     </div>
                   </div>
                 ) : (
-                  <img loading="lazy" 
+                  <SmartImage
                     src={item.url} 
                     alt={item.name}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
@@ -188,13 +190,13 @@ export default function Gallery() {
             >
               {selectedMedia.type === 'video' ? (
                 <video 
-                  src={selectedMedia.url} 
+                  src={resolveImageUrl(selectedMedia.url)} 
                   controls 
                   autoPlay 
                   style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} 
                 />
               ) : (
-                <img loading="lazy" 
+                <SmartImage 
                   src={selectedMedia.url} 
                   alt={selectedMedia.name} 
                   style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block', objectFit: 'contain' }} 

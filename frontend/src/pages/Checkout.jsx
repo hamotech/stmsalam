@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   MapPin, CreditCard, Banknote, Wallet, Phone, Home, Bike, 
@@ -7,15 +7,58 @@ import {
   CircleCheck, RefreshCw, Paperclip 
 } from 'lucide-react'
 import { shopInfo } from '../data/menuData';
-import payScanner from '../assets/payscanner_real.png';
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
-import { placeOrder } from '../admin/services/dataService'
+import {
+  placeGrabOrderAtCheckout,
+  createCheckoutIdempotencyKey,
+  readPersistedCheckoutIdempotencyKey,
+  persistCheckoutIdempotencyKey,
+  clearPersistedCheckoutIdempotencyKey,
+  tryAcquireCheckoutTabLock,
+  releaseCheckoutTabLock,
+  heartbeatCheckoutTabLock,
+  validateCheckoutSessionController,
+  releaseServerCheckoutLease,
+  persistResolvedOrderForIdempotency,
+} from '../services/grabCheckout'
+import {
+  createStripePendingOrder,
+  handleStripePayment,
+} from '../services/stripeCheckout'
 import { motion, AnimatePresence } from 'framer-motion'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
-import { storage, db } from '../lib/firebase'
+import { storage, db, auth as firebaseAuth } from '../lib/firebase'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updateDoc, doc } from 'firebase/firestore'
+import { haversineKm, geocodeAddressSingapore, computeDeliveryQuote, isGoogleMapsGeocodingConfigured } from '../utils/delivery'
+
+/** UI payment id → labels normalized by `grabCheckout` + Cloud Function `PAYMENT_ALIASES`. */
+const CHECKOUT_PAYMENT_MAP = {
+  paynow: 'PAYNOW',
+  stripe: 'CARD',
+  paypal: 'CARD',
+  cash: 'COD',
+}
+
+const buildSafeOrderLineItems = (items = []) => {
+  return (items || [])
+    .filter(
+      (i) =>
+        i &&
+        typeof i.name === 'string' &&
+        i.name.trim().length > 0 &&
+        Number.isFinite(i.price) &&
+        i.price > 0 &&
+        Number.isInteger(i.qty) &&
+        i.qty > 0
+    )
+    .map((i) => ({
+      name: i.name.trim(),
+      price: Number(i.price),
+      qty: i.qty,
+    }))
+}
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -43,6 +86,63 @@ export default function Checkout() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState('');
+  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState('')
+  const [checkoutForeignTabLock, setCheckoutForeignTabLock] = useState(false)
+  const checkoutIdempotencyRef = useRef(null)
+  const checkoutSubmitLockRef = useRef(false)
+  const stripePaymentLaunchRef = useRef(false)
+  const stripeCheckoutCooldownUntilRef = useRef(0)
+  const checkoutProcessingSyncRef = useRef(false)
+  const stripeHostedRedirectIssuedRef = useRef(false)
+
+  const commitCheckoutIdempotencySession = () => {
+    if (!validateCheckoutSessionController()) return false
+    releaseCheckoutTabLock()
+    clearPersistedCheckoutIdempotencyKey()
+    checkoutIdempotencyRef.current = null
+    void releaseServerCheckoutLease()
+    return true
+  }
+
+  /** Cross-tab lock: avoids two tabs each minting a fresh idempotency key for the same profile. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const acquired = tryAcquireCheckoutTabLock()
+    setCheckoutForeignTabLock(!acquired)
+    const hb = window.setInterval(() => heartbeatCheckoutTabLock(), 90_000)
+    const onUnload = () => releaseCheckoutTabLock()
+    window.addEventListener('beforeunload', onUnload)
+    window.addEventListener('pagehide', onUnload)
+    return () => {
+      window.clearInterval(hb)
+      window.removeEventListener('beforeunload', onUnload)
+      window.removeEventListener('pagehide', onUnload)
+      releaseCheckoutTabLock()
+    }
+  }, [])
+
+  /** When returning to a visible tab, refresh lock liveness (timers are throttled in background). */
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const onVis = () => {
+      if (document.visibilityState === 'visible') heartbeatCheckoutTabLock()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  /** Restore crash-resume key from sessionStorage; new key only when none stored. Cleared only on commit (nav / reset), not on unmount. */
+  useEffect(() => {
+    const stored = readPersistedCheckoutIdempotencyKey()
+    if (stored) {
+      checkoutIdempotencyRef.current = stored
+    } else if (!checkoutIdempotencyRef.current) {
+      checkoutIdempotencyRef.current = createCheckoutIdempotencyKey()
+      persistCheckoutIdempotencyKey(checkoutIdempotencyRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 500);
@@ -54,8 +154,10 @@ export default function Checkout() {
     const lastOrderId = localStorage.getItem('stm_last_order_id');
     // If we have a last order and the cart is empty, redirect to tracking instead of showing empty checkout
     if (lastOrderId && (!cartItems || cartItems.length === 0)) {
-      console.log('Redirecting to existing order tracking:', lastOrderId);
+      console.log('Navigating to tracking:', lastOrderId);
       navigate(`/tracking/${lastOrderId}`, { replace: true });
+    } else if ((!cartItems || cartItems.length === 0) && !lastOrderId) {
+      console.error('Track navigation blocked: missing orderId in Checkout.');
     }
   }, [cartItems.length, navigate]);
 
@@ -72,10 +174,63 @@ export default function Checkout() {
   }, [user]);
 
   const safeSubtotal = Number(subtotal) || 0
-  const deliveryFee = 0 // Override: delivery fee removed
   const taxRate = 0 // Override: GST removed
   const tax = safeSubtotal * taxRate
+
+  const deliveryQuote = useMemo(
+    () => computeDeliveryQuote({ mode, subtotal: safeSubtotal, distanceKm: deliveryDistanceKm }),
+    [mode, safeSubtotal, deliveryDistanceKm]
+  )
+
+  const deliveryFee =
+    mode === 'delivery' && !deliveryQuote.blocked
+      ? (typeof deliveryQuote.deliveryFee === 'number' ? deliveryQuote.deliveryFee : 0)
+      : 0
+
   const total = safeSubtotal + tax + deliveryFee
+
+  useEffect(() => {
+    if (mode !== 'delivery') {
+      setDeliveryDistanceKm(null)
+      setGeoError('')
+      setGeoLoading(false)
+      return
+    }
+    const addr = (formData.address || '').trim()
+    const hasSgPostal = /\b\d{6}\b/.test(addr)
+    if (addr.length < 6 || (!hasSgPostal && addr.length < 8)) {
+      setDeliveryDistanceKm(null)
+      setGeoError('')
+      return
+    }
+    const timer = setTimeout(async () => {
+      setGeoLoading(true)
+      setGeoError('')
+      try {
+        const pt = await geocodeAddressSingapore(addr)
+        if (!pt) {
+          setDeliveryDistanceKm(null)
+          setGeoError(
+            isGoogleMapsGeocodingConfigured()
+              ? 'We could not place that address on the map. Check the 6-digit postal code, block and street name, then try again.'
+              : import.meta.env.DEV
+                ? 'We could not place that address on the map. Use a 6-digit postal code with block and street, or DETECT ME. Tip: set VITE_GOOGLE_MAPS_API_KEY in .env.local for reliable geocoding.'
+                : 'We could not place that address on the map. Add a 6-digit Singapore postal code (e.g. 440004) with block and street, or tap DETECT ME to use your location.'
+          )
+          return
+        }
+        const km = haversineKm(shopInfo.outletLat, shopInfo.outletLng, pt.lat, pt.lon)
+        setDeliveryDistanceKm(km)
+        setGeoError('')
+      } catch {
+        setDeliveryDistanceKm(null)
+        setGeoError('Distance check failed. Standard delivery fee applies until we confirm your address.')
+      } finally {
+        setGeoLoading(false)
+      }
+    }, 750)
+    return () => clearTimeout(timer)
+  }, [mode, formData.address])
 
   const handleChange = (e) => {
     if (e?.target) {
@@ -84,14 +239,41 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
-    // Override: minimum order bypass — allow any amount
-
-    if (!formData?.name || !formData?.phone) {
-      alert('Please provide your name and phone number.');
-      return;
+    if (processing) {
+      return
+    }
+    stripeHostedRedirectIssuedRef.current = false
+    if (checkoutForeignTabLock) {
+      alert('Checkout is already active in another browser tab. Finish or close that tab first.')
+      return
     }
 
-    const normalizedPhone = String(formData.phone || '').replace(/\s|-/g, '')
+    const nameTrim = (formData?.name || '').trim()
+    const phoneTrim = (formData?.phone || '').trim()
+    if (!nameTrim) {
+      alert('Please enter your name.')
+      return
+    }
+    if (!phoneTrim) {
+      alert('Please enter your mobile number.')
+      return
+    }
+
+    if (mode === 'delivery') {
+      if (deliveryQuote.blocked) {
+        alert(
+          `Delivery needs a minimum order of SGD ${(shopInfo.minOrderDelivery ?? 10).toFixed(2)}. ` +
+          `Add more items, or choose pickup at ${shopInfo.outletName}.`
+        )
+        return
+      }
+      if (!(formData.address || '').trim()) {
+        alert('Please enter your full delivery address (include postal code).')
+        return
+      }
+    }
+
+    const normalizedPhone = String(phoneTrim).replace(/\s|-/g, '')
     const isValidSgPhone = /^(?:\+65)?[689]\d{7}$/.test(normalizedPhone)
 
     if ((payment === 'stripe' || payment === 'paypal') && !isValidSgPhone) {
@@ -99,64 +281,214 @@ export default function Checkout() {
       return
     }
 
-    if (payment === 'stripe' && !import.meta.env.VITE_STRIPE_CHECKOUT_URL) {
-      alert('Stripe not configured')
+    if (checkoutSubmitLockRef.current) {
       return
     }
-    if (payment === 'paypal' && !import.meta.env.VITE_PAYPAL_CHECKOUT_URL) {
-      alert('PayPal not configured')
+    checkoutSubmitLockRef.current = true
+
+    if (checkoutProcessingSyncRef.current) {
+      checkoutSubmitLockRef.current = false
       return
     }
+    checkoutProcessingSyncRef.current = true
+
+    // Stripe/PayPal fall back to the bundled demo gateway when no real
+    // checkout URL is configured — lets the app run end-to-end before the
+    // client provides production credentials.
 
     setProcessing(true)
+    let stripeHostedFlowThisSubmit = false
     try {
-      const newOrder = await placeOrder({
-          customer: formData,
-          items: cartItems || [],
-          total: (total || 0).toFixed(2),
-          mode,
-          payment,
-          notes: formData.notes || '',
-          payment_status: payment === 'cash' ? 'Cash on Delivery' : 'Pending Verification',
-          order_status: payment === 'cash' ? 'Pending' : 'Pending Payment Confirmation',
-          stage: 'kitchen_preparation',
-          userId: user?.id || 'anonymous'
-      });
+      const safeItems = buildSafeOrderLineItems(cartItems)
 
+      if (!safeItems.length) {
+        console.error('[CHECKOUT] Invalid cart items:', cartItems)
+        alert('Cart is invalid. Please refresh cart.')
+        setProcessing(false)
+        return
+      }
+
+      const orderTotalRaw = safeItems.reduce((sum, i) => sum + i.price * i.qty, 0)
+
+      if (!Number.isFinite(orderTotalRaw) || orderTotalRaw <= 0) {
+        console.error('[CHECKOUT] Invalid total:', orderTotalRaw)
+        alert('Invalid order total. Please try again.')
+        setProcessing(false)
+        return
+      }
+
+      const paymentModeForCf = CHECKOUT_PAYMENT_MAP[payment]
+
+      if (!paymentModeForCf) {
+        console.error('[CHECKOUT] Invalid payment mode:', payment)
+        alert('Invalid payment method.')
+        setProcessing(false)
+        return
+      }
+
+      let idempotencyKey =
+        checkoutIdempotencyRef.current?.trim() ||
+        readPersistedCheckoutIdempotencyKey() ||
+        createCheckoutIdempotencyKey()
+
+      if (!idempotencyKey) {
+        console.error('[CHECKOUT] Missing idempotency key')
+        alert('Session error. Please refresh checkout.')
+        setProcessing(false)
+        return
+      }
+
+      persistCheckoutIdempotencyKey(idempotencyKey)
+      checkoutIdempotencyRef.current = idempotencyKey
+
+      console.log('[CHECKOUT DEBUG PAYLOAD]', {
+        items: safeItems,
+        total: orderTotalRaw,
+        paymentModeForCf,
+        idempotencyKey,
+        uid: firebaseAuth?.currentUser?.uid || user?.id,
+      })
+
+      // Stripe (card): only ../services/stripeCheckout.js → fixed Cloud Run createStripeCheckout (no other HTTP checkout path).
+      if (payment === 'stripe') {
+        const cd = stripeCheckoutCooldownUntilRef.current
+        if (Date.now() < cd) {
+          const sec = Math.max(1, Math.ceil((cd - Date.now()) / 1000))
+          alert(`Please wait ${sec}s before trying payment again (network cooldown).`)
+          setProcessing(false)
+          return
+        }
+        const stripeItems = [...safeItems]
+        if (mode === 'delivery' && deliveryFee > 0) {
+          stripeItems.push({
+            name: 'Delivery fee',
+            price: Number(deliveryFee.toFixed(2)),
+            qty: 1,
+          })
+        }
+        const orderTotalForStripe = stripeItems.reduce(
+          (sum, i) => sum + i.price * i.qty,
+          0
+        )
+        if (!Number.isFinite(orderTotalForStripe) || orderTotalForStripe <= 0) {
+          alert('Invalid order total. Please try again.')
+          setProcessing(false)
+          return
+        }
+
+        const stripeOrderId = await createStripePendingOrder({
+          items: stripeItems,
+          totalAmount: Number(orderTotalForStripe.toFixed(2)),
+          idempotencyKey,
+          customerName: nameTrim,
+          customerPhone: normalizedPhone,
+          mode,
+          notes: formData.notes,
+          address: mode === 'delivery' ? formData.address : '',
+        })
+
+        persistResolvedOrderForIdempotency(idempotencyKey, stripeOrderId)
+
+        setOrderDetails({ id: stripeOrderId, trackingToken: '' })
+
+        if (!commitCheckoutIdempotencySession()) return
+        if (clearCart) clearCart()
+        localStorage.setItem('stm_last_order_id', stripeOrderId)
+
+        if (stripePaymentLaunchRef.current) {
+          return
+        }
+        stripePaymentLaunchRef.current = true
+        stripeHostedFlowThisSubmit = true
+        try {
+          const stripePayResult = await handleStripePayment({
+            orderId: stripeOrderId,
+            customerName: nameTrim,
+          })
+          if (stripePayResult && stripePayResult.redirected) {
+            stripeHostedRedirectIssuedRef.current = true
+          }
+        } catch (stripeErr) {
+          stripePaymentLaunchRef.current = false
+          throw stripeErr
+        }
+        return
+      }
+
+      const orderId = await placeGrabOrderAtCheckout({
+        items: safeItems,
+        totalAmount: Number(orderTotalRaw.toFixed(2)),
+        paymentMode: paymentModeForCf,
+        idempotencyKey,
+      })
+
+      const newOrder = { id: orderId, trackingToken: '' }
       setOrderDetails(newOrder)
-      
+
+      const origin = window.location.origin
+      const trackingUrl = `${origin}/tracking/${encodeURIComponent(orderId)}`
+      const cancelUrl = `${origin}/checkout`
+
       if (payment === 'paynow') {
         setShowPaymentModal(true)
-      } else if (payment === 'stripe' || payment === 'paypal') {
-        const base = payment === 'stripe'
-          ? import.meta.env.VITE_STRIPE_CHECKOUT_URL
-          : import.meta.env.VITE_PAYPAL_CHECKOUT_URL
+      } else if (payment === 'paypal') {
+        const envBase = import.meta.env.VITE_PAYPAL_CHECKOUT_URL
+        const isPlaceholderPay = (val) => {
+          if (!val) return true
+          const v = String(val).toLowerCase()
+          return v.includes('replace_me') || v.includes('replace-me')
+            || v.includes('your_') || v.includes('example.com')
+        }
+        const useDemo = isPlaceholderPay(envBase)
+        const base = useDemo ? `${origin}/pay` : envBase
         const sep = base.includes('?') ? '&' : '?'
-        const origin = window.location.origin
-        const successUrl = `${origin}/sandbox/success?orderId=${encodeURIComponent(newOrder.id)}`
-        const cancelUrl = `${origin}/sandbox/cancel?orderId=${encodeURIComponent(newOrder.id)}`
-        const trackingUrl = `${origin}/tracking/${encodeURIComponent(newOrder.id)}`
+
         const url =
           `${base}${sep}` +
-          `amount=${encodeURIComponent((total || 0).toFixed(2))}` +
+          `method=${encodeURIComponent(payment)}` +
+          `&amount=${encodeURIComponent((total || 0).toFixed(2))}` +
           `&currency=SGD` +
-          `&invoice=${encodeURIComponent(newOrder.id)}` +
+          `&invoice=${encodeURIComponent(orderId)}` +
           `&note=${encodeURIComponent(`phone:${normalizedPhone}`)}` +
-          // Common gateway callback param names (ignored safely if unsupported).
-          `&success_url=${encodeURIComponent(successUrl)}` +
+          `&success_url=${encodeURIComponent(trackingUrl)}` +
           `&cancel_url=${encodeURIComponent(cancelUrl)}` +
           `&return_url=${encodeURIComponent(trackingUrl)}` +
           `&redirect_url=${encodeURIComponent(trackingUrl)}`
-        window.open(url, '_blank', 'noopener,noreferrer')
-        finalizeSuccess(newOrder)
+
+        if (useDemo) {
+          if (!commitCheckoutIdempotencySession()) return
+          if (clearCart) clearCart()
+          localStorage.setItem('stm_last_order_id', orderId)
+          window.location.href = url
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer')
+          finalizeSuccess(newOrder)
+        }
       } else {
         finalizeSuccess(newOrder)
       }
     } catch (err) {
-      console.error('Order Error:', err);
-      alert('Failed to process order: ' + err.message);
+      if (stripeHostedFlowThisSubmit) {
+        stripeCheckoutCooldownUntilRef.current = Date.now() + 8000
+      }
+      const msg = err && typeof err.message === 'string' ? err.message : 'Internal error. Check Firebase logs.'
+      console.error('[CHECKOUT ERROR FULL]', {
+        message: err?.message,
+        stack: err?.stack,
+        payload: {
+          cartItems,
+          total,
+          payment,
+          idempotency: checkoutIdempotencyRef.current,
+        },
+      })
+      alert(msg)
     } finally {
+      checkoutSubmitLockRef.current = false
       setProcessing(false)
+      if (!stripeHostedRedirectIssuedRef.current) {
+        checkoutProcessingSyncRef.current = false
+      }
     }
   }
 
@@ -190,13 +522,8 @@ export default function Checkout() {
       await uploadBytes(fileRef, blob, { contentType: 'image/webp' });
       const url = await getDownloadURL(fileRef);
       
-      // Update order record
+      // Source of truth: orders only (public_tracking mirrors via Cloud Functions).
       await updateDoc(doc(db, 'orders', orderDetails.id), { payment_screenshot: url });
-      
-      // Step 5 Final Fix: Sync safe boolean to public tracking (No URL exposure)
-      try {
-        await updateDoc(doc(db, 'public_tracking', orderDetails.id), { paymentProofSubmitted: true });
-      } catch (e) {}
 
       setScreenshotUrl(url);
       alert('Payment screenshot uploaded successfully!');
@@ -232,6 +559,7 @@ export default function Checkout() {
   }
 
   const finalizeSuccess = (order) => {
+    if (!commitCheckoutIdempotencySession()) return
     if (clearCart) clearCart()
     if (order?.id) {
        localStorage.setItem('stm_last_order_id', order.id)
@@ -243,8 +571,16 @@ export default function Checkout() {
   }
 
   const [locating, setLocating] = useState(false)
-  const missingStripeEnv = !import.meta.env.VITE_STRIPE_CHECKOUT_URL
-  const missingPaypalEnv = !import.meta.env.VITE_PAYPAL_CHECKOUT_URL
+  const isPlaceholderUrl = (val) => {
+    if (!val) return true
+    const v = String(val).toLowerCase()
+    return v.includes('replace_me') || v.includes('replace-me')
+      || v.includes('your_') || v.includes('example.com')
+  }
+  const missingStripeEnv = isPlaceholderUrl(import.meta.env.VITE_STRIPE_CHECKOUT_URL)
+  const missingPaypalEnv = isPlaceholderUrl(import.meta.env.VITE_PAYPAL_CHECKOUT_URL)
+  const hasFirebaseForStripe = !!String(import.meta.env.VITE_FIREBASE_PROJECT_ID || '').trim()
+  const stripePaymentConfigured = hasFirebaseForStripe
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -356,22 +692,61 @@ export default function Checkout() {
                 </button>
               ))}
             </div>
+            <p style={{ marginTop: '14px', fontSize: '12px', color: '#64748b', lineHeight: 1.5, fontWeight: 600 }}>
+              {mode === 'delivery'
+                ? `Free delivery: SGD ${(shopInfo.minOrderFreeDelivery ?? 10).toFixed(0)}+ and within ${shopInfo.freeDeliveryRadiusKm} km of our outlet. Otherwise SGD ${shopInfo.deliveryFee.toFixed(2)} delivery fee.`
+                : `Collect from ${shopInfo.outletName} — no delivery fee.`}
+            </p>
+          </section>
+
+          <section style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 900, marginBottom: '12px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={18} color="var(--green-mid)" /> Order from
+            </h2>
+            <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '16px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 900, fontSize: '15px', color: 'var(--green-dark)', marginBottom: '6px' }}>{shopInfo.outletName}</div>
+              <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, fontWeight: 600 }}>{shopInfo.outletAddress}</div>
+            </div>
           </section>
 
           <section style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 900, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ width: '30px', height: '30px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>3</div>
-              Delivery Details
+              {mode === 'delivery' ? 'Delivery details' : 'Your details'}
             </h2>
             <div style={{ display: 'grid', gap: '16px' }}>
               <input name="name" value={formData.name} onChange={handleChange} placeholder="Full Name" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, boxSizing: 'border-box' }} />
               <input name="phone" value={formData.phone} onChange={handleChange} placeholder="Phone Number" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, boxSizing: 'border-box' }} />
               {mode === 'delivery' && (
-                <div style={{ position: 'relative' }}>
-                  <textarea name="address" value={formData.address} onChange={handleChange} placeholder="Exact Delivery Address" style={{ width: '100%', padding: '14px', paddingRight: '120px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, boxSizing: 'border-box', minHeight: '80px' }} />
-                  <button onClick={handleDetectLocation} disabled={locating} style={{ position: 'absolute', top: '10px', right: '10px', background: 'var(--green-dark)', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <MapPin size={12} /> {locating ? 'Locating...' : 'DETECT ME'}
-                  </button>
+                <>
+                  <div style={{ position: 'relative' }}>
+                    <textarea name="address" value={formData.address} onChange={handleChange} placeholder="Full address including postal code (e.g. Marine Parade)" style={{ width: '100%', padding: '14px', paddingRight: '120px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, boxSizing: 'border-box', minHeight: '80px' }} />
+                    <button type="button" onClick={handleDetectLocation} disabled={locating} style={{ position: 'absolute', top: '10px', right: '10px', background: 'var(--green-dark)', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MapPin size={12} /> {locating ? 'Locating...' : 'DETECT ME'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', lineHeight: 1.5 }}>
+                    {geoLoading && <span style={{ color: '#0ea5e9' }}>Checking distance from {shopInfo.outletName}…</span>}
+                    {!geoLoading && deliveryDistanceKm != null && (
+                      <span>
+                        ≈ <strong>{deliveryDistanceKm.toFixed(1)} km</strong> from outlet —{' '}
+                        {deliveryQuote.freeDelivery
+                          ? <strong style={{ color: '#15803d' }}>free delivery applies</strong>
+                          : <strong style={{ color: '#b45309' }}>SGD {shopInfo.deliveryFee.toFixed(2)} delivery fee</strong>}
+                      </span>
+                    )}
+                    {!geoLoading && geoError && (
+                      <span style={{ color: '#b45309' }}>{geoError}</span>
+                    )}
+                    {!geoLoading && !geoError && deliveryDistanceKm == null && (formData.address || '').trim().length >= 8 && (
+                      <span style={{ color: '#64748b' }}>Could not measure distance yet — fee may apply until confirmed.</span>
+                    )}
+                  </div>
+                </>
+              )}
+              {mode === 'pickup' && (
+                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, lineHeight: 1.5, padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                  Pick up at <strong>{shopInfo.outletName}</strong>. We’ll use your phone number to coordinate pickup time.
                 </div>
               )}
               <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Any specific requests?" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, boxSizing: 'border-box', minHeight: '60px' }} />
@@ -392,14 +767,9 @@ export default function Checkout() {
                   </button>
                 ))}
               </div>
-              {(payment === 'stripe' && missingStripeEnv) && (
-                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontSize: '12px', fontWeight: 700 }}>
-                  Stripe checkout is not configured. Missing <code>VITE_STRIPE_CHECKOUT_URL</code>.
-                </div>
-              )}
-              {(payment === 'paypal' && missingPaypalEnv) && (
-                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontSize: '12px', fontWeight: 700 }}>
-                  PayPal checkout is not configured. Missing <code>VITE_PAYPAL_CHECKOUT_URL</code>.
+              {((payment === 'stripe' && missingStripeEnv && !stripePaymentConfigured) || (payment === 'paypal' && missingPaypalEnv)) && (
+                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontSize: '12px', fontWeight: 700 }}>
+                  Running in <strong>demo mode</strong> — no real payment will be captured. For Stripe, set <code>VITE_FIREBASE_PROJECT_ID</code> and deploy <code>createStripePendingOrder</code> + Cloud Run <code>createStripeCheckout</code> (URL is fixed in code). For PayPal, set <code>VITE_PAYPAL_CHECKOUT_URL</code>.
                 </div>
               )}
             </section>
@@ -412,12 +782,27 @@ export default function Checkout() {
             <h3 style={{ fontSize: '18px', fontWeight: 900, marginBottom: '20px' }}>Final Total</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '20px' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>Subtotal</span><span>${safeSubtotal.toFixed(2)}</span></div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}><span>Fulfillment</span><span style={{ color: 'var(--success)', fontWeight: 800 }}>FREE</span></div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}>
+                 <span>Delivery</span>
+                 <span style={{ fontWeight: 800, color: mode === 'pickup' || deliveryFee === 0 ? '#15803d' : '#0f172a' }}>
+                   {mode === 'pickup' ? 'Pickup — FREE' : deliveryQuote.blocked ? '—' : deliveryFee === 0 ? 'FREE' : `$${deliveryFee.toFixed(2)}`}
+                 </span>
+               </div>
+               {mode === 'delivery' && deliveryQuote.blocked && (
+                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', background: '#fffbeb', padding: '10px', borderRadius: '10px', border: '1px solid #fde68a' }}>
+                   Minimum SGD {(shopInfo.minOrderDelivery ?? 10).toFixed(2)} for delivery. Add items or choose pickup.
+                 </div>
+               )}
+               {checkoutForeignTabLock && (
+                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', background: '#fffbeb', padding: '10px', borderRadius: '10px', border: '1px solid #fde68a', marginTop: '10px' }}>
+                   Another tab is using checkout. Complete or close it first — otherwise the same order could be placed twice.
+                 </div>
+               )}
                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22px', fontWeight: 950, color: 'var(--green-dark)', marginTop: '4px' }}><span>Total</span><span>${total.toFixed(2)}</span></div>
             </div>
             <button 
               onClick={handlePlaceOrder} 
-              disabled={processing} 
+              disabled={processing || checkoutForeignTabLock || (mode === 'delivery' && deliveryQuote.blocked)} 
               style={{ 
                 width: '100%', 
                 padding: '20px', 
@@ -426,12 +811,12 @@ export default function Checkout() {
                 border: 'none', 
                 borderRadius: '16px', 
                 fontWeight: 900, 
-                cursor: processing ? 'not-allowed' : 'pointer', 
+                cursor: processing || checkoutForeignTabLock ? 'not-allowed' : 'pointer', 
                 fontSize: '17px', 
                 animation: 'pulse 2s infinite' 
               }}
             >
-              {processing ? 'Processing...' : (isGuest ? 'Order via WhatsApp' : 'Confirm Order')}
+              {processing ? 'Processing...' : checkoutForeignTabLock ? 'Another tab has checkout' : (isGuest ? 'Order via WhatsApp' : 'Confirm Order')}
             </button>
             
             <WhatsAppChatButton 
@@ -454,8 +839,24 @@ export default function Checkout() {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
             <div style={{ background: 'white', borderTop: '6px solid var(--gold)', borderRadius: '32px', padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
               <h2 style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>Scan & Pay</h2>
-              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Scan this code to make payment</p>
-              <img loading="lazy" src={payScanner} alt="Scanner" style={{ width: '200px', maxWidth: '100%', borderRadius: '12px', marginBottom: '16px' }} />
+              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Open the scan-to-pay sheet (PDF) or use your bank app to complete PayNow.</p>
+              <div style={{ width: '100%', maxWidth: 320, height: 420, margin: '0 auto 16px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                <object
+                  data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
+                  type="application/pdf"
+                  title="Scan to pay"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                >
+                  <div style={{ padding: '16px', fontSize: '14px', fontWeight: 600 }}>
+                    <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ color: 'var(--green-dark)' }}>
+                      Open scan-to-pay PDF
+                    </a>
+                  </div>
+                </object>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+                <a href="/scanner-pay.pdf" download style={{ color: 'var(--green-mid)', fontWeight: 800 }}>Download PDF</a>
+              </p>
               
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ 

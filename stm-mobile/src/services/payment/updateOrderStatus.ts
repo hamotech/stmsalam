@@ -9,8 +9,7 @@ import { db } from '../firebase';
 export type PaymentCompletionStatus = 'PAID';
 
 /**
- * Mark Firestore payment as PAID on best-effort paths. Fails soft per-document
- * (client rules may block `orders/` — `public_tracking/` may still succeed).
+ * Mark payment PAID on `orders` only; public_tracking is mirrored by Cloud Functions.
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -28,23 +27,14 @@ export async function updateOrderStatus(
     updatedAt: new Date().toISOString(),
   };
 
-  const results = await Promise.all([
-    updateDoc(doc(db, 'orders', id), patch).then(
-      () => true,
-      () => false
-    ),
-    updateDoc(doc(db, 'public_tracking', id), patch).then(
-      () => true,
-      () => false
-    ),
-  ]);
-
-  if (!results[0] && !results[1]) {
+  try {
+    await updateDoc(doc(db, 'orders', id), patch);
+    return { ok: true };
+  } catch (e) {
+    console.error('[PAYMENT_ORDER_SYNC]', e);
     return {
       ok: false,
-      error:
-        'Could not update Firestore (check rules / network). No order documents were updated.',
+      error: e instanceof Error ? e.message : 'Could not update orders document.',
     };
   }
-  return { ok: true };
 }

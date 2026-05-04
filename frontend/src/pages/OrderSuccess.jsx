@@ -5,7 +5,8 @@ import { motion } from 'framer-motion'
 
 export default function OrderSuccess() {
   const navigate = useNavigate()
-  const orderId = localStorage.getItem('stm_last_order_id') || 'STM-' + Math.floor(Math.random() * 10000)
+  const orderId = localStorage.getItem('stm_last_order_id') || ''
+  const canTrack = Boolean(orderId)
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -20,17 +21,22 @@ export default function OrderSuccess() {
         
         <h1 style={{ fontSize: '32px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '16px' }}>Order Confirmed!</h1>
         <p style={{ color: '#64748b', fontSize: '16px', lineHeight: 1.6, marginBottom: '32px', fontWeight: 600 }}>
-          Your order <span style={{ color: 'var(--green-mid)', fontWeight: 900 }}>#{orderId}</span> has been received. 
-          {orderId.startsWith('STM-') ? ' We will contact you via WhatsApp for delivery confirmation.' : ' You can track it live below.'}
+          Your order <span style={{ color: 'var(--green-mid)', fontWeight: 900 }}>#{orderId || 'pending'}</span> has been received. 
+          {canTrack ? ' You can track it live below.' : ' Tracking link will be available once order ID is ready.'}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-           {orderId.startsWith('STM-') ? (
+           {!canTrack ? (
              <button onClick={() => navigate('/menu')} className="btn btn-gold" style={{ padding: '20px', borderRadius: '18px', justifyContent: 'center' }}>
                 Browse More Items <ArrowRight size={20} />
              </button>
            ) : (
-             <Link to={`/tracking/${orderId}`} className="btn btn-gold" style={{ padding: '20px', borderRadius: '18px', justifyContent: 'center', textDecoration: 'none' }}>
+             <Link
+               to={`/tracking/${orderId}`}
+               onClick={() => console.log('Navigating to tracking:', orderId)}
+               className="btn btn-gold"
+               style={{ padding: '20px', borderRadius: '18px', justifyContent: 'center', textDecoration: 'none' }}
+             >
                 Track Live Progress <MapPin size={20} />
              </Link>
            )}

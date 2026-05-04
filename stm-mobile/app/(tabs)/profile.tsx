@@ -1,1 +1,3 @@
-export { default } from '@/src/screens/delivery/ProfileTabScreen';
+import ProfileScreen from '@/src/screens/ProfileScreen';
+
+export default ProfileScreen;

@@ -1,0 +1,146 @@
+# Production deployment gate: SUCCESS → deploy safe, FAILURE → block. Binary only — no neutral/partial/skipped conclusions.
+name: E2E — Playwright
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  auth-context:
+    name: Auth context
+    runs-on: ubuntu-latest
+    outputs:
+      auth_enabled: ${{ steps.compute.outputs.auth_enabled }}
+      reason: ${{ steps.compute.outputs.reason }}
+    steps:
+      - id: compute
+        env:
+          STM_EMAIL: ${{ secrets.STM_E2E_LOGIN_EMAIL }}
+          STM_PASS: ${{ secrets.STM_E2E_LOGIN_PASSWORD }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          FORK=false
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_HEAD" ] && [ "$PR_HEAD" != "$GITHUB_REPO" ]; then
+            FORK=true
+          fi
+          SECRETS_OK=true
+          if [ -z "$STM_EMAIL" ] || [ -z "$STM_PASS" ]; then
+            SECRETS_OK=false
+          fi
+          if [ "$FORK" = "true" ]; then
+            echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=fork PR" >> "$GITHUB_OUTPUT"
+          elif [ "$SECRETS_OK" = "false" ]; then
+            echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=secrets missing" >> "$GITHUB_OUTPUT"
+          else
+            echo "auth_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "reason=enabled" >> "$GITHUB_OUTPUT"
+          fi
+
+  playwright:
+    name: Playwright (deployment gate)
+    needs: auth-context
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      CI: true
+      BASE_URL: http://localhost:3000
+      STM_E2E_LOGIN_EMAIL: ${{ secrets.STM_E2E_LOGIN_EMAIL }}
+      STM_E2E_LOGIN_PASSWORD: ${{ secrets.STM_E2E_LOGIN_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Gate context (informational only — does not affect pass/fail)
+        env:
+          AUTH_ENABLED: ${{ needs.auth-context.outputs.auth_enabled }}
+          AUTH_REASON: ${{ needs.auth-context.outputs.reason }}
+        run: |
+          {
+            echo "## auth-context"
+            echo ""
+            echo "| auth_enabled | reason |"
+            echo "|---|---|"
+            echo "| \`$AUTH_ENABLED\` | \`$AUTH_REASON\` |"
+            echo ""
+            echo "**Pipeline outcome is determined solely by the Playwright step (exit code).** auth_enabled only controls whether Firebase-backed tests execute."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - id: run_e2e
+        name: Run E2E tests
+        run: npm run test:e2e
+
+      # Required GitHub Check — conclusion MUST mirror Playwright exit only (binary: success | failure).
+      # auth_enabled does not participate in conclusion (informational job output only).
+      - name: GitHub Check — E2E deployment gate
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const e2eOutcome = '${{ steps.run_e2e.outcome }}';
+            const passed = e2eOutcome === 'success';
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'E2E deployment gate',
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion: passed ? 'success' : 'failure',
+              output: {
+                title: passed ? 'SUCCESS — safe to deploy' : 'FAILURE — deployment blocked',
+                summary: passed
+                  ? `Binary PASS: Playwright exited successfully (${e2eOutcome}). Treat as deployment-safe subject to org policy.`
+                  : `Binary FAIL: Playwright outcome=${e2eOutcome}. Block deployment until fixed.`,
+              },
+            });
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+
+      - name: Upload test results (traces / video)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: frontend/test-results
+          retention-days: 7
+          if-no-files-found: ignore

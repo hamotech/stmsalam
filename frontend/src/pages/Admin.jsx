@@ -9,11 +9,18 @@ import Categories from '../admin/pages/Categories';
 import GalleryAdmin from '../admin/pages/GalleryAdmin';
 import Customers from '../admin/pages/Customers';
 import AdminSettings from '../admin/pages/AdminSettings';
+import SupportInbox from '../admin/pages/SupportInbox';
+import KitchenView from '../admin/pages/KitchenView';
+import RidersDispatch from '../admin/pages/RidersDispatch';
+import PaymentsOps from '../admin/pages/PaymentsOps';
+import AnalyticsPlaceholder from '../admin/pages/AnalyticsPlaceholder';
+import AdminOrderNotifications from '../admin/components/AdminOrderNotifications';
 import { useAuth } from '../context/AuthContext';
 
 const AdminLayout = ({ children }) => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+      <AdminOrderNotifications />
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         <Navbar />
@@ -68,6 +75,11 @@ export default function Admin() {
         <Route path="/products" element={<Products />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/kitchen" element={<KitchenView />} />
+        <Route path="/riders" element={<RidersDispatch />} />
+        <Route path="/payments" element={<PaymentsOps />} />
+        <Route path="/analytics" element={<AnalyticsPlaceholder />} />
+        <Route path="/support" element={<SupportInbox />} />
         <Route path="/gallery" element={<GalleryAdmin />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/settings" element={<AdminSettings />} />

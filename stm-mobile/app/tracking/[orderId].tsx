@@ -1,12 +1,8 @@
 /**
- * app/tracking/[orderId].tsx
+ * app/tracking/[orderId].tsx — legacy deep link path `/tracking/:orderId`.
  *
- * Dynamic route: /tracking/:orderId
- * Renders the TrackingScreen with live Firestore onSnapshot.
- *
- * Navigated to from:
- *  - HomeScreen (search bar)
- *  - OrdersScreen (OrderCard "Track Order" button)
+ * In-app navigation after checkout should use `/order-tracking/[orderId]` only (`replaceToOrderTrackingScreen`).
+ * This route remains for external/bookmark URLs and older links (TrackingScreen).
  */
 
 import TrackingScreen from '@/src/screens/TrackingScreen';

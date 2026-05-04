@@ -2,6 +2,7 @@
   "expo": {
     "name": "stm-mobile",
     "slug": "stm-mobile",
+    "owner": "stmsalam",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -28,6 +29,34 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#013220",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "STM Salam uses your location to fill your delivery address.",
+          "locationAlwaysAndWhenInUsePermission": "STM Salam uses your location to fill your delivery address."
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -47,22 +76,21 @@
           "merchantIdentifier": "merchant.com.hamotech.stmmobile",
           "enableGooglePay": true
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "c73c4770-599b-41c9-9c2a-a7748c36ca62"
-      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/c73c4770-599b-41c9-9c2a-a7748c36ca62"
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c291d77c-2848-4968-8d99-d4e3d41fef83"
+      }
     }
   }
 }

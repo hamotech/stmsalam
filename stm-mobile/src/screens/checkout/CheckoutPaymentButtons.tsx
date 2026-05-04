@@ -14,9 +14,15 @@ import {
   TextInput,
   Linking,
 } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
-import { initPaymentSheet, presentPaymentSheet } from '@/src/payment';
-import { updateOrderStatus } from '@/src/services/payment/updateOrderStatus';
+import { useRouter } from 'expo-router';
+import { navPush, navReplace } from '@/src/navigation/appNavigation';
+import { useAppRole } from '@/src/auth/useAppRole';
+import { useAuth } from '@/src/context/AuthContext';
+import {
+  initPaymentSheet,
+  presentPaymentSheet,
+  verifyStripePaymentOnServer,
+} from '@/src/services/payment/stripeService';
 
 const GREEN = '#013220';
 const GOLD = '#D4AF37';
@@ -36,6 +42,8 @@ export default function CheckoutPaymentButtons({
   enabled,
 }: Props) {
   const router = useRouter();
+  const { user, profile } = useAuth();
+  const navRole = useAppRole();
   const [busy, setBusy] = useState<'none' | 'stripe'>('none');
   const [phone, setPhone] = useState('');
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -54,12 +62,16 @@ export default function CheckoutPaymentButtons({
 
   const goScanPay = () => {
     if (!enabled) return;
-    const q = new URLSearchParams({
-      orderId: orderId.trim(),
-      amount: String(amount),
-      customerName: customerName.trim() || 'Customer',
-    });
-    router.push(`/payment/scan-pay?${q.toString()}` as Href);
+    navPush(
+      router,
+      {
+        kind: 'paymentScanPay',
+        orderId: orderId.trim(),
+        amount,
+        customerName: customerName.trim() || 'Customer',
+      },
+      navRole
+    );
   };
 
   const goStripe = async () => {
@@ -77,11 +89,25 @@ export default function CheckoutPaymentButtons({
         Alert.alert('Payment failed', pay.error || 'Payment was not completed.');
         return;
       }
-      const sync = await updateOrderStatus(orderId.trim(), 'PAID');
-      if (!sync.ok) {
-        console.warn('[Checkout] payment marked in Stripe but Firestore sync:', sync.error);
+      if (!init.paymentIntentId) {
+        Alert.alert('Payment', 'Missing payment reference. Please try again.');
+        return;
       }
-      router.replace(`/payment/success?orderId=${encodeURIComponent(orderId.trim())}` as Href);
+      const verified = await verifyStripePaymentOnServer(orderId.trim(), init.paymentIntentId);
+      if (!verified.ok) {
+        Alert.alert('Payment not confirmed', verified.error);
+        return;
+      }
+      navReplace(
+        router,
+        {
+          kind: 'paymentSuccess',
+          orderId: orderId.trim(),
+          total: amount.toFixed(2),
+          source: 'stripe',
+        },
+        navRole
+      );
     } finally {
       setBusy('none');
     }

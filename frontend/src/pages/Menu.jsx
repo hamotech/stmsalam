@@ -5,6 +5,7 @@ import { shopInfo } from '../data/menuData'
 import { subscribeProducts, subscribeCategories } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
 import { useData } from '../context/DataContext'
+import SmartImage from '../components/common/SmartImage'
 
 function MenuItemRow({ item }) {
   const { addToCart, updateQty, cartItems = [] } = useCart() || {}
@@ -26,7 +27,7 @@ function MenuItemRow({ item }) {
       transition: 'all 0.3s', position: 'relative'
     }}>
       <div className="menu-item-img-col" style={{ position: 'relative', width: '120px', height: '120px', borderRadius: '20px', overflow: 'hidden', flexShrink: 0, background: '#f8fafc' }}>
-        <img loading="lazy" src={item.image || item.img || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=300'} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <SmartImage src={item.image || item.img || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=300'} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         {b && <span className={`badge ${b.cls}`} style={{ position: 'absolute', top: '10px', left: '10px', padding: '4px 8px', fontSize: '10px' }}>{b.label}</span>}
       </div>
       

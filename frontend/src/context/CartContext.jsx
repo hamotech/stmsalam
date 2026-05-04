@@ -1,11 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-const CartContext = createContext();
+/** Exported for Checkout / diagnostics so `useContext` can avoid throwing when provider is absent. */
+export const CartContext = createContext();
 
 export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState(() => {
-    const saved = localStorage.getItem('stm_salam_cart');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('stm_salam_cart');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      try {
+        localStorage.removeItem('stm_salam_cart');
+      } catch {
+        /* ignore */
+      }
+      return [];
+    }
   });
 
   useEffect(() => {

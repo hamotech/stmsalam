@@ -1,9 +1,12 @@
 /**
  * src/services/orderService.ts
  *
- * Customer-facing Firestore layer — mirrors the web `placeOrder` contract
- * (`frontend/src/admin/services/dataService.js`) so mobile writes are compatible
- * with existing `orders` + `public_tracking` documents. Read paths unchanged.
+ * Customer-facing Firestore service layer.
+ * Reads from `public_tracking` (public, no auth required) — same collection
+ * that the admin web app writes to via `updateOrderStatus`.
+ *
+ * NEVER modifies the private `orders` collection.
+ * NEVER duplicates business logic from the web app.
  */
 
 import {
@@ -15,93 +18,8 @@ import {
   limit,
   Unsubscribe,
   DocumentData,
-  setDoc,
 } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from './firebase';
-
-const LOCAL_ORDERS_KEY = 'stm_local_orders';
-/** Same key as web `localStorage` for last placed order id (mobile: AsyncStorage). */
-const LAST_ORDER_ID_KEY = 'stm_last_order_id';
-
-export type PlaceOrderPayload = Record<string, unknown> & {
-  items: unknown[];
-  total: string | number;
-  mode?: string;
-  payment?: string;
-  userId?: string;
-  customer?: Record<string, string>;
-  notes?: string;
-  status?: string;
-};
-
-export type PlacedOrder = PlaceOrderPayload & {
-  id: string;
-  trackingToken: string;
-  createdAt: string;
-  status: string;
-};
-
-/** Web parity: `frontend/src/admin/services/dataService.js` placeOrder */
-export async function placeOrder(payload: PlaceOrderPayload): Promise<PlacedOrder> {
-  const orderId = `STM-${Date.now()}`;
-  // Match web token generation exactly (.substring, not .slice)
-  const trackingToken =
-    Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-  const statusUp = (payload.status || 'PENDING').toString().toUpperCase();
-  const newOrder: PlacedOrder = {
-    ...payload,
-    id: orderId,
-    trackingToken,
-    createdAt: new Date().toISOString(),
-    status: statusUp,
-    isNewForAdmin: true,
-    chatEnabled: true,
-    unreadAdmin: 0,
-    unreadCustomer: 0,
-  } as PlacedOrder;
-
-  await setDoc(doc(db, 'orders', orderId), newOrder as DocumentData);
-
-  // public_tracking shape must stay byte-for-byte compatible with web (no Number() coercion here)
-  const publicData = {
-    id: orderId,
-    status: newOrder.status || 'PENDING',
-    items: newOrder.items || [],
-    total: newOrder.total || 0,
-    mode: (newOrder.mode as string) || 'delivery',
-    paymentProofSubmitted: false,
-    createdAt: new Date(),
-  };
-
-  await setDoc(doc(db, 'public_tracking', orderId), publicData);
-  await rememberLocalOrderId(orderId);
-  return newOrder;
-}
-
-export async function rememberLocalOrderId(orderId: string): Promise<void> {
-  try {
-    await AsyncStorage.setItem(LAST_ORDER_ID_KEY, orderId);
-    const raw = await AsyncStorage.getItem(LOCAL_ORDERS_KEY);
-    const list: string[] = raw ? JSON.parse(raw) : [];
-    if (!list.includes(orderId)) {
-      list.unshift(orderId);
-      await AsyncStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(list.slice(0, 50)));
-    }
-  } catch (e) {
-    console.warn('[orderService] rememberLocalOrderId', e);
-  }
-}
-
-export async function getLocalOrderIds(): Promise<string[]> {
-  try {
-    const raw = await AsyncStorage.getItem(LOCAL_ORDERS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +30,8 @@ export type OrderStatus =
   | 'READY'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERING'
-  | 'DELIVERED';
+  | 'DELIVERED'
+  | 'CANCELLED';
 
 export interface OrderItem {
   name: string;
@@ -132,24 +51,35 @@ export interface PublicOrder {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Normalize line items for UI — tolerate partial/malformed docs from the field. */
-function normalizeTrackingItems(raw: unknown): OrderItem[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((it) => {
+function numMoney(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const x = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(x) ? x : 0;
+  }
+  return 0;
+}
+
+/** Prefer Firestore totals; if missing/zero (stale mirror), derive from line items. */
+export function resolveOrderDisplayTotal(data: Record<string, unknown>): number {
+  const fromDoc = numMoney(data.totalAmount) || numMoney(data.total);
+  if (fromDoc > 0) return Math.round(fromDoc * 100) / 100;
+  const items = Array.isArray(data.items) ? data.items : [];
+  let sum = 0;
+  for (const it of items) {
     const row = it && typeof it === 'object' ? (it as Record<string, unknown>) : {};
-    return {
-      name:  String(row.name ?? ''),
-      qty:   Math.max(0, Number(row.qty ?? 0)),
-      price: Number(row.price ?? 0),
-    };
-  });
+    sum += numMoney(row.price) * (numMoney(row.qty) || 1);
+  }
+  const fromLines = Math.round(sum * 100) / 100;
+  if (fromLines > 0) return fromLines;
+  return fromDoc;
 }
 
 const mapDoc = (d: DocumentData & { id: string }): PublicOrder => ({
   id:                   d.id,
   status:               (d.status ?? 'PENDING').toUpperCase() as OrderStatus,
-  items:                normalizeTrackingItems(d.items),
-  total:                Number(d.total ?? 0),
+  items:                d.items ?? [],
+  total:                resolveOrderDisplayTotal(d as Record<string, unknown>),
   mode:                 d.mode ?? 'delivery',
   paymentProofSubmitted: d.paymentProofSubmitted ?? false,
   createdAt:            d.createdAt ?? '',
@@ -175,7 +105,6 @@ export const subscribeOrderTracking = (
 
   const ref = doc(db, 'public_tracking', orderId.trim());
 
-  // Real-time listener — same pattern as web OrderTracking.jsx (onSnapshot on public_tracking doc).
   return onSnapshot(
     ref,
     (snap) => {
@@ -231,8 +160,7 @@ export const STATUS_STEPS: {
 }[] = [
   { id: 'PENDING',          label: 'Order Placed',     desc: 'We have received your order',     emoji: '🧾' },
   { id: 'CONFIRMED',        label: 'Confirmed',         desc: 'Kitchen has accepted your order', emoji: '✅' },
-  // PREPARING copy matches web OrderTracking.jsx
-  { id: 'PREPARING',        label: 'Preparing',         desc: 'Our chefs are grilling your kebabs', emoji: '👨‍🍳' },
+  { id: 'PREPARING',        label: 'Preparing',         desc: "Chef is preparing your meal",     emoji: '👨‍🍳' },
   { id: 'READY',            label: 'Food Ready',        desc: 'Order packed and ready',          emoji: '📦' },
   { id: 'OUT_FOR_DELIVERY', label: 'Out for Delivery',  desc: 'Driver is on the way',            emoji: '🛵' },
   { id: 'DELIVERED',        label: 'Delivered',         desc: 'Enjoy your meal!',                emoji: '🎉' },
@@ -242,7 +170,7 @@ export const getActiveStep = (status: OrderStatus | string): number => {
   const s = (status ?? '').toUpperCase();
   const map: Record<string, number> = {
     PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3,
-    OUT_FOR_DELIVERY: 4, DELIVERING: 4, DELIVERED: 5,
+    OUT_FOR_DELIVERY: 4, DELIVERING: 4, DELIVERED: 5, CANCELLED: 0,
   };
   return map[s] ?? 0;
 };
@@ -257,6 +185,7 @@ export const statusColor = (status: OrderStatus | string): string => {
     OUT_FOR_DELIVERY: '#0EA5E9',
     DELIVERING:       '#0EA5E9',
     DELIVERED:        '#22C55E',
+    CANCELLED:        '#DC2626',
   };
   return map[s] ?? '#6B7280';
 };

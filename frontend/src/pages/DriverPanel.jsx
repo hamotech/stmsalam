@@ -1,369 +1,403 @@
-import React, { useState, useEffect } from 'react'
-import { MapPin, Phone, MessageSquare, DollarSign, List, ShieldCheck, ChevronRight, LogOut, Package, Navigation, CheckCircle, Bell, User, Clock, ArrowRight, X, TrendingUp, Wallet, Map as MapIcon } from 'lucide-react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { MapPin, MessageSquare, Package, Navigation, CheckCircle, User, Target, Wallet, Phone } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import { db } from '../lib/firebase'
+import { doc, onSnapshot, query, collection, where, updateDoc, serverTimestamp, setDoc, limit, addDoc, orderBy, getDoc } from 'firebase/firestore'
+import { safeLog } from '../utils/runtimeSafety'
 
-// Mock Data for Driver
-const INITIAL_JOBS = [
-  { id: 'SALAM-9231', customer: 'Farhan Ahmed', address: 'Block 123, Marine Terrace, #12-345', items: '3x Kebab Roll, 1x Cola', total: 24.50, distance: '1.2 km', reward: 6.50, type: 'Delivery' },
-  { id: 'SALAM-9230', customer: 'Alicia Ng', address: 'Blk 55 Bedok South Ave 1, #08-22', items: '2x Classic Burger', total: 13.80, distance: '3.4 km', reward: 8.20, type: 'Delivery' }
-]
+const STATUS_FILTER = ['assigned', 'picked_up']
+const TASK_STATUS_FILTER = new Set(['assigned', 'picked_up'])
+
+const toOrderStatus = (raw) =>
+  String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
 
 export default function DriverPanel() {
-  const [activeTab, setActiveTab] = useState('tasks') // tasks, earnings, profile
-  const [isOnline, setIsOnline] = useState(true)
-  const [activeJob, setActiveJob] = useState(null)
-  const [showIncoming, setShowIncoming] = useState(false)
-  const [jobStage, setJobStage] = useState('accepted') // accepted, picked_up, arrived, delivered
+  const { user, loading, isAuthenticated } = useAuth() || {}
+  const navigate = useNavigate()
+  const riderId = user?.id || ''
+  const isRiderAllowed = Boolean(isAuthenticated && user && user.role === 'rider')
+  const [riderProfile, setRiderProfile] = useState({
+    role: 'rider',
+    status: 'offline',
+    assignedOrders: [],
+  })
+  const [assignedOrders, setAssignedOrders] = useState([])
+  const [completedToday, setCompletedToday] = useState(0)
+  const [busyOrderId, setBusyOrderId] = useState('')
+  const [panelError, setPanelError] = useState('')
+  const [chatOrderId, setChatOrderId] = useState('')
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const lastGpsPushRef = useRef(0)
+  const hasTrackableDelivery = assignedOrders.some((o) => {
+    const st = toOrderStatus(o.status)
+    return st === 'assigned' || st === 'picked_up'
+  })
 
-  // Simulate an incoming job after 3 seconds if online and no active job
   useEffect(() => {
-    if (isOnline && !activeJob && !showIncoming) {
-      const timer = setTimeout(() => setShowIncoming(true), 4000)
-      return () => clearTimeout(timer)
+    if (loading) return
+    if (!isRiderAllowed) {
+      navigate('/login?redirect=/rider', { replace: true })
     }
-  }, [isOnline, activeJob, showIncoming])
+  }, [loading, isRiderAllowed, navigate])
 
-  const acceptJob = () => {
-    setActiveJob(INITIAL_JOBS[0])
-    setShowIncoming(false)
-    setJobStage('accepted')
+  useEffect(() => {
+    if (!isRiderAllowed || !riderId) return undefined
+    const riderRef = doc(db, 'riders', riderId)
+    const unsub = onSnapshot(
+      riderRef,
+      async (snap) => {
+        try {
+          if (!snap.exists()) {
+            const seed = { role: 'rider', status: 'offline', assignedOrders: [] }
+            await setDoc(riderRef, seed, { merge: true })
+            setRiderProfile(seed)
+            if (import.meta.env.DEV) safeLog('Rider active status', seed.status)
+            return
+          }
+          const data = snap.data() || {}
+          setRiderProfile({
+            role: data.role || 'rider',
+            status: data.status === 'active' ? 'active' : 'offline',
+            assignedOrders: Array.isArray(data.assignedOrders) ? data.assignedOrders : [],
+          })
+          if (import.meta.env.DEV) safeLog('Rider active status', data.status === 'active' ? 'active' : 'offline')
+        } catch (e) {
+          setPanelError(e?.message || 'Failed to load rider profile.')
+        }
+      },
+      (e) => setPanelError(e?.message || 'Failed to subscribe rider profile.')
+    )
+    return () => unsub()
+  }, [isRiderAllowed, riderId])
+
+  useEffect(() => {
+    if (!isRiderAllowed || !chatOrderId) return undefined
+    const q = query(collection(db, 'chats', chatOrderId, 'messages'), orderBy('createdAt', 'asc'))
+    safeLog('chat initialized', { orderId: chatOrderId })
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setChatMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      },
+      (e) => setPanelError(e?.message || 'Failed to subscribe rider chat.')
+    )
+    return () => unsub()
+  }, [isRiderAllowed, chatOrderId])
+
+  useEffect(() => {
+    if (!isRiderAllowed || !riderId || riderProfile.status !== 'active' || !hasTrackableDelivery) return undefined
+    if (!navigator.geolocation) return undefined
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const now = Date.now()
+        if (now - lastGpsPushRef.current < 5000) return
+        lastGpsPushRef.current = now
+        try {
+          await setDoc(
+            doc(db, 'riders', riderId),
+            {
+              location: {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                updatedAt: serverTimestamp(),
+              },
+            },
+            { merge: true }
+          )
+        } catch (e) {
+          safeLog('[RiderGPS] update failed', e?.message || e)
+        }
+      },
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    )
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [isRiderAllowed, riderId, riderProfile.status, hasTrackableDelivery])
+
+  useEffect(() => {
+    if (!isRiderAllowed || !riderId) return undefined
+    if (import.meta.env.DEV) safeLog('auth.uid:', riderId)
+    const q = query(
+      collection(db, 'orders'),
+      where('riderId', '==', riderId)
+    )
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rawRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        if (import.meta.env.DEV) safeLog('Fetched orders count', rawRows.length)
+        const rows = rawRows.filter((row) => {
+          const st = toOrderStatus(row.status)
+          if (import.meta.env.DEV) safeLog('order.riderId:', row.riderId)
+          return STATUS_FILTER.includes(st)
+        })
+        if (import.meta.env.DEV) safeLog('Matched rider orders', rows.length)
+        rows.forEach(async (row) => {
+          const patch = {}
+          if (typeof row.riderId === 'undefined') patch.riderId = riderId
+          if (!row.customerSnapshot) {
+            patch.customerSnapshot = {
+              name: row?.customer?.name || '',
+              phone: row?.customer?.phone || '',
+              address: row?.customer?.address || '',
+            }
+          }
+          if (Object.keys(patch).length > 0) {
+            await setDoc(doc(db, 'orders', row.id), patch, { merge: true })
+          }
+        })
+        setAssignedOrders(rows)
+        if (import.meta.env.DEV) {
+          rows.forEach((o) => safeLog('[Rider LIVE]', { orderId: o.id, status: toOrderStatus(o.status) }))
+          if (rows[0]) {
+            safeLog('rider data loaded', { orderId: rows[0].id })
+          }
+        }
+      },
+      (e) => setPanelError(e?.message || 'Failed to subscribe assigned deliveries.')
+    )
+    return () => unsub()
+  }, [isRiderAllowed, riderId])
+
+  useEffect(() => {
+    if (!isRiderAllowed || !riderId) return undefined
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const q = query(
+      collection(db, 'orders'),
+      where('riderId', '==', riderId),
+      where('status', '==', 'delivered'),
+      where('updatedAt', '>=', start),
+      limit(200)
+    )
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setCompletedToday(snap.size)
+      },
+      () => setCompletedToday(0)
+    )
+    return () => unsub()
+  }, [isRiderAllowed, riderId])
+
+  const activeDelivery = useMemo(() => {
+    const priority = { picked_up: 0, assigned: 1, ready: 2 }
+    const sorted = [...assignedOrders]
+      .filter((o) => toOrderStatus(o.status) !== 'delivered')
+      .sort((a, b) => {
+        const pa = priority[toOrderStatus(a.status)] ?? 99
+        const pb = priority[toOrderStatus(b.status)] ?? 99
+        return pa - pb
+      })
+    return sorted[0] || null
+  }, [assignedOrders])
+
+  const earningsToday = completedToday * 7.5
+  const dailyGoal = 20
+  const goalPct = Math.min(100, Math.round((completedToday / dailyGoal) * 100))
+
+  const setShiftStatus = async (next) => {
+    if (!riderId) return
+    const riderRef = doc(db, 'riders', riderId)
+    const snap = await getDoc(riderRef)
+    if (!snap.exists()) {
+      await setDoc(riderRef, { role: 'rider', status: next, assignedOrders: [] }, { merge: true })
+    } else {
+      await updateDoc(riderRef, { role: 'rider', status: next })
+    }
+    if (import.meta.env.DEV) safeLog('Rider active status', next)
   }
 
-  const completeStep = () => {
-    if (jobStage === 'accepted') setJobStage('picked_up')
-    else if (jobStage === 'picked_up') setJobStage('arrived')
-    else {
-      setActiveJob(null)
-      // Reset for next job
+  const markDelivered = async (orderId) => {
+    if (!orderId) return
+    setBusyOrderId(orderId)
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: 'delivered',
+        updatedAt: serverTimestamp(),
+        'timestamps.deliveredAt': serverTimestamp(),
+      })
+    } finally {
+      setBusyOrderId('')
     }
+  }
+
+  const openMaps = (order) => {
+    const address = encodeURIComponent(order?.customer?.address || order?.address || '')
+    if (!address) return
+    window.open(`https://www.google.com/maps/search/?api=1&query=${address}`, '_blank')
+  }
+
+  const messageCustomer = (order) => {
+    const phone = String(order?.customerSnapshot?.phone || order?.customer?.phone || '').replace(/\D/g, '')
+    if (!phone) return
+    const msg = encodeURIComponent(`Hi, this is your SMT rider for order #${order.id?.slice(-8)}.`)
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+  }
+
+  const callCustomer = (order) => {
+    const phone = String(order?.customerSnapshot?.phone || order?.customer?.phone || '').replace(/[^\d+]/g, '')
+    if (!phone) return
+    window.location.href = `tel:${phone}`
+  }
+
+  const sendChatMessage = async () => {
+    const text = chatInput.trim()
+    if (!chatOrderId || !text) return
+    await addDoc(collection(db, 'chats', chatOrderId, 'messages'), {
+      text,
+      senderId: riderId,
+      senderRole: 'rider',
+      createdAt: serverTimestamp(),
+    })
+    safeLog('chat send', { orderId: chatOrderId, senderId: riderId })
+    setChatInput('')
+  }
+
+  if (loading) {
+    return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontWeight: 700, color: '#64748b' }}>Verifying rider session...</div>
+  }
+  if (!isRiderAllowed) {
+    return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontWeight: 700, color: '#64748b' }}>Redirecting to rider login...</div>
   }
 
   return (
-    <div style={{ 
-      background: 'var(--bg-body)', minHeight: '100vh', 
-      maxWidth: '480px', margin: '0 auto', 
-      display: 'flex', flexDirection: 'column',
-      boxShadow: '0 0 40px rgba(0,0,0,0.1)',
-      position: 'relative',
-      fontFamily: 'inherit'
-    }}>
-      
-      {/* HEADER - Premium Glassmorphism */}
-      <header style={{ 
-        background: 'var(--green-dark)', padding: '24px', color: 'white',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        position: 'sticky', top: 0, zIndex: 100
-      }}>
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-               <div style={{ 
-                 width: '48px', height: '48px', borderRadius: '16px', 
-                 background: 'var(--gold)', color: 'var(--green-dark)', 
-                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                 fontWeight: 900, fontSize: '18px' 
-               }}>S</div>
-               <div>
-                  <h1 style={{ fontSize: '18px', fontWeight: 900, marginBottom: '2px' }}>Suresh Kumar</h1>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isOnline ? 'var(--success)' : '#666' }} />
-                     <span style={{ fontSize: '12px', fontWeight: 800, color: isOnline ? 'var(--success)' : '#aaa' }}>
-                        {isOnline ? 'Active & Online' : 'Offline'}
-                     </span>
-                  </div>
-               </div>
+    <div style={{ background: 'var(--bg-body)', minHeight: '100vh', maxWidth: '560px', margin: '0 auto', paddingBottom: '24px' }}>
+      <header style={{ background: 'var(--green-dark)', padding: '24px', color: 'white', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: 'var(--gold)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>
+              {(user?.name || 'R').slice(0, 1).toUpperCase()}
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-               <button style={{ 
-                 width: '44px', height: '44px', borderRadius: '14px', 
-                 background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', 
-                 display: 'flex', alignItems: 'center', justifyContent: 'center' 
-               }}><Bell size={20} /></button>
-               <button 
-                 onClick={() => setIsOnline(!isOnline)}
-                 style={{ 
-                   padding: '0 20px', height: '44px', borderRadius: '14px', 
-                   background: isOnline ? 'var(--danger)20' : 'var(--success)20',
-                   color: isOnline ? '#ff6b6b' : 'var(--success)',
-                   border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer'
-                 }}>
-                 {isOnline ? 'Go Offline' : 'Go Online'}
-               </button>
+            <div>
+              <div style={{ fontSize: '18px', fontWeight: 900 }}>{user?.name || 'Rider'}</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: riderProfile.status === 'active' ? '#22c55e' : '#cbd5e1' }}>
+                {riderProfile.status === 'active' ? 'Active shift' : 'Inactive shift'}
+              </div>
             </div>
-         </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShiftStatus(riderProfile.status === 'active' ? 'offline' : 'active')}
+            style={{ border: 'none', borderRadius: '12px', padding: '10px 14px', cursor: 'pointer', fontWeight: 900, background: riderProfile.status === 'active' ? '#fee2e2' : '#dcfce7', color: riderProfile.status === 'active' ? '#b91c1c' : '#166534' }}
+          >
+            {riderProfile.status === 'active' ? 'Set Inactive' : 'Set Active'}
+          </button>
+        </div>
       </header>
 
-      {/* TABS CONTENT */}
-      <main style={{ flex: 1, paddingBottom: '100px', width: '100%' }}>
-         {activeTab === 'tasks' && (
-           <div className="fade-up" style={{ padding: '24px' }}>
-              {/* Earnings Quick Summary */}
-              <div style={{ 
-                background: 'var(--green-dark)', borderRadius: '28px', padding: '24px', 
-                color: 'white', marginBottom: '32px', border: '1px solid rgba(255,255,255,0.1)',
-                boxShadow: '0 15px 30px rgba(10,61,46,0.3)',
-                position: 'relative', overflow: 'hidden'
-              }}>
-                 <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', background: 'var(--gold)', opacity: 0.05, borderRadius: '50%' }} />
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                    <div>
-                       <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Today's Payout</div>
-                       <div style={{ fontSize: '38px', fontWeight: 900, color: 'var(--gold)' }}>$84.50</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                       <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase' }}>Trips Completed</div>
-                       <div style={{ fontSize: '24px', fontWeight: 900 }}>12</div>
-                    </div>
-                 </div>
-                 <div style={{ height: '3px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginBottom: '16px' }}>
-                    <div style={{ width: '75%', height: '100%', background: 'var(--gold)', borderRadius: '2px' }} />
-                 </div>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800 }}>
-                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>Daily Goal: $120.00</span>
-                    <span style={{ color: 'var(--gold)' }}>$35.50 to go</span>
-                 </div>
-              </div>
-
-              {!activeJob ? (
-                <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                   <div style={{ 
-                     width: '120px', height: '120px', background: 'var(--cream)', 
-                     borderRadius: '40px', margin: '0 auto 24px', 
-                     display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green-mid)'
-                   }}>
-                      <Navigation size={48} className="spin-slow" />
-                   </div>
-                   <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '8px' }}>
-                     {isOnline ? 'Searching for jobs...' : 'You are currently offline'}
-                   </h3>
-                   <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 600 }}>
-                     {isOnline ? 'Position yourself near Marine Terrace for faster orders.' : 'Go online to start receiving delivery requests.'}
-                   </p>
-                </div>
-              ) : (
-                <div className="active-job-card fade-up">
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                      <h2 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--green-dark)' }}>Active Delivery</h2>
-                      <span style={{ 
-                        background: 'var(--gold-tint)', color: 'var(--gold)', 
-                        padding: '6px 14px', borderRadius: '12px', fontSize: '12px', fontWeight: 900 
-                      }}>{activeJob.distance} away</span>
-                   </div>
-
-                   {/* Map Preview Placeholder */}
-                   <div style={{ 
-                     width: '100%', height: '180px', background: '#e0e0e0', borderRadius: '24px', 
-                     marginBottom: '24px', overflow: 'hidden', position: 'relative', border: '1px solid var(--border)'
-                   }}>
-                      <img loading="lazy" src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                         <div style={{ width: '40px', height: '40px', background: 'var(--danger)', borderRadius: '50%', border: '4px solid white', boxShadow: '0 5px 15px rgba(0,0,0,0.2)' }} />
-                      </div>
-                      <div style={{ position: 'absolute', bottom: '16px', left: '16px', right: '16px', display: 'flex', gap: '8px' }}>
-                         <button style={{ flex: 1, padding: '10px', background: 'white', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                            <MapIcon size={16} color="var(--green-mid)" /> Open Maps
-                         </button>
-                      </div>
-                   </div>
-
-                   <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-                      <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green-dark)', fontWeight: 900, fontSize: '18px' }}>
-                         {activeJob.customer[0]}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                         <div style={{ fontSize: '18px', fontWeight: 900, marginBottom: '2px' }}>{activeJob.customer}</div>
-                         <div style={{ fontSize: '13px', color: 'var(--text-light)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <MapPin size={14} color="var(--danger)" fill="var(--danger)" /> {activeJob.address}
-                         </div>
-                      </div>
-                   </div>
-
-                   <div style={{ background: 'var(--cream)', borderRadius: '24px', padding: '20px', marginBottom: '32px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-light)', textTransform: 'uppercase', marginBottom: '12px' }}>Order: {activeJob.id}</div>
-                      <div style={{ fontWeight: 800, fontSize: '16px', color: 'var(--green-dark)', lineHeight: 1.6 }}>{activeJob.items}</div>
-                   </div>
-
-                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                      <button className="btn btn-outline" style={{ borderRadius: '16px', padding: '16px' }}><Phone size={20} /> Customer</button>
-                      <button className="btn btn-outline" style={{ borderRadius: '16px', padding: '16px' }}><MessageSquare size={20} /> Message</button>
-                   </div>
-
-                   <button 
-                     onClick={completeStep}
-                     style={{ 
-                       width: '100%', padding: '20px', borderRadius: '20px', border: 'none',
-                       background: 'var(--green-dark)', color: 'white', fontWeight: 900, fontSize: '16px',
-                       cursor: 'pointer', transition: '0.2s', boxShadow: '0 10px 20px rgba(10,61,46,0.2)'
-                     }}
-                   >
-                     {jobStage === 'accepted' ? 'Picked Up from Shop' : jobStage === 'picked_up' ? 'Arrived at Customer' : 'Confirm Delivered ✓'}
-                   </button>
-                </div>
-              )}
-           </div>
-         )}
-
-         {activeTab === 'earnings' && (
-           <div className="fade-up" style={{ padding: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '24px' }}>Earnings Dashboard</h2>
-              
-              <div style={{ background: 'white', borderRadius: '28px', border: '1px solid var(--border)', padding: '24px', marginBottom: '24px' }}>
-                 <div style={{ color: 'var(--text-light)', fontSize: '14px', fontWeight: 700, marginBottom: '8px' }}>Wallet Balance</div>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <div style={{ fontSize: '32px', fontWeight: 900, color: 'var(--text-dark)' }}>$428.10</div>
-                    <button style={{ padding: '10px 20px', borderRadius: '12px', background: 'var(--gold)', color: 'var(--green-dark)', border: 'none', fontWeight: 900, fontSize: '14px' }}>Withdraw</button>
-                 </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '32px' }}>
-                 <div style={{ background: 'white', borderRadius: '24px', border: '1px solid var(--border)', padding: '20px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--success)15', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-                       <TrendingUp size={20} />
-                    </div>
-                    <div style={{ fontSize: '20px', fontWeight: 900 }}>$1,240</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-light)', fontWeight: 700 }}>This Month</div>
-                 </div>
-                 <div style={{ background: 'white', borderRadius: '24px', border: '1px solid var(--border)', padding: '20px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--gold)15', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-                       <Wallet size={20} />
-                    </div>
-                    <div style={{ fontSize: '20px', fontWeight: 900 }}>$34.50</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-light)', fontWeight: 700 }}>Tips Received</div>
-                 </div>
-              </div>
-
-              <h3 style={{ fontSize: '18px', fontWeight: 900, marginBottom: '16px' }}>Trip History</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                 {[
-                   { id: 'SALAM-9221', date: 'Today, 2:40 PM', earn: 8.50 },
-                   { id: 'SALAM-9218', date: 'Today, 1:15 PM', earn: 6.20 },
-                   { id: 'SALAM-9215', date: 'Today, 12:45 PM', earn: 7.80 },
-                   { id: 'SALAM-9211', date: 'Yesterday, 8:20 PM', earn: 12.40 },
-                 ].map(t => (
-                   <div key={t.id} style={{ background: 'white', borderRadius: '20px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border)' }}>
-                      <div>
-                         <div style={{ fontWeight: 800, fontSize: '15px' }}>{t.id}</div>
-                         <div style={{ fontSize: '12px', color: 'var(--text-light)', fontWeight: 600 }}>{t.date}</div>
-                      </div>
-                      <div style={{ fontWeight: 900, color: 'var(--green-mid)', fontSize: '18px' }}>+${t.earn.toFixed(2)}</div>
-                   </div>
-                 ))}
-              </div>
-           </div>
-         )}
-
-         {activeTab === 'profile' && (
-            <div className="fade-up" style={{ padding: '24px' }}>
-               <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                  <div style={{ 
-                    width: '100px', height: '100px', borderRadius: '50%', margin: '0 auto 20px',
-                    border: '4px solid var(--gold)', padding: '4px'
-                  }}>
-                     <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--green-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '32px', fontWeight: 900 }}>SK</div>
-                  </div>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--green-dark)' }}>Suresh Kumar</h2>
-                  <p style={{ color: 'var(--text-light)', fontWeight: 600 }}>Rider ID: STM-DRV-7721</p>
-               </div>
-
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {[
-                    { icon: <User size={20} />, label: 'Personal Information' },
-                    { icon: <ShieldCheck size={20} />, label: 'Vehicle Details (Yamaha Y15)' },
-                    { icon: <CheckCircle size={20} />, label: 'Verified Accounts' },
-                    { icon: <Clock size={20} />, label: 'Schedule & Availability' },
-                    { icon: <X size={20} />, label: 'Log Out', color: 'var(--danger)' }
-                  ].map(item => (
-                    <button key={item.label} style={{ 
-                      padding: '20px', background: 'white', borderRadius: '20px', border: '1px solid var(--border)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer'
-                    }}>
-                       <div style={{ display: 'flex', gap: '16px', alignItems: 'center', color: item.color || 'var(--text-dark)' }}>
-                          {item.icon}
-                          <span style={{ fontWeight: 800 }}>{item.label}</span>
-                       </div>
-                       <ChevronRight size={18} color="var(--text-light)" />
-                    </button>
-                  ))}
-               </div>
+      <main style={{ padding: '20px' }}>
+        {panelError ? (
+          <div style={{ marginBottom: '12px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '12px', padding: '10px 12px', fontWeight: 700, fontSize: '13px' }}>
+            {panelError}
+          </div>
+        ) : null}
+        {riderProfile.status !== 'active' ? (
+          <section style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '20px', padding: '18px', marginBottom: '18px' }}>
+            <h3 style={{ margin: 0, marginBottom: '8px', fontSize: '16px', fontWeight: 900, color: '#9a3412' }}>Activate shift</h3>
+            <div style={{ color: '#7c2d12', fontWeight: 700, fontSize: '14px' }}>
+              Your shift is inactive. Set Active to view assigned deliveries.
             </div>
-         )}
+          </section>
+        ) : (
+        <section style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '20px', padding: '18px', marginBottom: '18px' }}>
+          <h3 style={{ margin: 0, marginBottom: '12px', fontSize: '16px', fontWeight: 900 }}>Active Delivery</h3>
+          {activeDelivery ? (
+            <>
+              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Order #{activeDelivery.id?.slice(-8)?.toUpperCase()}</div>
+              <div style={{ marginTop: '8px', display: 'grid', gap: '6px', fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                <div>Distance: {activeDelivery.distanceKm ? `${activeDelivery.distanceKm} km` : (activeDelivery.distance || 'N/A')}</div>
+                <div>Status: {toOrderStatus(activeDelivery.status) === 'picked_up' ? 'Picked Up' : 'Assigned'}</div>
+                <div>Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || 'N/A'}</div>
+                <div>Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || 'N/A'}</div>
+                <div>Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.address || 'N/A'}</div>
+                <div>Items: {(activeDelivery?.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ') || 'N/A'}</div>
+              </div>
+              <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button onClick={() => openMaps(activeDelivery)} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 800, display: 'flex', justifyContent: 'center', gap: '8px' }}><Navigation size={16} /> Open Maps</button>
+                <button onClick={() => messageCustomer(activeDelivery)} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 800, display: 'flex', justifyContent: 'center', gap: '8px' }}><MessageSquare size={16} /> Message Customer</button>
+                <button onClick={() => callCustomer(activeDelivery)} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 800, display: 'flex', justifyContent: 'center', gap: '8px' }}><Phone size={16} /> Call Customer</button>
+                <button onClick={() => setChatOrderId(activeDelivery.id)} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 800, display: 'flex', justifyContent: 'center', gap: '8px' }}><MessageSquare size={16} /> Chat</button>
+              </div>
+              <button
+                type="button"
+                disabled={busyOrderId === activeDelivery.id}
+                onClick={() => markDelivered(activeDelivery.id)}
+                style={{ marginTop: '12px', width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: '#013220', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer' }}
+              >
+                {busyOrderId === activeDelivery.id ? 'Updating...' : 'Mark Delivered'}
+              </button>
+            </>
+          ) : (
+            <div style={{ color: '#64748b', fontWeight: 700 }}>No active delivery assigned.</div>
+          )}
+        </section>
+        )}
+
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '18px' }}>
+          <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '16px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Deliveries Today</div>
+            <div style={{ fontSize: '22px', fontWeight: 900 }}>{completedToday}</div>
+          </div>
+          <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '16px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Earnings Today</div>
+            <div style={{ fontSize: '22px', fontWeight: 900 }}>${earningsToday.toFixed(2)}</div>
+          </div>
+          <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '16px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Goal Progress</div>
+            <div style={{ fontSize: '22px', fontWeight: 900 }}>{goalPct}%</div>
+          </div>
+        </section>
+
+        {riderProfile.status === 'active' ? (
+        <section style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '20px', padding: '16px' }}>
+          <h3 style={{ margin: 0, marginBottom: '12px', fontSize: '16px', fontWeight: 900 }}>Assigned Deliveries</h3>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, background: '#e2e8f0', padding: '4px 8px', borderRadius: '8px' }}>assigned</span>
+            <span style={{ fontSize: '11px', fontWeight: 800, background: '#dbeafe', padding: '4px 8px', borderRadius: '8px' }}>picked_up</span>
+          </div>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {assignedOrders.filter((o) => TASK_STATUS_FILTER.has(toOrderStatus(o.status))).length === 0 ? (
+              <div style={{ color: '#64748b', fontWeight: 700 }}>No assigned deliveries.</div>
+            ) : assignedOrders
+              .filter((order) => TASK_STATUS_FILTER.has(toOrderStatus(order.status)))
+              .map((order) => (
+              <div key={order.id} style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px' }}>
+                <div style={{ fontWeight: 900 }}>#{order.id?.slice(-8)?.toUpperCase()}</div>
+                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>{toOrderStatus(order.status)}</div>
+                <div style={{ marginTop: '6px', fontSize: '13px', color: '#334155', fontWeight: 600 }}>
+                  {(order.customerSnapshot?.name || order.customer?.name || 'Customer')} · {(order.customerSnapshot?.address || order.customer?.address || order.address || 'No address')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        ) : null}
+        {chatOrderId ? (
+          <section style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '20px', padding: '16px', marginTop: '18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900 }}>Rider Chat · #{chatOrderId.slice(-8).toUpperCase()}</h3>
+              <button onClick={() => setChatOrderId('')} style={{ border: '1px solid #cbd5e1', background: 'white', borderRadius: '8px', padding: '6px 10px', fontWeight: 700, cursor: 'pointer' }}>Close</button>
+            </div>
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', marginBottom: '8px' }}>
+              {chatMessages.length === 0 ? <div style={{ color: '#64748b', fontSize: '13px' }}>Start conversation</div> : chatMessages.map((m) => (
+                <div key={m.id} style={{ fontSize: '13px', marginBottom: '6px' }}>
+                  <strong>{m.senderRole || 'user'}:</strong> {m.text || ''}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type message..." style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '10px', padding: '10px' }} />
+              <button onClick={sendChatMessage} style={{ border: 'none', background: '#013220', color: 'white', borderRadius: '10px', padding: '10px 14px', fontWeight: 800, cursor: 'pointer' }}>Send</button>
+            </div>
+          </section>
+        ) : null}
       </main>
-
-      {/* INCOMING JOB OVERLAY */}
-      {showIncoming && (
-        <div style={{ 
-          position: 'absolute', inset: 0, background: 'rgba(10,61,46,0.9)', 
-          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' 
-        }}>
-           <div className="fade-up" style={{ 
-             background: 'white', width: '100%', borderRadius: '40px', padding: '40px', textAlign: 'center',
-             boxShadow: '0 40px 100px rgba(0,0,0,0.5)', border: '2px solid var(--gold)'
-           }}>
-              <div style={{ 
-                width: '80px', height: '80px', background: 'var(--gold-tint)', color: 'var(--gold)',
-                borderRadius: '24px', margin: '0 auto 24px', display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                 <Bell size={40} className="pulse-dot" />
-              </div>
-              <h2 style={{ fontSize: '28px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '8px' }}>New Job Nearby!</h2>
-              <p style={{ color: 'var(--text-light)', fontWeight: 800, marginBottom: '32px' }}>Pick up in 1.2km • Reward $8.20</p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                 <button onClick={acceptJob} style={{ 
-                   width: '100%', padding: '20px', borderRadius: '20px', border: 'none',
-                   background: 'var(--green-dark)', color: 'white', fontWeight: 900, fontSize: '18px',
-                   cursor: 'pointer'
-                 }}>Accept Job Request</button>
-                 <button onClick={() => setShowIncoming(false)} style={{ 
-                   width: '100%', padding: '16px', borderRadius: '20px', border: 'none',
-                   background: 'var(--cream)', color: 'var(--danger)', fontWeight: 800, fontSize: '15px',
-                   cursor: 'pointer'
-                 }}>Decline</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* NAVIGATION BAR - Tab Style */}
-      <nav style={{ 
-        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', 
-        width: '100%', maxWidth: '480px', background: 'rgba(255,255,255,0.95)', 
-        backdropFilter: 'blur(10px)', borderTop: '1px solid var(--border)', 
-        padding: '12px 24px 30px', display: 'flex', justifyContent: 'space-around', zIndex: 500
-      }}>
-         {[
-           { id: 'tasks', icon: <Navigation />, label: 'TASKS' },
-           { id: 'earnings', icon: <Wallet />, label: 'EARNINGS' },
-           { id: 'profile', icon: <User />, label: 'PROFILE' }
-         ].map(tab => (
-           <button 
-             key={tab.id}
-             onClick={() => setActiveTab(tab.id)}
-             style={{ 
-               background: 'none', border: 'none', cursor: 'pointer',
-               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-               color: activeTab === tab.id ? 'var(--green-dark)' : 'var(--text-light)',
-               transition: '0.2s'
-             }}
-           >
-             <div style={{ 
-               padding: '8px', borderRadius: '14px', 
-               background: activeTab === tab.id ? 'var(--gold-tint)' : 'transparent',
-               transition: '0.2s'
-             }}>
-                {React.cloneElement(tab.icon, { size: 24, strokeWidth: activeTab === tab.id ? 2.5 : 2 })}
-             </div>
-             <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.5px' }}>{tab.label}</span>
-           </button>
-         ))}
-      </nav>
-
-      <style>{`
-        .spin-slow { animation: spin 4s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .fade-up { animation: fadeUp 0.4s ease-out; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .pulse-dot { animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-      `}</style>
     </div>
   )
 }

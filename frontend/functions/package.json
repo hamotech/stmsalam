@@ -1,0 +1,19 @@
+{
+  "name": "stm-functions",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "node ./scripts/wrong-folder-guard.cjs",
+    "dev": "node ./scripts/wrong-folder-guard.cjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0",
+    "stripe": "^22.1.0",
+    "teh-tarik-app": "file:.."
+  }
+}

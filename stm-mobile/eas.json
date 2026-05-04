@@ -1,6 +1,6 @@
 {
   "cli": {
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -12,20 +12,31 @@
       "distribution": "internal",
       "channel": "preview",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "resourceClass": "medium"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "medium"
+      },
+      "env": {
+        "NODE_OPTIONS": "--dns-result-order=ipv4first"
       }
     },
     "production": {
+      "distribution": "store",
       "channel": "production",
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "resourceClass": "large"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "large"
+      },
+      "env": {
+        "NODE_OPTIONS": "--dns-result-order=ipv4first"
       }
     }
   },

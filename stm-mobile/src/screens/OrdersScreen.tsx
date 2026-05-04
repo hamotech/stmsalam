@@ -5,16 +5,21 @@
  * Customer can filter by status and tap→navigate to the Tracking screen.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator,
-  Platform, StatusBar, TextInput,
+  StatusBar, TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { subscribeRecentOrders, PublicOrder, getLocalOrderIds } from '../services/orderService';
+import { navPush } from '@/src/navigation/appNavigation';
+import { useAppRole } from '@/src/auth/useAppRole';
+import { useAuth } from '@/src/context/AuthContext';
+import { subscribeRecentOrders, PublicOrder } from '../services/orderService';
 import OrderCard from '../components/OrderCard';
+import SupportFloatingButtons from '../components/SupportFloatingButtons';
+import { useTabBarBottomInset } from '@/src/navigation/useTabBarBottomInset';
 
 const FILTERS: { label: string; value: string }[] = [
   { label: 'All',       value: 'ALL'           },
@@ -25,32 +30,20 @@ const FILTERS: { label: string; value: string }[] = [
 
 export default function OrdersScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useTabBarBottomInset(28);
+  const { user, profile } = useAuth();
+  const navRole = useAppRole();
   const [orders,  setOrders]  = useState<PublicOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState('ALL');
   const [search,  setSearch]  = useState('');
-  const [localIds, setLocalIds] = useState<string[]>([]);
-  const [listError, setListError] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      getLocalOrderIds().then(setLocalIds);
-    }, [])
-  );
 
   useEffect(() => {
-    const unsub = subscribeRecentOrders(
-      (data) => {
-        setOrders(data);
-        setListError(null);
-        setLoading(false);
-      },
-      (err) => {
-        console.error('[OrdersScreen]', err);
-        setListError('Could not load orders. Pull to retry or check your connection.');
-        setLoading(false);
-      }
-    );
+    const unsub = subscribeRecentOrders((data) => {
+      setOrders(data);
+      setLoading(false);
+    });
     return unsub;
   }, []);
 
@@ -67,20 +60,12 @@ export default function OrdersScreen() {
     return matchStatus && matchSearch;
   });
 
-  const sorted = useMemo(() => {
-    const rank = (id: string) => {
-      const i = localIds.indexOf(id);
-      return i === -1 ? 10_000 : i;
-    };
-    return [...filtered].sort((a, b) => rank(a.id) - rank(b.id));
-  }, [filtered, localIds]);
-
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
 
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>Orders</Text>
         <Text style={styles.headerSub}>Live real-time sync</Text>
 
@@ -114,15 +99,11 @@ export default function OrdersScreen() {
       {/* ── List ── */}
       {loading ? (
         <ActivityIndicator color={GREEN} style={{ marginTop: 48 }} size="large" />
-      ) : listError ? (
-        <View style={styles.errWrap}>
-          <Text style={styles.errTxt}>{listError}</Text>
-        </View>
       ) : (
         <FlatList
-          data={sorted}
+          data={filtered}
           keyExtractor={o => o.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarBottomInset }]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -134,25 +115,27 @@ export default function OrdersScreen() {
           renderItem={({ item }) => (
             <OrderCard
               order={item}
-              onTrack={(id) => router.push(`/tracking/${encodeURIComponent(id)}`)}
+              onTrack={(id) =>
+                navPush(router, { kind: 'legacyOrderTracking', orderId: id }, navRole)
+              }
+              onViewOrder={(id) => navPush(router, { kind: 'orderDetail', orderId: id }, navRole)}
             />
           )}
         />
       )}
+      <SupportFloatingButtons />
     </View>
   );
 }
 
 const GREEN = '#013220';
-const PT    = Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 0;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F8FAFC' },
 
   header: {
     backgroundColor: GREEN,
-    paddingTop: PT + 56,
-    paddingBottom: 24,
+    paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
@@ -186,13 +169,10 @@ const styles = StyleSheet.create({
   chipText:       { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
   chipTextActive: { color: GREEN },
 
-  list: { padding: 16, paddingBottom: 40 },
+  list: { padding: 16 },
 
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '900', color: '#475569', marginBottom: 6 },
   emptySub:   { fontSize: 13, color: '#94A3B8', fontWeight: '500' },
-
-  errWrap: { padding: 24, marginTop: 24 },
-  errTxt:  { color: '#B91C1C', fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 });

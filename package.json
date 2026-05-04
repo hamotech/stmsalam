@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:new": "concurrently \"npm run dev:frontend:new\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && npm run dev",
+    "dev:frontend:new": "cd frontend && npx vite --port 5174",
     "dev:backend": "cd backend && npm start",
     "install:all": "npm install --legacy-peer-deps && cd frontend && npm install --legacy-peer-deps && cd ../backend && npm install"
   },

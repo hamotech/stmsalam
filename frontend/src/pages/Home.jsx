@@ -14,8 +14,11 @@ import { API_URL } from '../config/api'
 import { dataService } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
 import { useData } from '../context/DataContext'
+import { useAuth } from '../context/AuthContext'
 import { Plus, Minus, Image as ImageIcon, PlayCircle } from 'lucide-react'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
+import SmartImage from '../components/common/SmartImage'
+import { DEFAULT_FALLBACK_IMAGE, resolveImageUrl } from '../utils/imageUrl'
 // static data removed
 
 /* ── tiny floating food component ── */
@@ -63,10 +66,10 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
       }}
     >
       <div style={{ position: 'relative', height: '240px', overflow: 'hidden', background: '#f8fafc' }} onClick={() => navigate('/menu')}>
-        <img loading="lazy" 
-          src={item.img || item.image || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400'} 
-          style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} 
-          alt={item.name} 
+        <SmartImage
+          src={item.img || item.image || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=400'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
+          alt={item.name}
         />
         <div style={{ position: 'absolute', top: '20px', left: '20px', background: 'var(--gold)', color: 'var(--green-dark)', padding: '6px 14px', borderRadius: '12px', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 4px 12px rgba(212,175,55,0.3)' }}>
           {badge}
@@ -246,12 +249,22 @@ export default function Home() {
         <AnimatePresence mode="wait">
           <motion.img
             key={heroIdx}
-            src={heroImages[heroIdx]}
+            src={resolveImageUrl(heroImages[heroIdx])}
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 0.4, scale: 1 }}
             exit={{ opacity: 0.1 }}
             transition={{ duration: 1.5 }}
             loading={heroIdx === 0 ? "eager" : "lazy"}
+            onError={(event) => {
+              const target = event.currentTarget
+              if (target.dataset.fallbackApplied === '1') return
+              console.warn('[ImageLoadError] hero image failed; using fallback', {
+                attemptedSrc: target.currentSrc || target.src,
+                originalSrc: heroImages[heroIdx],
+              })
+              target.dataset.fallbackApplied = '1'
+              target.src = DEFAULT_FALLBACK_IMAGE
+            }}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </AnimatePresence>
@@ -321,17 +334,13 @@ export default function Home() {
                 <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: 'var(--green-mid)', color: 'white', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>SGQR PayNow</div>
                 <div style={{ width: '240px', height: '300px', background: 'white', margin: '12px auto 0', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
                   <object
-                    data="/CamScanner.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
+                    data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
                     type="application/pdf"
                     style={{ width: '240px', height: '300px', border: 'none' }}
                   >
-                    {/* Fallback if browser can't render PDF inline */}
-                    <img loading="lazy" 
-                      src="/qr-payment.png" 
-                      alt="SGQR PayNow Code" 
-                      style={{ width: '200px', height: '200px', objectFit: 'contain' }} 
-                      onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PayNow_STMSalam'; }}
-                    />
+                    <div style={{ padding: '12px', fontSize: '13px', fontWeight: 700 }}>
+                      <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ color: 'var(--green-mid)' }}>Open scan-to-pay PDF</a>
+                    </div>
                   </object>
                 </div>
                 <div style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-light)', fontWeight: 700 }}>
@@ -421,15 +430,16 @@ export default function Home() {
 
                 <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '28px', border: '2px solid #e2e8f0', marginBottom: '24px' }}>
                   <div style={{ width: '220px', height: '220px', background: 'white', margin: '0 auto', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-                    <object data="/CamScanner.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH" type="application/pdf" style={{ width: '220px', height: '220px', border: 'none' }}>
-                      <img loading="lazy" src="/qr-payment.png" alt="QR Code" style={{ width: '180px', height: '180px' }} />
+                    <object data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH" type="application/pdf" style={{ width: '220px', height: '220px', border: 'none' }}>
+                      <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green-mid)' }}>Open PDF</a>
                     </object>
                   </div>
                   
                   <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
                     <div style={{ background: 'white', padding: '12px', borderRadius: '16px', border: '1px solid #eef2f6' }}>
-                      <div style={{ fontSize: '10px', color: 'var(--text-light)', fontWeight: 800, textTransform: 'uppercase' }}>Amount Due</div>
-                      <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--green-dark)' }}>SGD {(subtotal + (subtotal * 0.09) + (subtotal >= 30 ? 0 : 2)).toFixed(2)}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-light)', fontWeight: 800, textTransform: 'uppercase' }}>Item subtotal</div>
+                      <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--green-dark)' }}>SGD {subtotal.toFixed(2)}</div>
+                      <div style={{ fontSize: '9px', color: 'var(--text-light)', fontWeight: 700, marginTop: '4px', lineHeight: 1.3 }}>Delivery min SGD {(shopInfo.minOrderDelivery ?? 10).toFixed(0)} · free ≤{shopInfo.freeDeliveryRadiusKm} km from {shopInfo.outletName}</div>
                     </div>
                     <div style={{ background: 'white', padding: '12px', borderRadius: '16px', border: '1px solid #eef2f6' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-light)', fontWeight: 800, textTransform: 'uppercase' }}>Temp Order ID</div>
@@ -456,8 +466,8 @@ export default function Home() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     const tempId = `PN-${Math.floor(1000 + Math.random() * 9000)}`;
-                    const total = (subtotal + (subtotal * 0.09) + (subtotal >= 30 ? 0 : 2)).toFixed(2);
-                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Amount: SGD ${total}\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
+                    const total = subtotal.toFixed(2);
+                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Item subtotal: SGD ${total}\n(Delivery & final total confirmed at checkout.)\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
                     window.open(`https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
                     setShowPayNow(false);
                   }}
@@ -496,7 +506,7 @@ export default function Home() {
                 : dynamicProducts
               ).slice(0, 2).map((p, i) => (
                 <div key={p.id} style={{ position: 'relative', width: '140px', height: '140px', transform: i === 0 ? 'translateY(10px)' : 'translateY(-10px)' }}>
-                  <img loading="lazy" src={p.image || p.img || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
+                  <SmartImage src={p.image || p.img || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', borderRadius: '24px', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)' }} />
                   <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '6px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)', textAlign: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                 </div>
               ))}
@@ -551,7 +561,7 @@ export default function Home() {
               {dynamicProducts.filter(p => p.badge === 'bestseller' || p.badge === 'new').slice(0, 4).map((p, i) => (
                 <motion.div key={p.id || i} initial={{ x: -20, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.1 }}
                   style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', overflow: 'hidden', marginLeft: i === 0 ? 0 : '-15px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)', background: '#f1f5f9' }}>
-                  <img loading="lazy" src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} title={p.name} />
+                  <SmartImage src={p.img || p.image || '/bg1.jpeg'} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} title={p.name} />
                 </motion.div>
               ))}
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', border: '4px solid white', background: 'var(--gold)', color: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '-15px', zIndex: 1, boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
@@ -635,12 +645,13 @@ export default function Home() {
             >
               <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, whiteSpace: 'nowrap' }}>Official SGQR</div>
               <div style={{ background: 'white', borderRadius: '25px', padding: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
-                <img loading="lazy" 
-                  src="/qr-payment.png" 
-                  alt="Scan to Pay" 
-                  style={{ width: '100%', height: 'auto', borderRadius: '15px' }} 
-                  onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=STMSalam_Pay'; }}
-                />
+                <object
+                  data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
+                  type="application/pdf"
+                  style={{ width: '100%', height: '200px', border: 'none', borderRadius: '15px' }}
+                >
+                  <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ fontSize: '14px', fontWeight: 800, color: 'var(--green-dark)' }}>Open scan-to-pay PDF</a>
+                </object>
               </div>
               <div style={{ textAlign: 'center', marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>TAP TO ENLARGE</div>
@@ -712,7 +723,7 @@ export default function Home() {
                         onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
                       />
                     ) : (
-                      <img loading="lazy" src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <SmartImage src={item.url} alt="Gallery item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
                       {isVideo && <PlayCircle size={40} color="white" style={{ opacity: 0.8 }} />}
@@ -1005,30 +1016,48 @@ export default function Home() {
 
 /* ── Active Order Tracker Sub-Component ── */
 function ActiveOrderTracker() {
+  const { user } = useAuth() || {}
   const [activeOrder, setActiveOrder] = useState(null)
-  const orderId = localStorage.getItem('stm_last_order_id')
+  const normalizeStatus = (raw) =>
+    String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
 
   useEffect(() => {
-    if (!orderId) return
-    const checkOrder = async () => {
-      try {
-        const data = await dataService.fetchOrderById(orderId);
-        if (data && data.status && data.status.toLowerCase() !== 'delivered') setActiveOrder(data)
-        else setActiveOrder(null)
-      } catch (e) { console.log('Tracker error:', e) }
-    }
-    checkOrder()
-    const interval = setInterval(checkOrder, 10000)
-    return () => clearInterval(interval)
-  }, [orderId])
+    if (!user) return undefined
+    const unsub = dataService.subscribeOrders((allOrders) => {
+      const mine = allOrders.filter((o) =>
+        o.userId === user.id ||
+        o.customer?.email === user.email ||
+        o.customer?.phone === user.phone
+      )
+      const ACTIVE_ALLOWED = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up']
+      const active = mine.find((o) => {
+        const st = normalizeStatus(o.status || o.stage || o.orderStatus)
+        return ACTIVE_ALLOWED.includes(st)
+      })
+      setActiveOrder(active || null)
+      if (import.meta.env.DEV && active?.id) {
+        console.log('Received live update:', normalizeStatus(active.status || active.stage || active.orderStatus))
+      }
+    })
+    return () => { if (typeof unsub === 'function') unsub() }
+  }, [user])
 
   if (!activeOrder) return null
 
-  const statusMap = { pending: 'Order Received', accepted: 'Kitchen Accepting', preparing: 'Preparing Delicious Food', ready: 'Packing Your Bags', delivering: 'Courier is On the Move' }
-  const progressMap = { pending: 10, accepted: 30, preparing: 60, ready: 80, delivering: 95 }
+  const statusKey = normalizeStatus(activeOrder.status || activeOrder.stage || activeOrder.orderStatus)
+  const statusMap = {
+    pending: 'Order Placed',
+    confirmed: 'Confirmed',
+    preparing: 'Preparing your food',
+    ready: 'Ready for pickup',
+    assigned: 'Rider assigned',
+    picked_up: 'Out for delivery',
+    delivered: 'Delivered',
+  }
+  const progressMap = { pending: 12, preparing: 35, ready: 55, assigned: 72, picked_up: 90, delivered: 100 }
 
   return (
-    <Link to={`/tracking/${orderId}`} style={{ display: 'block', textDecoration: 'none', background: 'white', borderBottom: '1.5px solid #eef2f6' }}>
+    <Link to={`/tracking/${activeOrder.id}`} style={{ display: 'block', textDecoration: 'none', background: 'white', borderBottom: '1.5px solid #eef2f6' }}>
       <div className="container" style={{ padding: '16px 0', display: 'flex', alignItems: 'center', gap: '20px' }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           <Activity size={24} color="var(--gold)" />
@@ -1036,11 +1065,11 @@ function ActiveOrderTracker() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
-            <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--green-dark)' }}>{statusMap[activeOrder.status]}...</div>
+            <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--green-dark)' }}>{statusMap[statusKey] || 'Processing...'}...</div>
             <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--success, #22c55e)', background: '#f0fdf4', padding: '4px 10px', borderRadius: '8px' }}>ARRIVING IN 14 MIN</div>
           </div>
           <div style={{ height: '6px', background: 'var(--cream)', borderRadius: '3px' }}>
-            <motion.div initial={{ width: 0 }} animate={{ width: `${progressMap[activeOrder.status]}%` }} style={{ height: '100%', background: 'var(--success, #22c55e)', borderRadius: '3px' }} />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${progressMap[statusKey] ?? 20}%` }} style={{ height: '100%', background: 'var(--success, #22c55e)', borderRadius: '3px' }} />
           </div>
         </div>
         <ChevronRight size={20} color="var(--text-light)" />

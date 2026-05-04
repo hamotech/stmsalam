@@ -6,6 +6,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import ChatWindow from '../components/ChatWindow'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { markMessagesAsRead } from '../admin/services/dataService'
+import { safeLog } from '../utils/runtimeSafety'
 import {
   Plus, CircleCheck, Clock, Package, Truck,
   ReceiptText, ArrowLeft, MessageCircle,
@@ -20,69 +21,165 @@ export default function OrderTracking() {
   const [searchParams] = useSearchParams()
 
   const token = searchParams.get('token') || ''
+  const stripeSessionId = searchParams.get('session_id') || ''
+  const paymentQueryParam = searchParams.get('payment') || ''
 
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [riderLocation, setRiderLocation] = useState(null)
 
+  const FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered']
   const steps = [
     { id: 'pending', label: 'Order Placed', desc: 'We have received your order', icon: <Plus size={20} /> },
     { id: 'confirmed', label: 'Confirmed', desc: 'Kitchen has accepted your order', icon: <CircleCheck size={20} /> },
-    { id: 'preparing', label: 'Preparing', desc: 'Our chefs are grilling your kebabs', icon: <Clock size={20} /> },
-    { id: 'ready', label: 'Food Ready', desc: 'Order is packed and ready', icon: <Package size={20} /> },
-    { id: 'delivering', label: 'Out for Delivery', desc: 'Driver is on the way', icon: <Truck size={20} /> },
-    { id: 'delivered', label: 'Delivered', desc: 'Enjoy your meal!', icon: <CircleCheck size={20} /> }
+    { id: 'preparing', label: 'Preparing your food', desc: 'Kitchen is preparing your order', icon: <Clock size={20} /> },
+    { id: 'ready', label: 'Ready for pickup', desc: 'Order is packed and ready', icon: <Package size={20} /> },
+    { id: 'assigned', label: 'Rider assigned', desc: 'A rider is assigned to your order', icon: <CircleCheck size={20} /> },
+    { id: 'picked_up', label: 'Out for delivery', desc: 'Your order is on the way', icon: <Truck size={20} /> },
+    { id: 'delivered', label: 'Delivered', desc: 'Enjoy your meal!', icon: <CircleCheck size={20} /> },
   ]
 
+  const normalizeCustomerStatus = (raw) => {
+    const s = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+    if (!s) return 'pending'
+    if (s === 'placed') return 'pending'
+    if (s === 'out_for_delivery' || s === 'delivering') return 'picked_up'
+    if (s === 'complete' || s === 'completed') return 'delivered'
+    return s
+  }
+
   const getActiveStep = (status) => {
-    const s = (status || "").toUpperCase()
-    switch (s) {
-      case 'PENDING': return 0
-      case 'CONFIRMED': return 1
-      case 'PREPARING': return 2
-      case 'READY': return 3
-      case 'OUT_FOR_DELIVERY':
-      case 'DELIVERING': return 4
-      case 'DELIVERED': return 5
-      default: return 0
+    const normalized = normalizeCustomerStatus(status)
+    const idx = FLOW.indexOf(normalized)
+    return idx >= 0 ? idx : 0
+  }
+
+  const getCustomerStatusText = (status) => {
+    const normalized = normalizeCustomerStatus(status)
+    const map = {
+      pending: 'Order Placed',
+      confirmed: 'Confirmed',
+      preparing: 'Preparing your food',
+      ready: 'Ready for pickup',
+      assigned: 'Rider assigned',
+      picked_up: 'Out for delivery',
+      delivered: 'Delivered',
     }
+    return map[normalized] || 'Processing...'
   }
 
-  // ✅ FIXED REAL-TIME LISTENER
-useEffect(() => {
-  console.log("TRACKING ORDER ID:", cleanOrderId);
-
-  // ❌ guard (prevents Firestore crash)
-  if (!cleanOrderId) {
-    setError(true);
-    setLoading(false);
-    return;
+  /** Stripe redirect (?payment=) + Firestore fields — feedback only, non-blocking. */
+  const resolvePaymentBannerMessage = (ord, paymentParam) => {
+    const ps = String(ord?.paymentStatus ?? '').trim().toLowerCase()
+    const st = String(ord?.status ?? '').trim().toLowerCase()
+    if (ps === 'failed') return 'Payment failed'
+    if (ps === 'paid') return 'Payment successful'
+    if (paymentParam === 'cancel') return 'Payment cancelled'
+    if (paymentParam === 'success') return 'Payment processing...'
+    if (st === 'pending_payment' || ps === 'pending')
+      return 'Waiting for payment confirmation...'
+    return ''
   }
 
-  const ref = doc(db, 'public_tracking', cleanOrderId);
+  useEffect(() => {
+    console.log('TRACKING ORDER ID:', cleanOrderId)
 
-  const unsub = onSnapshot(
-    ref,
-    (snap) => {
-      if (snap.exists()) {
-        setOrder({ id: snap.id, ...snap.data() });
-        setError(false);
-      } else {
-        setError(true);
+    if (!cleanOrderId) {
+      setError(true)
+      setLoading(false)
+      return undefined
+    }
+
+    const ref = doc(db, 'orders', cleanOrderId)
+
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        console.log('[Tracking] Firestore snapshot exists:', snap.exists(), 'orderId:', cleanOrderId)
+        if (snap.exists()) {
+          const next = { id: snap.id, ...snap.data() }
+          setOrder(next)
+          console.log('Received live update:', normalizeCustomerStatus(next.status))
+          if (import.meta.env.DEV) {
+            console.debug('[UserOrderListener]', { orderId: next.id, status: normalizeCustomerStatus(next.status) })
+          }
+          setError(false)
+        } else {
+          setError(true)
+        }
+        setLoading(false)
+      },
+      (err) => {
+        console.error('Tracking Error:', err)
+        setError(true)
+        setLoading(false)
       }
-      setLoading(false);
-    },
-    (err) => {
-      console.error("Tracking Error:", err);
-      setError(true);
-      setLoading(false);
-    }
-  );
+    )
 
-  return () => unsub();
-}, [cleanOrderId]);
+    return () => unsub()
+  }, [cleanOrderId])
+
+  useEffect(() => {
+    const riderId = String(order?.riderId || '').trim()
+    if (!riderId) return undefined
+    const riderRef = doc(db, 'riders', riderId)
+    const unsub = onSnapshot(
+      riderRef,
+      (snap) => {
+        if (!snap.exists()) return
+        const loc = snap.data()?.location || null
+        if (loc?.lat && loc?.lng) {
+          setRiderLocation(loc)
+          safeLog('gps update received', { riderId, lat: loc.lat, lng: loc.lng })
+        }
+      },
+      () => undefined
+    )
+    return () => unsub()
+  }, [order?.riderId])
+
+  useEffect(() => {
+    if (!stripeSessionId || !cleanOrderId) return undefined
+    /* Optional: REST base for POST /verify-checkout-session only (not customer checkout; checkout is Cloud Run via stripeCheckout.js). */
+    const api = import.meta.env.VITE_STRIPE_CHECKOUT_API
+      ? String(import.meta.env.VITE_STRIPE_CHECKOUT_API).trim().replace(/\/$/, '')
+      : ''
+    if (!api) {
+      navigate(`/tracking/${encodeURIComponent(cleanOrderId)}`, { replace: true })
+      return undefined
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const headers = { 'Content-Type': 'application/json' }
+        const bearer = import.meta.env.VITE_STRIPE_VERIFY_BEARER_TOKEN
+          ? String(import.meta.env.VITE_STRIPE_VERIFY_BEARER_TOKEN).trim()
+          : ''
+        if (bearer) headers.Authorization = `Bearer ${bearer}`
+        const r = await fetch(`${api}/verify-checkout-session`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ orderId: cleanOrderId, sessionId: stripeSessionId }),
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          console.warn('[OrderTracking] verify-checkout-session', r.status, j)
+        }
+      } catch (e) {
+        console.warn('[OrderTracking] verify-checkout-session', e)
+      } finally {
+        if (!cancelled) {
+          navigate(`/tracking/${encodeURIComponent(cleanOrderId)}`, { replace: true })
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [cleanOrderId, stripeSessionId, navigate])
 
   const handleUpload = async (e) => {
     const file = e.target.files[0]
@@ -127,12 +224,6 @@ useEffect(() => {
 
       const url = await getDownloadURL(fileRef)
 
-      // public_tracking write: guest-permitted path
-      await updateDoc(doc(db, 'public_tracking', cleanOrderId), {
-        paymentProofSubmitted: true
-      })
-
-      // orders write: may require admin permissions — isolated so it never blocks UX
       try {
         await updateDoc(doc(db, 'orders', cleanOrderId), {
           payment_screenshot: url
@@ -155,11 +246,13 @@ useEffect(() => {
     markMessagesAsRead(cleanOrderId, 'customer', token)
   }
 
-  if (!cleanOrderId) return <div>Invalid Order</div>
+  if (!cleanOrderId) return <div>Invalid tracking link</div>
   if (loading) return <div>Loading tracking...</div>
-  if (error || !order) return <div>Order not found</div>
+  if (error || !order) return <div>Invalid tracking link</div>
 
-  const activeStep = getActiveStep(order?.status || 'PENDING')
+  const paymentBannerText = resolvePaymentBannerMessage(order, paymentQueryParam)
+
+  const activeStep = getActiveStep(order?.status || 'pending')
   const orderType = order?.mode || 'delivery'
   const items = order?.items || []
   const total = Number(order?.total || 0)
@@ -193,9 +286,12 @@ useEffect(() => {
              <div>
                 <h1 style={{ color: 'white', fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 900, letterSpacing: '-2px', marginBottom: '8px' }}>Your Order Status</h1>
                 <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '18px', fontWeight: 600 }}>ID: <span style={{ color: 'white' }}>#{order?.id?.slice(-8) || ''}</span> · {(items || []).length} Items</p>
+                {paymentBannerText ? (
+                  <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '15px', fontWeight: 700, marginTop: '10px', maxWidth: '520px', lineHeight: 1.45 }}>{paymentBannerText}</p>
+                ) : null}
              </div>
              <div style={{ background: 'rgba(255,255,255,0.1)', padding: '20px 40px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', textAlign: 'center' }}>
-                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{steps[activeStep]?.label || ''}</div>
+                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{getCustomerStatusText(order?.status)}</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Current Status</div>
              </div>
           </div>
@@ -261,6 +357,16 @@ useEffect(() => {
                     <div style={{ width: '12px', height: '12px', background: 'var(--green-mid)', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
                     GPS Tracking Active
                  </div>
+                 {!order?.riderId ? (
+                   <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'rgba(255,255,255,0.95)', display: 'inline-block', padding: '6px 10px', borderRadius: '10px' }}>
+                     Waiting for rider assignment
+                   </div>
+                 ) : null}
+                 {riderLocation ? (
+                   <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'rgba(255,255,255,0.95)', display: 'inline-block', padding: '6px 10px', borderRadius: '10px' }}>
+                     Rider location: {Number(riderLocation.lat).toFixed(5)}, {Number(riderLocation.lng).toFixed(5)}
+                   </div>
+                 ) : null}
               </div>
            </div>
         </div>

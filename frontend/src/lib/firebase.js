@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -32,6 +33,26 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+
+/** Must match `onCall({ region })` in `frontend/functions` (default us-central1). */
+export const FUNCTIONS_REGION =
+  String(import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || "us-central1").trim() || "us-central1";
+export const functions = getFunctions(app, FUNCTIONS_REGION);
+export const FIREBASE_PROJECT_ID = firebaseConfig.projectId || "";
+
+if (import.meta.env.DEV) {
+  if (!firebaseConfig.projectId) {
+    console.warn("[firebase] VITE_FIREBASE_PROJECT_ID is missing — checkout callables will fail.");
+  }
+  if (FUNCTIONS_REGION !== "us-central1") {
+    console.warn(
+      `[firebase] VITE_FIREBASE_FUNCTIONS_REGION=${FUNCTIONS_REGION} — ensure createGrabOrder is deployed in this region.`
+    );
+  }
+  if (FIREBASE_PROJECT_ID) {
+    console.info(`[firebase] Checkout callables: project=${FIREBASE_PROJECT_ID} region=${FUNCTIONS_REGION}`);
+  }
+}
 
 // 🔥 Safer persistence (prevents app crash in unsupported cases)
 try {

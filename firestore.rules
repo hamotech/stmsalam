@@ -1,0 +1,158 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
+    }
+
+    /** JWT custom claim (Admin SDK only). */
+    function hasAdminCustomClaim() {
+      return isAuthed() && request.auth.token.admin == true;
+    }
+
+    function hasAdminRoleFirestore() {
+      return isAuthed() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function hasAdminRole() {
+      return hasAdminCustomClaim() || hasAdminRoleFirestore();
+    }
+
+    /** Legacy admin email — keep until all admins use claims / role doc. */
+    function isLegacyAdminEmail() {
+      return isAuthed() && request.auth.token.email == "haritha.mh77@gmail.com";
+    }
+
+    function isAdmin() {
+      return hasAdminRole() || isLegacyAdminEmail();
+    }
+
+    function orderRef(orderId) {
+      return get(/databases/$(database)/documents/orders/$(orderId));
+    }
+
+    function isOrderParticipant(orderId) {
+      return isAuthed()
+        && exists(/databases/$(database)/documents/orders/$(orderId))
+        && (
+          orderRef(orderId).data.userId == request.auth.uid
+          || orderRef(orderId).data.riderId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    /** Owner may patch payment/proof fields only (no status / items / riderId). */
+    function orderOwnerSelfServiceUpdate() {
+      return isAuthed()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'paymentStatus',
+            'payment_status',
+            'updatedAt',
+            'payment_screenshot',
+            'paymentProofSubmitted',
+            'customerMarkedPaidAt',
+            'qrCustomerClaimedAt',
+          ]);
+    }
+
+    // --- Public catalog (read-only for clients) ---
+    match /categories/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /products/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /gallery/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAdmin();
+    }
+
+    match /checkout_lease/{uid} {
+      allow read: if isAuthed() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // --- Orders: creates via Cloud Functions / Admin SDK only ---
+    match /orders/{orderId} {
+      allow create: if false;
+      allow delete: if false;
+
+      allow read: if isAuthed()
+        && (
+          isAdmin()
+          || resource.data.userId == request.auth.uid
+          || resource.data.riderId == request.auth.uid
+        );
+
+      allow update: if isAdmin() || orderOwnerSelfServiceUpdate();
+
+      match /messages/{messageId} {
+        allow read, create, update: if isOrderParticipant(orderId);
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /riders/{riderId} {
+      allow read, write: if isAuthed()
+        && (isAdmin() || request.auth.uid == riderId);
+    }
+
+    match /chats/{orderId} {
+      allow read, write: if isOrderParticipant(orderId);
+      match /messages/{messageId} {
+        allow read, write: if isOrderParticipant(orderId);
+      }
+    }
+
+    // Mirror of orders for tracking — client read-only; writes via Admin SDK / Functions only.
+    match /public_tracking/{orderId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /admin_push_tokens/{tokenDoc} {
+      allow read: if false;
+      allow write: if isAdmin();
+    }
+
+    match /customer_push_tokens/{userId} {
+      allow read: if false;
+      allow create, update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    match /support_chats/{conversationId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

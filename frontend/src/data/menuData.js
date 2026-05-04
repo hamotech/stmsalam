@@ -1,20 +1,44 @@
 export const shopInfo = {
   name: 'STM Salam',
   tagline: "Authentic Kopitiam Flavors, Delivered.",
+  /** Fulfilment / pickup location (two lines for UI) */
+  outletName: 'STM Salam — Blk 50A',
+  outletAddress: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+  /** Same as outletAddress — kept for backwards compatibility */
   address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+  /** Approx. WGS84 for Blk 50A Marine Terrace — used for delivery radius checks */
+  outletLat: 1.30892,
+  outletLng: 103.91548,
+  /** Free delivery only within this distance (km) of the outlet, and with minimum order */
+  freeDeliveryRadiusKm: 5,
+  /** Charged when address is outside the free zone (or until distance is verified) */
+  deliveryFee: 2.0,
+  /** Minimum cart subtotal (SGD) to choose delivery */
+  minOrderDelivery: 10.0,
+  /** Minimum subtotal for free delivery inside the radius (same as delivery minimum here) */
+  minOrderFreeDelivery: 10.0,
+  minOrder: 10.0,
   phone: '+65 9191 5766',
   whatsapp: '+65 9191 5766',
   email: 'highlitesg786@gmail.com',
   website: 'https://www.stmsalam.com',
   catalog: 'https://wa.me/c/6591915766',
   hours: 'Daily 9:00 AM – 11:00 PM',
-  deliveryFee: 2.00,
-  minOrder: 10.00,
   avgDeliveryTime: '25–35 min',
 }
 
 export const outlets = [
-  { id: 1, name: 'STM Salam — Blk 50A', address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050', phone: '+65 9191 5766', hours: 'Daily 9:00 AM – 11:00 PM', isMain: true, img: '/bg2.jpeg' },
+  {
+    id: 1,
+    name: 'STM Salam — Blk 50A',
+    address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+    phone: '+65 9191 5766',
+    hours: 'Daily 9:00 AM – 11:00 PM',
+    isMain: true,
+    img: '/bg2.jpeg',
+    lat: 1.30892,
+    lng: 103.91548,
+  },
 ]
 
 export const categories = [

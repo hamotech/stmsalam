@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchDashboardStats, subscribeOrders } from '../services/dataService';
-import { ShoppingBag, DollarSign, TrendingUp, Clock, ArrowUpRight, Activity } from 'lucide-react';
+import { ShoppingBag, DollarSign, TrendingUp, Clock, ArrowUpRight, Activity, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // --- ANIMATION VARIANTS --- //
@@ -92,6 +93,38 @@ const Dashboard = () => {
       <motion.div variants={itemVariants} style={{ marginBottom: '32px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a', letterSpacing: '-0.5px' }}>Dashboard Overview</h2>
         <p style={{ color: '#64748b', fontWeight: '600', marginTop: '4px' }}>Welcome back to your STM operations hub.</p>
+      </motion.div>
+
+      <motion.div variants={itemVariants} style={{ marginBottom: '28px' }}>
+        <Link
+          to="/admin/support"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            padding: '18px 24px',
+            borderRadius: 20,
+            background: 'linear-gradient(135deg, #013220 0%, #0d5c3f 100%)',
+            color: 'white',
+            textDecoration: 'none',
+            boxShadow: '0 12px 32px rgba(1,50,32,0.2)',
+            border: '1px solid rgba(212,175,55,0.35)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MessageCircle size={24} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 17 }}>Chat with Customer</div>
+              <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 600, marginTop: 4 }}>
+                Open the support inbox — messages from the site “STM Help” Live team tab.
+              </div>
+            </div>
+          </div>
+          <span style={{ fontWeight: 900, fontSize: 14, whiteSpace: 'nowrap' }}>Open inbox →</span>
+        </Link>
       </motion.div>
       
       {/* STATS ROW */}

@@ -1,149 +1,188 @@
-/**
- * Customer auth — Firebase email/password + optional guest mode (parity with web).
- */
-
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  signInAnonymously,
+  sendPasswordResetEmail,
+  getIdTokenResult,
+  type User,
+  type ActionCodeSettings,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import * as Linking from 'expo-linking';
 import { auth, db } from '@/src/services/firebase';
-import { resolveUserRole } from '@/src/config/adminAccess';
 
-const GUEST_KEY = 'stm_guest';
-
-export type AppUser = {
-  id: string;
-  name: string;
-  email: string | null;
-  role: 'user' | 'admin';
+export type UserProfile = {
+  name?: string;
+  email?: string;
+  role?: string;
+  isAdmin?: boolean;
 };
 
 type AuthContextValue = {
-  user: AppUser | null;
-  isGuest: boolean;
-  /** True after guest flag is read and first `onAuthStateChanged` has fired. */
+  user: User | null;
+  profile: UserProfile | null;
+  idTokenClaims: Record<string, unknown> | null;
+  loading: boolean;
+  /** True after authStateReady + guest bootstrap attempt + listener attached. */
   authReady: boolean;
-  loginAsGuest: () => Promise<void>;
-  logout: () => Promise<void>;
+  /** Set only if core auth init throws (not anonymous failure). */
+  authBootstrapError: string | null;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
+  refreshIdTokenClaims: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [isGuest, setIsGuest] = useState(false);
-  const [guestHydrated, setGuestHydrated] = useState(false);
-  const [authHandled, setAuthHandled] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [idTokenClaims, setIdTokenClaims] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [authBootstrapError, setAuthBootstrapError] = useState<string | null>(null);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    void (async () => {
       try {
-        const g = await AsyncStorage.getItem(GUEST_KEY);
-        if (alive) setIsGuest(g === 'true');
-      } catch {
-        /* ignore */
-      } finally {
-        if (alive) setGuestHydrated(true);
+        await auth.authStateReady();
+        if (cancelled) return;
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (err) {
+            console.error('[AUTH_FAIL]', err);
+          }
+        }
+        await auth.authStateReady();
+      } catch (err) {
+        console.error('[AUTH_FAIL]', err);
+        if (!cancelled) {
+          setAuthBootstrapError('Could not initialize sign-in. Check your connection.');
+        }
+      }
+
+      if (cancelled) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (u) => {
+        setUser(u);
+        if (u) {
+          try {
+            const [snap, tokenResult] = await Promise.all([
+              getDoc(doc(db, 'users', u.uid)),
+              getIdTokenResult(u),
+            ]);
+            setProfile(snap.exists() ? (snap.data() as UserProfile) : { email: u.email ?? undefined });
+            setIdTokenClaims(tokenResult.claims as Record<string, unknown>);
+          } catch (err) {
+            console.error('[AUTH_PROFILE]', err);
+            try {
+              setProfile({ email: u.email ?? undefined });
+              const tokenResult = await getIdTokenResult(u);
+              setIdTokenClaims(tokenResult.claims as Record<string, unknown>);
+            } catch (err2) {
+              console.error('[AUTH_PROFILE_FALLBACK]', err2);
+              setIdTokenClaims(null);
+            }
+          }
+        } else {
+          setProfile(null);
+          setIdTokenClaims(null);
+        }
+        setLoading(false);
+      });
+
+      if (!cancelled) {
+        console.log('[AUTH_READY]');
+        setAuthReady(true);
       }
     })();
+
     return () => {
-      alive = false;
+      cancelled = true;
+      unsubscribe?.();
     };
   }, []);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          await AsyncStorage.removeItem(GUEST_KEY);
-        } catch {
-          /* ignore */
-        }
-        setIsGuest(false);
+  const signIn = async (email: string, password: string) => {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+  };
 
-        let role: 'user' | 'admin' = 'user';
-        let name = firebaseUser.displayName || 'Customer';
-        const email = firebaseUser.email;
-
-        try {
-          const profileRef = doc(db, 'users', firebaseUser.uid);
-          const profileSnap = await getDoc(profileRef);
-          if (profileSnap.exists()) {
-            const profileData = profileSnap.data();
-            role = resolveUserRole(email, profileData.role as string | undefined) as 'user' | 'admin';
-            name = (profileData.name as string) || name;
-          } else {
-            role = resolveUserRole(email, null) as 'user' | 'admin';
-          }
-        } catch {
-          role = resolveUserRole(email, null) as 'user' | 'admin';
-        }
-
-        setUser({
-          id: firebaseUser.uid,
-          name: role === 'admin' ? name || 'Admin' : name,
-          email,
-          role,
-        });
-      } else {
-        setUser(null);
-      }
-      setAuthHandled(true);
+  const signUp = async (email: string, password: string, name: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      role: 'user',
+      createdAt: new Date().toISOString(),
     });
-    return () => unsub();
+  };
+
+  const signOut = async () => {
+    await firebaseSignOut(auth);
+  };
+
+  const sendPasswordResetEmailFn = useCallback(async (email: string) => {
+    const customContinue = process.env.EXPO_PUBLIC_PASSWORD_RESET_CONTINUE_URL?.trim();
+    const url =
+      customContinue && /^https:\/\//.test(customContinue)
+        ? customContinue
+        : Linking.createURL('/reset-password');
+    const actionCodeSettings: ActionCodeSettings = {
+      handleCodeInApp: true,
+      url,
+      android: {
+        packageName: 'com.hamotech.stmmobile',
+        installApp: false,
+        minimumVersion: '1',
+      },
+      iOS: {
+        bundleId: 'com.hamotech.stmmobile',
+      },
+    };
+    await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
   }, []);
 
-  const authReady = guestHydrated && authHandled;
-
-  const loginAsGuest = useCallback(async () => {
-    try {
-      await signOut(auth);
-    } catch {
-      /* ignore */
+  const refreshIdTokenClaims = useCallback(async () => {
+    const u = auth.currentUser;
+    if (!u) {
+      setIdTokenClaims(null);
+      return;
     }
-    await AsyncStorage.setItem(GUEST_KEY, 'true');
-    setIsGuest(true);
-    setUser(null);
-  }, []);
-
-  const logout = useCallback(async () => {
-    try {
-      await AsyncStorage.removeItem(GUEST_KEY);
-    } catch {
-      /* ignore */
-    }
-    setIsGuest(false);
-    setUser(null);
-    try {
-      await signOut(auth);
-    } catch {
-      /* ignore */
-    }
+    await u.getIdToken(true);
+    const r = await getIdTokenResult(u);
+    setIdTokenClaims(r.claims as Record<string, unknown>);
   }, []);
 
   const value = useMemo(
     () => ({
       user,
-      isGuest,
+      profile,
+      idTokenClaims,
+      loading,
       authReady,
-      loginAsGuest,
-      logout,
+      authBootstrapError,
+      signIn,
+      signUp,
+      signOut,
+      sendPasswordResetEmail: sendPasswordResetEmailFn,
+      refreshIdTokenClaims,
     }),
-    [user, isGuest, authReady, loginAsGuest, logout]
+    [user, profile, idTokenClaims, loading, authReady, authBootstrapError, sendPasswordResetEmailFn, refreshIdTokenClaims]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;

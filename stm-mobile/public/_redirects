@@ -1,0 +1,2 @@
+# Client-side routes (e.g. /order/:id) after static export; real files still win first.
+/*    /index.html   200

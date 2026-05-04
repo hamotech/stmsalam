@@ -12,6 +12,7 @@ import {
   toLegacyTrackingStatus,
 } from '../orderPipeline.js';
 import { getSupportBotReply } from '../../utils/supportBotReply';
+import { normalizePhone, safeLog } from '../../utils/runtimeSafety';
 
 const IMAGE_PATH_RE = /^(\/|https?:\/\/)/i;
 const toSafeCategoryFolder = (folderName) => String(folderName || '').replace(/\s+/g, '_');
@@ -216,9 +217,24 @@ export const bootstrapAdminClaim = async (uid) => {
 
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
+/** Doc path id must win: stored `id` inside the document must not replace the real Firestore document id (breaks keys + dispatch). */
+export const mapOrderDocSnapshot = (d) => ({ ...d.data(), id: d.id });
+
+/** Line items for kitchen / riders UI (tolerant of qty/quantity, name/title). */
+export const normalizeOrderLineItems = (order) => {
+  const raw = order?.items ?? order?.lineItems ?? [];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((i) => {
+    const qtyRaw = Number(i?.qty ?? i?.quantity ?? 1);
+    const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.min(999, Math.floor(qtyRaw)) : 1;
+    const name = String(i?.name ?? i?.title ?? i?.productName ?? 'Item').trim() || 'Item';
+    return { qty, name };
+  });
+};
+
 export const placeOrder = async (orderPayload) => {
   // Step 6 Debug: Log Firebase Config
-  console.log('[DEBUG] Active Firebase Config:', {
+  safeLog('[DEBUG] Active Firebase Config:', {
     projectId: auth.app.options.projectId,
     authDomain: auth.app.options.authDomain
   });
@@ -243,7 +259,10 @@ export const placeOrder = async (orderPayload) => {
 
     const statusRaw =
       orderPayload.status || orderPayload.order_status || orderPayload.orderStatus || 'PENDING';
-    const status = String(statusRaw).toUpperCase();
+    const status = String(statusRaw)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
 
     const payRaw = orderPayload.paymentStatus ?? orderPayload.payment_status;
     const paymentStatus = typeof payRaw === 'string' ? payRaw : String(payRaw ?? '');
@@ -283,15 +302,25 @@ export const placeOrder = async (orderPayload) => {
       chatEnabled: true,
       unreadAdmin: 0,
       unreadCustomer: 0,
+      ...(typeof cleanExtras.riderId === 'string' ? {} : { riderId: null }),
+      ...(cleanExtras.customerSnapshot
+        ? {}
+        : {
+            customerSnapshot: {
+              name: cleanExtras?.customer?.name || '',
+              phone: normalizePhone(cleanExtras?.customer?.phone || ''),
+              address: cleanExtras?.customer?.address || '',
+            },
+          }),
     };
 
     // DEBUG: Write #1 - Primary Order
-    console.log('[DEBUG] Attempting Write #1: /orders/' + orderId);
-    console.log('[DEBUG] Payload #1:', JSON.stringify(newOrder, null, 2));
+    safeLog('[DEBUG] Attempting Write #1: /orders/' + orderId, null);
+    safeLog('[DEBUG] Payload #1:', JSON.stringify(newOrder, null, 2));
     
     try {
       await setDoc(doc(db, 'orders', orderId), newOrder);
-      console.log('[DEBUG] Write #1 SUCCESS');
+      safeLog('[DEBUG] Write #1 SUCCESS', { orderId });
     } catch (err1) {
       console.error('[DEBUG] Write #1 FAILED:', {
         code: err1.code,
@@ -315,7 +344,7 @@ export const fetchOrders = async () => {
   try {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return snap.docs.map(mapOrderDocSnapshot);
   } catch (err) {
     console.error('Failed to fetch orders:', err);
     throw err;
@@ -325,7 +354,7 @@ export const fetchOrders = async () => {
 export const subscribeOrders = (callback) => {
   const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
   const unsub = onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    callback(snap.docs.map(mapOrderDocSnapshot));
   }, (err) => {
     console.error('Orders Subscription Error:', err);
   });
@@ -345,15 +374,66 @@ export const fetchOrderById = async (id) => {
 };
 
 export const updateOrderStatus = async (orderId, newStatus, extraOrderFields = {}) => {
-  const normalizedStatus = (newStatus || 'PENDING').toUpperCase();
-  try {
-    await updateDoc(doc(db, "orders", orderId), {
-      ...extraOrderFields,
-      status: normalizedStatus
-    });
-  } catch (error) {
-    console.error("Status update failed:", error);
-    throw error;
+  const normalizeFlowStatus = (value) => {
+    const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (raw === 'placed') return 'pending';
+    if (raw === 'out_for_delivery' || raw === 'delivering') return 'assigned';
+    if (raw === 'completed' || raw === 'complete') return 'delivered';
+    return raw || 'pending';
+  };
+  const STATUS_FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered'];
+  const TS_FIELD_MAP = {
+    pending: 'createdAt',
+    confirmed: 'confirmedAt',
+    preparing: 'preparingAt',
+    ready: 'readyAt',
+    assigned: 'assignedAt',
+    picked_up: 'pickedUpAt',
+    delivered: 'deliveredAt',
+  };
+
+  const next = normalizeFlowStatus(newStatus);
+  if (!STATUS_FLOW.includes(next)) {
+    throw new Error(`Invalid status: ${newStatus}`);
+  }
+
+  const ref = doc(db, 'orders', orderId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Order not found');
+  const data = snap.data() || {};
+  const current = normalizeFlowStatus(data.status || data.orderStatus || data.stage);
+  const currentIdx = STATUS_FLOW.indexOf(current);
+  const nextIdx = STATUS_FLOW.indexOf(next);
+
+  if (currentIdx >= 0 && nextIdx !== currentIdx + 1 && !(current === 'pending' && next === 'pending')) {
+    throw new Error(`Invalid transition: ${current} -> ${next}`);
+  }
+
+  const riderId =
+    typeof extraOrderFields.riderId === 'string'
+      ? extraOrderFields.riderId.trim()
+      : (typeof data.riderId === 'string' ? data.riderId : null);
+  if (next === 'assigned' && !riderId) {
+    throw new Error('Assign Rider requires riderId.');
+  }
+
+  const payload = {
+    status: next,
+    riderId: riderId || null,
+    updatedAt: serverTimestamp(),
+    [`timestamps.${TS_FIELD_MAP[next]}`]: serverTimestamp(),
+  };
+  if (!data?.timestamps?.createdAt) {
+    payload['timestamps.createdAt'] = serverTimestamp();
+  }
+
+  if (import.meta.env.DEV) {
+    safeLog(`Updating order status: ${next}`, { orderId });
+  }
+  await updateDoc(ref, payload);
+
+  if (import.meta.env.DEV) {
+    console.debug('[AdminStatusUpdate]', { orderId, from: current, to: next, riderId: payload.riderId });
   }
 };
 

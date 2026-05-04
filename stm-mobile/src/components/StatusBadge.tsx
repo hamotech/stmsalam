@@ -20,6 +20,7 @@ const LABEL_MAP: Record<string, string> = {
   OUT_FOR_DELIVERY: 'On the Way',
   DELIVERING:       'On the Way',
   DELIVERED:        'Delivered',
+  CANCELLED:        'Cancelled',
 };
 
 export default function StatusBadge({ status, size = 'md' }: Props) {

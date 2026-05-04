@@ -1,11 +1,12 @@
 import React, { Suspense, lazy } from 'react'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
 import WhatsAppChatButton from './components/WhatsAppChatButton'
+import SupportHubWidget from './components/SupportHubWidget'
 
 const Home = lazy(() => import('./pages/Home'))
 const Menu = lazy(() => import('./pages/Menu'))
@@ -13,19 +14,15 @@ const Cart = lazy(() => import('./pages/Cart'))
 const Gallery = lazy(() => import('./pages/Gallery'))
 const AboutUs = lazy(() => import('./pages/AboutUs'))
 const Checkout = lazy(() => import('./pages/Checkout'))
-const OrderTracking = lazy(() => import('./pages/OrderTracking'))
 const Login = lazy(() => import('./pages/Login'))
 const Profile = lazy(() => import('./pages/Profile'))
 const OrderSuccess = lazy(() => import('./pages/OrderSuccess'))
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'))
+const PaymentCancel = lazy(() => import('./pages/PaymentCancel'))
+const OrderTracking = lazy(() => import('./pages/OrderTracking'))
 const Admin = lazy(() => import('./pages/Admin'))
 const DriverPanel = lazy(() => import('./pages/DriverPanel'))
 const DataSeedPage = lazy(() => import('./pages/DataSeedPage'))
-
-// Sandbox Pages
-const CheckoutSandbox = lazy(() => import('./sandbox/CheckoutSandbox'))
-const PaymentLoadingSandbox = lazy(() => import('./sandbox/PaymentLoadingSandbox'))
-const SuccessSandbox = lazy(() => import('./sandbox/SuccessSandbox'))
-const CancelSandbox = lazy(() => import('./sandbox/CancelSandbox'))
 
 function PageWrapper({ children }) {
   return (
@@ -42,11 +39,17 @@ function PageWrapper({ children }) {
 
 function Shell() {
   const location = useLocation()
-  const hide = ['/admin', '/driver', '/login', '/order-success', '/sandbox'].some(p => location.pathname.startsWith(p))
-  
+  const path = location.pathname
+  // Navbar + footer: hidden on admin/rider and on “focused” flows (login, pay, etc.)
+  const hideNavFooter =
+    ['/admin', '/driver', '/rider', '/login', '/order-success', '/success', '/cancel', '/sandbox', '/pay'].some((p) => path.startsWith(p)) ||
+    path.startsWith('/seed')
+  // STM Help + WhatsApp: show on every customer-facing page (including login, checkout, pay)
+  const hideFloatingHelp = path.startsWith('/admin') || path.startsWith('/driver') || path.startsWith('/rider')
+
   return (
     <>
-      {!hide && <Navbar />}
+      {!hideNavFooter && <Navbar />}
       <AnimatePresence mode="popLayout">
         <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><div style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTopColor: 'var(--green-dark)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /></div>}>
           <Routes location={location} key={location.pathname}>
@@ -56,25 +59,25 @@ function Shell() {
             <Route path="/about"    element={<PageWrapper><AboutUs /></PageWrapper>} />
             <Route path="/cart"     element={<PageWrapper><Cart /></PageWrapper>} />
             <Route path="/checkout" element={<PageWrapper><Checkout /></PageWrapper>} />
-            <Route path="/tracking/:orderId" element={<PageWrapper><OrderTracking /></PageWrapper>} />
-            <Route path="/tracking" element={<PageWrapper><OrderTracking /></PageWrapper>} />
             <Route path="/login"    element={<PageWrapper><Login /></PageWrapper>} />
             <Route path="/profile"  element={<PageWrapper><Profile /></PageWrapper>} />
             <Route path="/order-success" element={<PageWrapper><OrderSuccess /></PageWrapper>} />
+            <Route path="/success" element={<PageWrapper><PaymentSuccess /></PageWrapper>} />
+            <Route path="/cancel" element={<PageWrapper><PaymentCancel /></PageWrapper>} />
+            <Route path="/tracking/:orderId" element={<PageWrapper><OrderTracking /></PageWrapper>} />
+            <Route path="/order-tracking/:orderId" element={<PageWrapper><OrderTracking /></PageWrapper>} />
             <Route path="/admin/*"    element={<PageWrapper><Admin /></PageWrapper>} />
             <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
+            <Route path="/rider" element={<Navigate to="/driver" replace />} />
             <Route path="/seed"     element={<PageWrapper><DataSeedPage /></PageWrapper>} />
-
-            {/* Sandbox Flow */}
-            <Route path="/sandbox/checkout" element={<PageWrapper><CheckoutSandbox /></PageWrapper>} />
-            <Route path="/sandbox/payment-loading" element={<PageWrapper><PaymentLoadingSandbox /></PageWrapper>} />
-            <Route path="/sandbox/success" element={<PageWrapper><SuccessSandbox /></PageWrapper>} />
-            <Route path="/sandbox/cancel" element={<PageWrapper><CancelSandbox /></PageWrapper>} />
           </Routes>
         </Suspense>
       </AnimatePresence>
-      {!hide && <Footer />}
-      {!hide && <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />}
+      {!hideNavFooter && <Footer />}
+      {!hideFloatingHelp && <SupportHubWidget />}
+      {!hideFloatingHelp && (
+        <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />
+      )}
     </>
   )
 }

@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
+import SmartImage from '../components/common/SmartImage'
 
 export default function Cart() {
   const { cartItems, updateQty, removeFromCart, subtotal, totalItems, clearCart } = useCart()
@@ -19,8 +20,10 @@ export default function Cart() {
   useEffect(() => {
     const lastOrderId = localStorage.getItem('stm_last_order_id');
     if (lastOrderId && cartItems.length === 0) {
-      console.log('Redirecting to existing order tracking from Cart:', lastOrderId);
+      console.log('Navigating to tracking:', lastOrderId);
       navigate(`/tracking/${lastOrderId}`, { replace: true });
+    } else if (!lastOrderId && cartItems.length === 0) {
+      console.error('Track navigation blocked: missing orderId in Cart.');
     }
   }, [cartItems.length, navigate]);
 
@@ -35,7 +38,7 @@ export default function Cart() {
     }
   }
 
-  const deliveryFee = 0 // Override: delivery fee removed
+  const deliveryFee = 0 // Final delivery charge is calculated at checkout (distance + minimum rules)
   const discount = activePromo ? (activePromo.code === 'SALAM10' ? subtotal * 0.10 : 0) : 0
   const taxRate = 0 // Override: GST removed
   const taxableAmount = subtotal - discount
@@ -43,7 +46,6 @@ export default function Cart() {
   const total = taxableAmount + tax + deliveryFee
 
   const handleProceed = () => {
-    // Override: minimum order bypass — allow any amount
     if (user) navigate('/checkout')
     else setShowGuestModal(true)
   }
@@ -106,7 +108,7 @@ export default function Cart() {
           {cartItems.map(item => (
             <div key={item.id} style={{ background: 'white', borderRadius: '24px', padding: '24px', display: 'flex', gap: '24px', alignItems: 'center', border: '1px solid var(--border)', boxShadow: 'var(--shadow-xs)' }}>
               <div style={{ width: '100px', height: '100px', borderRadius: '18px', overflow: 'hidden', flexShrink: 0 }}>
-                <img loading="lazy" src={item.img} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <SmartImage src={item.img || item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
@@ -141,6 +143,13 @@ export default function Cart() {
             </div>
             
             <div style={{ padding: '32px' }}>
+              <div style={{ marginBottom: '20px', padding: '14px 16px', background: 'var(--cream)', borderRadius: '14px', border: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 900, fontSize: '13px', color: 'var(--green-dark)', marginBottom: '6px' }}>{shopInfo.outletName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-light)', lineHeight: 1.5, fontWeight: 600 }}>{shopInfo.outletAddress}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-light)', marginTop: '10px', lineHeight: 1.45, fontWeight: 700 }}>
+                  Delivery: min SGD {(shopInfo.minOrderDelivery ?? 10).toFixed(0)} · free within {shopInfo.freeDeliveryRadiusKm} km · otherwise +SGD {shopInfo.deliveryFee.toFixed(2)} (set at checkout).
+                </div>
+              </div>
               <div style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
@@ -148,8 +157,8 @@ export default function Cart() {
                     <span style={{ fontWeight: 800 }}>${subtotal.toFixed(2)}</span>
                   </div>
                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
-                    <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Delivery Fee</span>
-                    <span style={{ fontWeight: 800, color: 'var(--success)' }}>FREE</span>
+                    <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Delivery</span>
+                    <span style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '14px' }}>At checkout</span>
                   </div>
                 </div>
               </div>

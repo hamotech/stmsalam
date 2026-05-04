@@ -1,12 +1,14 @@
 /**
  * src/services/menuService.ts
  *
- * Menu catalog = Firestore `products` + `categories` (same as web admin).
- * There is no separate `menu_items` collection in this project.
+ * Real-time subscription to the shared `products` and `categories` collections.
+ * Read-only from the mobile app — writing is exclusively admin-side.
  */
 
 import {
   collection,
+  doc,
+  getDoc,
   onSnapshot,
   query,
   where,
@@ -34,7 +36,19 @@ export interface Product {
   badge?: string;
   categoryId: string;
   category?: string;
+  /** Optional: `drink` | `food` — used by smart options engine when set in Firestore. */
+  type?: string;
+  /**
+   * Per-product option lists — replaces or extends schema fields for this SKU only.
+   * Same shape as schema `options` values: string[] or `{ choices, optionType, required? }`.
+   */
+  customizationOverride?: Record<
+    string,
+    | string[]
+    | { choices: string[]; optionType?: 'single' | 'multi'; required?: boolean }
+  >;
   active?: boolean;
+  /** Optional catalog copy for product detail. */
   description?: string;
 }
 
@@ -52,7 +66,6 @@ export const subscribeCategories = (
   );
 };
 
-/** Filters by `categoryId` — same field as web Menu (`frontend/src/pages/Menu.jsx`). */
 export const subscribeProducts = (
   onData: (products: Product[]) => void,
   onError?: (err: Error) => void,
@@ -73,3 +86,12 @@ export const subscribeProducts = (
     (err) => { console.error('[menuService] products error:', err); onError?.(err); }
   );
 };
+
+export async function fetchProductById(id: string): Promise<Product | null> {
+  if (!id?.trim()) return null;
+  const snap = await getDoc(doc(db, 'products', id.trim()));
+  if (!snap.exists()) return null;
+  const p = { id: snap.id, ...snap.data() } as Product;
+  if (p.active === false) return null;
+  return p;
+}

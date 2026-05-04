@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
   subscribeOrders,
-  updateOrderStatus,
+  advanceOrderPipeline,
   deleteOrder,
-  markOrderAsSeen
+  markOrderAsSeen,
+  normalizeOrderLineItems,
 } from '../services/dataService';
+import {
+  normalizeGrabOrderStatus,
+  nextPipelineStep,
+  orderMatchesPaymentFilter,
+  paymentAllowsConfirm,
+} from '../orderPipeline.js';
 import { db } from '../../lib/firebase';
 import { updateDoc, doc } from 'firebase/firestore';
 import { 
   Trash2, CheckCircle, XCircle, Clock, Truck, 
   Package, MessageSquare, ExternalLink, CreditCard,
-  ChefHat, Bike, CheckCircle2, MoreVertical, RefreshCcw, MessageCircle, Phone, Bell, X, Send
+  ChefHat, Bike, CheckCircle2, MoreVertical, RefreshCcw, MessageCircle, Phone, Bell, X, Send, Printer
 } from 'lucide-react';
+import { printCustomerBill } from '../../utils/customerBillPrint';
 import { useAuth } from '../../context/AuthContext';
 import ChatWindow from '../../components/ChatWindow';
 
@@ -20,7 +28,8 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [deleteModal, setDeleteModal] = useState({ show: false, id: null });
-  const [filter, setFilter] = useState('all');
+  const [lifecycleFilter, setLifecycleFilter] = useState('active');
+  const [payFilter, setPayFilter] = useState('all');
   const [activeChatOrderId, setActiveChatOrderId] = useState(null);
 
   const showToast = (message, type = 'success') => {
@@ -33,17 +42,13 @@ const Orders = () => {
     return () => { if (unsub) unsub(); }
   }, []);
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleAdvance = async (order, nextStatus) => {
     try {
-      const chatEnabled = newStatus !== 'pending';
-      await updateOrderStatus(id, newStatus, {
-        order_status: newStatus.toLowerCase(),
-        updatedAt: new Date().toISOString(),
-        chatEnabled
-      });
-      showToast(`Order status updated to ${newStatus}`);
+      await advanceOrderPipeline(order.id, order, nextStatus);
+      if (order.isNewForAdmin) markOrderAsSeen(order.id);
+      showToast(`Order → ${String(nextStatus).replace(/_/g, ' ')}`);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Update failed', 'error');
     }
   };
 
@@ -56,7 +61,10 @@ const Orders = () => {
     try {
       const newPaymentStatus = order.payment_status === 'paid' ? 'pending' : 'paid';
       const orderRef = doc(db, 'orders', order.id);
-      await updateDoc(orderRef, { payment_status: newPaymentStatus });
+      await updateDoc(orderRef, {
+        payment_status: newPaymentStatus,
+        paymentStatus: newPaymentStatus === 'paid' ? 'PAID' : 'PENDING',
+      });
       if (order.isNewForAdmin) markOrderAsSeen(order.id);
       showToast(`Payment marked as ${newPaymentStatus}`);
     } catch (err) {
@@ -76,21 +84,26 @@ const Orders = () => {
     }
   };
 
-  const filteredOrders = orders.filter(o => {
-    if (filter === 'all') return true;
-    const isCompleted = (o.status || '').toLowerCase() === 'delivered';
-    return filter === 'delivered' ? isCompleted : !isCompleted;
+  const filteredOrders = orders.filter((o) => {
+    if (!orderMatchesPaymentFilter(o, payFilter)) return false;
+    if (lifecycleFilter === 'all') return true;
+    const st = normalizeGrabOrderStatus(o);
+    const done = st === 'DELIVERED' || st === 'CANCELLED';
+    if (lifecycleFilter === 'delivered') return st === 'DELIVERED';
+    if (lifecycleFilter === 'active') return !done;
+    return true;
   });
 
-  const getStatusStyle = (status) => {
-    const s = (status || 'pending').toLowerCase();
-    switch(s) {
-      case 'confirmed': return { bg: '#f0fdf4', text: '#166534', icon: <CheckCircle2 size={14} /> };
-      case 'preparing': return { bg: '#f0fdf4', text: '#166534', icon: <ChefHat size={14} /> };
-      case 'ready':     return { bg: '#f0f9ff', text: '#075985', icon: <Package size={14} /> };
-      case 'delivering':return { bg: '#fef2f2', text: '#991b1b', icon: <Truck size={14} /> };
-      case 'delivered': return { bg: '#f0fdf4', text: '#15803d', icon: <CheckCircle2 size={14} /> };
-      default:          return { bg: '#fff7ed', text: '#9a3412', icon: <Clock size={14} /> };
+  const getStatusStyle = (order) => {
+    const st = normalizeGrabOrderStatus(order);
+    switch (st) {
+      case 'CONFIRMED': return { bg: '#f0fdf4', text: '#166534', icon: <CheckCircle2 size={14} /> };
+      case 'PREPARING': return { bg: '#f0fdf4', text: '#166534', icon: <ChefHat size={14} /> };
+      case 'READY': return { bg: '#f0f9ff', text: '#075985', icon: <Package size={14} /> };
+      case 'OUT_FOR_DELIVERY': return { bg: '#fef2f2', text: '#991b1b', icon: <Truck size={14} /> };
+      case 'DELIVERED': return { bg: '#f0fdf4', text: '#15803d', icon: <CheckCircle2 size={14} /> };
+      case 'CANCELLED': return { bg: '#fee2e2', text: '#991b1b', icon: <XCircle size={14} /> };
+      default: return { bg: '#fff7ed', text: '#9a3412', icon: <Clock size={14} /> };
     }
   };
 
@@ -137,8 +150,8 @@ const Orders = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div>
-            <h2 style={{ fontSize: '32px', fontWeight: '950', color: '#0f172a', letterSpacing: '-1px' }}>Kitchen Orders</h2>
-            <p style={{ color: '#64748b', fontWeight: 600 }}>Manage live cooking and delivery stages.</p>
+            <h2 style={{ fontSize: '32px', fontWeight: '950', color: '#0f172a', letterSpacing: '-1px' }}>Operations · Orders</h2>
+            <p style={{ color: '#64748b', fontWeight: 600 }}>Strict pipeline — one stage at a time (Grab-style).</p>
           </div>
           {orders.filter(o => o.isNewForAdmin).length > 0 && (
             <div style={{ background: '#ef4444', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px', animation: 'bounce 1s infinite' }}>
@@ -146,10 +159,26 @@ const Orders = () => {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
-          {['all', 'active', 'delivered'].map(t => (
-            <button key={t} onClick={() => setFilter(t)} style={{ padding: '8px 20px', borderRadius: '10px', border: 'none', background: filter === t ? 'white' : 'transparent', color: filter === t ? '#0f172a' : '#64748b', fontWeight: '800', cursor: 'pointer', fontSize: '14px', textTransform: 'capitalize' }}>{t}</button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+          <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {[
+              ['all', 'All'],
+              ['active', 'Active'],
+              ['delivered', 'Delivered'],
+            ].map(([t, label]) => (
+              <button key={t} type="button" onClick={() => setLifecycleFilter(t)} style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: lifecycleFilter === t ? 'white' : 'transparent', color: lifecycleFilter === t ? '#0f172a' : '#64748b', fontWeight: '800', cursor: 'pointer', fontSize: '13px' }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', background: '#ecfeff', padding: '4px', borderRadius: '12px', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '2px' }}>
+            {[
+              ['all', 'All pay'],
+              ['cod', 'COD'],
+              ['stripe_paid', 'Stripe / paid'],
+              ['qr_pending', 'QR pending'],
+            ].map(([t, label]) => (
+              <button key={t} type="button" onClick={() => setPayFilter(t)} style={{ padding: '8px 12px', borderRadius: '10px', border: 'none', background: payFilter === t ? 'white' : 'transparent', color: payFilter === t ? '#0e7490' : '#64748b', fontWeight: '800', cursor: 'pointer', fontSize: '12px' }}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -167,8 +196,11 @@ const Orders = () => {
           </thead>
           <tbody>
             {filteredOrders.map((order, idx) => {
-              const statusStyle = getStatusStyle(order.status || order.stage || 'pending');
-              const items = Array.isArray(order.items) ? order.items : [];
+              const pipelineSt = normalizeGrabOrderStatus(order);
+              const nextSt = nextPipelineStep(pipelineSt);
+              const confirmGate = pipelineSt === 'PLACED' ? paymentAllowsConfirm(order) : { ok: true };
+              const statusStyle = getStatusStyle(order);
+              const items = normalizeOrderLineItems(order);
               const isNew = order.isNewForAdmin;
               
               return (
@@ -230,24 +262,58 @@ const Orders = () => {
                        )}
                     </div>
                   </td>
-                  <td style={{ padding: '20px' }}>
-                    <select
-                      value={(order.status || order.stage || 'pending').toLowerCase()}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ 
-                        padding: '10px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', 
-                        background: statusStyle.bg, color: statusStyle.text, fontWeight: '950', fontSize: '13px',
-                        outline: 'none', cursor: 'pointer', appearance: 'none', width: '135px', textAlign: 'center'
-                      }}
-                    >
-                      <option value="pending">⏳ Pending</option>
-                      <option value="confirmed">✅ Confirmed</option>
-                      <option value="preparing">👨‍🍳 Preparing</option>
-                      <option value="ready">🎁 Ready</option>
-                      <option value="delivering">🚴 Delivering</option>
-                      <option value="delivered">✅ Delivered</option>
-                    </select>
+                  <td style={{ padding: '20px', minWidth: '200px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '950', fontSize: '13px', color: statusStyle.text }}>
+                        {statusStyle.icon}
+                        {pipelineSt.replace(/_/g, ' ')}
+                      </div>
+                      {pipelineSt === 'PLACED' ? (
+                        <>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'CONFIRMED'); }}
+                              disabled={!confirmGate.ok}
+                              style={{
+                                padding: '8px 14px', borderRadius: '10px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: confirmGate.ok ? 'pointer' : 'not-allowed',
+                                background: confirmGate.ok ? '#0A8754' : '#cbd5e1', color: 'white',
+                              }}
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'CANCELLED'); }}
+                              style={{
+                                padding: '8px 14px', borderRadius: '10px', border: '1.5px solid #fecaca', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
+                                background: '#fef2f2', color: '#b91c1c',
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                          {!confirmGate.ok ? (
+                            <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '700', maxWidth: '220px' }}>{confirmGate.reason}</span>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {pipelineSt !== 'PLACED' && pipelineSt !== 'DELIVERED' && pipelineSt !== 'CANCELLED' && nextSt ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleAdvance(order, nextSt); }}
+                          style={{
+                            padding: '8px 14px', borderRadius: '10px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
+                            background: 'var(--green-dark, #013220)', color: 'white',
+                          }}
+                        >
+                          Next: {nextSt.replace(/_/g, ' ')}
+                        </button>
+                      ) : null}
+                      {(pipelineSt === 'DELIVERED' || pipelineSt === 'CANCELLED') ? (
+                        <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '700' }}>Terminal</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td style={{ padding: '20px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -266,12 +332,20 @@ const Orders = () => {
                           )}
                        </button>
                        <button 
-                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${order.status}!`, '_blank'); }}
+                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
                          style={{ background: '#25D366', border: 'none', padding: '10px', borderRadius: '10px', color: 'white', cursor: 'pointer' }}
                        >
                           <MessageSquare size={18} />
                        </button>
-                       {isAuthenticated && (
+                       <button
+                         type="button"
+                         title="Print customer bill"
+                         onClick={(e) => { e.stopPropagation(); printCustomerBill(order); }}
+                         style={{ background: '#f1f5f9', border: '1.5px solid #e2e8f0', padding: '10px', borderRadius: '10px', color: '#0f172a', cursor: 'pointer' }}
+                       >
+                          <Printer size={18} />
+                       </button>
+                       {(isAuthenticated && user?.role === 'admin') && (
                          <button
                            onClick={(e) => { e.stopPropagation(); setDeleteModal({ show: true, id: order.id }); }}
                            style={{ background: '#fef2f2', border: 'none', padding: '10px', borderRadius: '10px', color: '#ef4444', cursor: 'pointer' }}

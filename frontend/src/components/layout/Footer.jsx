@@ -1,9 +1,15 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Clock, Facebook, Instagram } from 'lucide-react'
+import { MapPin, Phone, Clock, Facebook, Instagram, MessageCircle } from 'lucide-react'
+import { OPEN_SUPPORT_EVENT } from '../../config/supportEvents'
 import { shopInfo, outlets } from '../../data/menuData'
+import SmartImage from '../common/SmartImage'
 
 export default function Footer() {
+  const openChatWithAdmin = () => {
+    window.dispatchEvent(new CustomEvent(OPEN_SUPPORT_EVENT, { detail: { tab: 'team' } }))
+  }
+
   return (
     <footer style={{ background: 'var(--green-dark)', color: 'white', paddingTop: '72px', width: '100%', overflow: 'hidden' }}>
       <div className="container">
@@ -12,7 +18,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="footer-brand">
             <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <img loading="lazy" src="/stmsalamlogo.png" alt="Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
+              <SmartImage src="/stmsalamlogo.png" alt="Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: '26px', fontWeight: 950, color: 'var(--gold)', letterSpacing: '-0.5px', lineHeight: 1 }}>Salam</div>
                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', marginTop: '4px' }}>Genuine Taste Since 1988</div>
@@ -69,8 +75,22 @@ export default function Footer() {
           <div>
             <h4 style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: '24px' }}>Support</h4>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '14px', padding: 0 }}>
+              <li>
+                <button
+                  type="button"
+                  onClick={openChatWithAdmin}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    background: 'var(--gold)', color: 'var(--green-dark)',
+                    border: 'none', borderRadius: 12, padding: '10px 16px',
+                    fontSize: '14px', fontWeight: 900, cursor: 'pointer', width: '100%', justifyContent: 'center',
+                  }}
+                >
+                  <MessageCircle size={18} /> Chat with Admin
+                </button>
+              </li>
               <li><Link to="/about" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '15px', fontWeight: 500, textDecoration: 'none' }}>About STM</Link></li>
-              {['Latest Promos', 'Delivery Info', 'Halal Status', 'Contact Us'].map(label => (
+              {['Latest Promos', 'Delivery Info', 'Halal Status'].map(label => (
                 <li key={label}><a href="#" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '15px', fontWeight: 500, textDecoration: 'none' }}>{label}</a></li>
               ))}
             </ul>

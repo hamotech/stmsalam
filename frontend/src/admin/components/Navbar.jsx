@@ -1,7 +1,7 @@
 import React from 'react';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const Navbar = () => {
   const { logout } = useAuth();
@@ -27,6 +27,24 @@ const Navbar = () => {
     }}>
       <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: '#333' }}>STM Admin Dashboard</h1>
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <Link
+          to="/admin/support"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'linear-gradient(135deg, #013220 0%, #056a48 100%)',
+            color: 'white',
+            textDecoration: 'none',
+            padding: '10px 18px',
+            borderRadius: '12px',
+            fontWeight: 800,
+            fontSize: '14px',
+            boxShadow: '0 4px 14px rgba(1,50,32,0.25)',
+          }}
+        >
+          <MessageCircle size={18} /> Chat with Customer
+        </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#555' }}>
           <User size={20} />
           <span>Admin Profile</span>

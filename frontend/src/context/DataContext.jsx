@@ -2,6 +2,23 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { subscribeProducts, subscribeCategories, subscribeGallery } from '../admin/services/dataService';
 import { API_URL } from '../config/api';
 import { galleryMedia } from '../data/galleryData';
+import { findImageForProduct, hasBrokenImage } from '../utils/imageMatcher';
+
+// Non-destructive runtime enrichment: if a product arrives without an image,
+// (or with an obvious placeholder) fall back to a real photo from the
+// SMT FOOD library so the UI never shows an empty tile.
+const enrichProductImages = (products = []) => {
+  return products.map((p) => {
+    // Keep both fields aligned because some UI reads `img` first.
+    const primary = p.image || p.img || '';
+    const base = { ...p, image: primary, img: primary };
+
+    if (!hasBrokenImage(base)) return base;
+    const match = findImageForProduct(p);
+    if (!match) return base;
+    return { ...base, image: match, img: match };
+  });
+};
 
 const DataContext = createContext();
 
@@ -24,7 +41,7 @@ export function DataProvider({ children }) {
     };
 
     const unsubProducts = subscribeProducts((data) => {
-      const nextProducts = data.filter((p) => p.active !== false);
+      const nextProducts = enrichProductImages(data.filter((p) => p.active !== false));
       setProducts((prev) => {
         if (nextProducts.length === 0 && prev.length > 0) return prev;
         return nextProducts;
@@ -75,7 +92,8 @@ export function DataProvider({ children }) {
         if (menuRes.ok) {
           const menuData = await menuRes.json();
           if (Array.isArray(menuData) && menuData.length > 0) {
-            setProducts((prev) => (prev.length > 0 ? prev : menuData.filter((p) => p.active !== false)));
+            const enriched = enrichProductImages(menuData.filter((p) => p.active !== false));
+            setProducts((prev) => (prev.length > 0 ? prev : enriched));
           }
         }
 

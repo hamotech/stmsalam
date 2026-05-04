@@ -7,6 +7,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import CheckoutPaymentButtons from './CheckoutPaymentButtons';
+import SupportFloatingButtons from '@/src/components/SupportFloatingButtons';
 
 const GREEN = '#013220';
 
@@ -41,34 +42,36 @@ export default function CheckoutScreen() {
   const enabled = Boolean(orderId.trim()) && Number.isFinite(amount) && amount > 0;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Checkout</Text>
-      <Text style={styles.sub}>
-        {isWeb
-          ? 'Review your order, enter your phone number, and pay with Stripe.'
-          : 'Review your order, then choose a payment method.'}
-      </Text>
-
-      <View style={styles.card}>
-        <Row label="Order ID" value={orderId || '—'} />
-        <Row label="Customer" value={customerName || '—'} />
-        <Row label="Amount (SGD)" value={Number.isFinite(amount) ? amount.toFixed(2) : '—'} />
-      </View>
-
-      {!enabled && (
-        <Text style={styles.warn}>
-          Pass `orderId` and `amount` as query params to enable payment (e.g. from your order
-          flow).
+    <View style={styles.wrap}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Checkout</Text>
+        <Text style={styles.sub}>
+          {isWeb
+            ? 'Review your order, enter your phone number, and pay with Stripe.'
+            : 'Review your order, then choose a payment method.'}
         </Text>
-      )}
 
-      <CheckoutPaymentButtons
-        orderId={orderId}
-        amount={amount}
-        customerName={customerName || 'Customer'}
-        enabled={enabled}
-      />
-    </ScrollView>
+        <View style={styles.card}>
+          <Row label="Order ID" value={orderId || '—'} />
+          <Row label="Customer" value={customerName || '—'} />
+          <Row label="Amount (SGD)" value={Number.isFinite(amount) ? amount.toFixed(2) : '—'} />
+        </View>
+
+        {!enabled ? (
+          <Text style={styles.warn}>
+            Pass orderId and amount as query params to enable payment (e.g. from your order flow).
+          </Text>
+        ) : null}
+
+        <CheckoutPaymentButtons
+          orderId={orderId}
+          amount={amount}
+          customerName={customerName || 'Customer'}
+          enabled={enabled}
+        />
+      </ScrollView>
+      <SupportFloatingButtons />
+    </View>
   );
 }
 
@@ -82,6 +85,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: '#F8FAFC' },
   screen: { flex: 1, backgroundColor: '#F8FAFC' },
   content: { padding: 22, paddingTop: 56, paddingBottom: 48 },
   title: { fontSize: 28, fontWeight: '900', color: GREEN },

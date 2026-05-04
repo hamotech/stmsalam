@@ -1,26 +1,13 @@
-# src_v2 Architecture (Clean Architecture + MVVM)
+# STM `src_v2` (alternate app branch)
 
-This folder is a safe, isolated architecture sample for Expo React Native.
+## Boundaries
 
-## Layers
+- **Must not** import from **`stm-mobile/app/`** (Expo Router tree).
+- Prefer keeping all UI, navigation, and data access under **`src_v2/`**.
+- Imports from **`stm-mobile/src/**`** are **discouraged**; existing exceptions should be removed in favor of shared packages or local duplicates.
 
-- `screens/`, `components/`, `hooks/`: Presentation + MVVM (UI + ViewModel state)
-- `domain/`: Enterprise business logic (entities, repository contracts, use cases)
-- `data/`: Infrastructure details (Firebase/API services, repository implementations)
-- `core/`: Shared constants/config/helpers
-- `navigation/`: React Navigation setup and route wiring
-- `features/`: Feature facades for modular growth (e.g., orders feature)
+## Entry
 
-## Naming convention
+Loaded only when **`EXPO_PUBLIC_USE_NEW_APP=true`** in `stm-mobile` (see `stm-mobile/docs/DUAL_APP_ARCHITECTURE.md`).
 
-- Files use `camelCase` for hooks/use cases (e.g., `useOrderViewModel.ts`, `placeOrder.ts`)
-- Components and screens use `PascalCase` (e.g., `OrderScreen.tsx`, `PrimaryButton.tsx`)
-- Interfaces start with `I` in domain contracts (e.g., `IOrderRepository`)
-
-## End-to-end flow
-
-`OrderScreen` (View) -> `useOrderViewModel` (ViewModel) -> `PlaceOrderUseCase` (Domain) -> `OrderRepository` (Data) -> `OrderFirebaseService` + `OrderApiService`.
-
-## DI setup
-
-App dependencies are created in `core/di/container.ts` and injected through `AppContainerProvider`.
+The Metro `require` path from the mobile app is a **string literal**: `../../../src_v2/AppV2`.

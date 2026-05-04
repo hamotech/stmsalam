@@ -14,7 +14,10 @@ import {
   TouchableOpacity, ActivityIndicator,
   Platform, StatusBar,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { navPush } from '@/src/navigation/appNavigation';
+import { useAppRole } from '@/src/auth/useAppRole';
+import { useAuth } from '@/src/context/AuthContext';
 import {
   subscribeOrderTracking,
   PublicOrder,
@@ -24,9 +27,14 @@ import {
 } from '../services/orderService';
 import TrackingTimeline from '../components/TrackingTimeline';
 import StatusBadge from '../components/StatusBadge';
+import OrderLiveChat from '../components/OrderLiveChat';
+import SupportFloatingButtons from '../components/SupportFloatingButtons';
+import { openWhatsApp } from '@/src/config/whatsapp';
 
 export default function TrackingScreen() {
   const router = useRouter();
+  const { user, profile } = useAuth();
+  const navRole = useAppRole();
   const { orderId: rawId } = useLocalSearchParams<{ orderId: string }>();
 
   // Decode URL & strip trailing comma (matches web app behaviour)
@@ -51,22 +59,28 @@ export default function TrackingScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={GREEN} />
-        <Text style={styles.loadingText}>Fetching live status…</Text>
+      <View style={styles.fill}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={GREEN} />
+          <Text style={styles.loadingText}>Fetching live status…</Text>
+        </View>
+        <SupportFloatingButtons />
       </View>
     );
   }
 
   if (error || !order) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorEmoji}>🔍</Text>
-        <Text style={styles.errorTitle}>Order Not Found</Text>
-        <Text style={styles.errorSub}>ID: {orderId || '—'}</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Go Back</Text>
-        </TouchableOpacity>
+      <View style={styles.fill}>
+        <View style={styles.center}>
+          <Text style={styles.errorEmoji}>🔍</Text>
+          <Text style={styles.errorTitle}>Order Not Found</Text>
+          <Text style={styles.errorSub}>ID: {orderId || '—'}</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+        <SupportFloatingButtons />
       </View>
     );
   }
@@ -74,13 +88,11 @@ export default function TrackingScreen() {
   const activeStep  = getActiveStep(order.status);
   const currentStep = STATUS_STEPS[activeStep];
   const accent      = statusColor(order.status);
-  const lineItems    = order.items ?? [];
-  const shortId     = String(order.id || '').slice(-8).toUpperCase() || '—';
-  const totalNum    = Number(order.total ?? 0);
-  const canPayNow =
-    !order.paymentProofSubmitted && totalNum > 0 && order.status !== 'DELIVERED';
+  const shortId     = order.id.slice(-8).toUpperCase();
+  const canPayNow = !order.paymentProofSubmitted && order.total > 0 && order.status !== 'DELIVERED';
 
   return (
+    <View style={styles.fill}>
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.content}
@@ -96,7 +108,7 @@ export default function TrackingScreen() {
         </TouchableOpacity>
 
         <Text style={styles.heroTitle}>Order Status</Text>
-        <Text style={styles.heroOrderId}>#{shortId} · {lineItems.length} items</Text>
+        <Text style={styles.heroOrderId}>#{shortId} · {order.items.length} items</Text>
 
         {/* Big status bubble */}
         <View style={[styles.statusBubble, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
@@ -133,21 +145,19 @@ export default function TrackingScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Order Summary</Text>
 
-        {lineItems.map((item, i) => (
+        {order.items.map((item, i) => (
           <View key={i} style={styles.itemRow}>
             <View style={styles.qtyBadge}>
-              <Text style={styles.qtyText}>{item.qty ?? 0}</Text>
+              <Text style={styles.qtyText}>{item.qty}</Text>
             </View>
-            <Text style={styles.itemName} numberOfLines={1}>{item.name ?? '—'}</Text>
-            <Text style={styles.itemPrice}>
-              ${((Number(item.price) || 0) * (Number(item.qty) || 0)).toFixed(2)}
-            </Text>
+            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.itemPrice}>${((item.price ?? 0) * (item.qty ?? 1)).toFixed(2)}</Text>
           </View>
         ))}
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total Paid</Text>
-          <Text style={styles.totalAmount}>${totalNum.toFixed(2)}</Text>
+          <Text style={styles.totalAmount}>${order.total.toFixed(2)}</Text>
         </View>
 
         <View style={styles.modeRow}>
@@ -165,16 +175,36 @@ export default function TrackingScreen() {
         )}
       </View>
 
+      <View style={styles.chatSection}>
+        <OrderLiveChat orderId={order.id} />
+        <TouchableOpacity
+          style={styles.waInline}
+          onPress={() =>
+            openWhatsApp(
+              `Hi STM Salam, about my order ${order.id} (ref #${shortId}).`
+            )
+          }
+          activeOpacity={0.88}
+        >
+          <Text style={styles.waInlineText}>WhatsApp about this order</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* ── CTA ── */}
       {canPayNow && (
         <View style={styles.payNowWrap}>
           <TouchableOpacity
             style={styles.payNowBtn}
             onPress={() =>
-              router.push(
-                `/checkout?orderId=${encodeURIComponent(order.id)}&amount=${encodeURIComponent(
-                  String(totalNum)
-                )}&customerName=${encodeURIComponent('Customer')}` as Href
+              navPush(
+                router,
+                {
+                  kind: 'checkoutResume',
+                  orderId: order.id,
+                  amount: String(order.total),
+                  customerName: 'Customer',
+                },
+                navRole
               )
             }
             activeOpacity={0.85}
@@ -187,20 +217,22 @@ export default function TrackingScreen() {
       <View style={styles.ctaGroup}>
         <TouchableOpacity
           style={styles.ctaSecondary}
-          onPress={() => router.push('/(tabs)/orders')}
+          onPress={() => navPush(router, { kind: 'tabsOrders' }, navRole)}
           activeOpacity={0.8}
         >
           <Text style={styles.ctaSecondaryText}>← All Orders</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.ctaPrimary}
-          onPress={() => router.push('/')}
+          onPress={() => navPush(router, { kind: 'tabs' }, navRole)}
           activeOpacity={0.8}
         >
           <Text style={styles.ctaPrimaryText}>🏠 Home</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
+    <SupportFloatingButtons />
+    </View>
   );
 }
 
@@ -210,8 +242,19 @@ const GREEN = '#013220';
 const PT    = Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 0;
 
 const styles = StyleSheet.create({
+  fill: { flex: 1, backgroundColor: '#F8FAFC' },
   screen:  { flex: 1, backgroundColor: '#F8FAFC' },
   content: { paddingBottom: 48 },
+
+  chatSection: { paddingHorizontal: 16, marginTop: 8 },
+  waInline: {
+    marginTop: 12,
+    backgroundColor: '#25D366',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  waInlineText: { color: '#FFF', fontWeight: '900', fontSize: 14 },
 
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

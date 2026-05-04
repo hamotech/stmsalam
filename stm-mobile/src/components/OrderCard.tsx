@@ -11,6 +11,8 @@ import StatusBadge from './StatusBadge';
 interface Props {
   order: PublicOrder;
   onTrack: (orderId: string) => void;
+  /** Order details + chat (`/order/[id]`). */
+  onViewOrder?: (orderId: string) => void;
 }
 
 const formatDate = (raw: PublicOrder['createdAt']): string => {
@@ -28,7 +30,7 @@ const formatDate = (raw: PublicOrder['createdAt']): string => {
   }
 };
 
-export default function OrderCard({ order, onTrack }: Props) {
+export default function OrderCard({ order, onTrack, onViewOrder }: Props) {
   const shortId = order.id?.slice(-8)?.toUpperCase() ?? '—';
 
   return (
@@ -69,13 +71,24 @@ export default function OrderCard({ order, onTrack }: Props) {
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalAmount}>${order.total.toFixed(2)}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.trackBtn}
-          onPress={() => onTrack(order.id)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.trackBtnText}>Track Order →</Text>
-        </TouchableOpacity>
+        <View style={styles.footerBtns}>
+          {onViewOrder ? (
+            <TouchableOpacity
+              style={styles.detailBtn}
+              onPress={() => onViewOrder(order.id)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.detailBtnText}>Details</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={styles.trackBtn}
+            onPress={() => onTrack(order.id)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.trackBtnText}>Track</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -168,6 +181,16 @@ const styles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
     paddingTop: 14,
   },
+  footerBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailBtn: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  detailBtnText: { color: GREEN, fontWeight: '800', fontSize: 13 },
   totalLabel: {
     fontSize: 11,
     color: '#94A3B8',

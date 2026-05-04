@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ShoppingBag, User, Menu as MenuIcon, X, MapPin, ChevronDown, LogOut, Home as HomeIcon, Search, Receipt, Image, Info } from 'lucide-react'
+import { ShoppingBag, User, Menu as MenuIcon, X, MapPin, ChevronDown, LogOut, Home as HomeIcon, Search, Receipt, Image, Info, MessageCircle } from 'lucide-react'
+import { OPEN_SUPPORT_EVENT } from '../../config/supportEvents'
 import { shopInfo } from '../../data/menuData'
 import { useAuth } from '../../context/AuthContext'
 import { useCart } from '../../context/CartContext'
+import SmartImage from '../common/SmartImage'
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
@@ -57,6 +59,10 @@ export default function Navbar() {
     navigate('/login')
   }
 
+  const openChatWithAdmin = () => {
+    window.dispatchEvent(new CustomEvent(OPEN_SUPPORT_EVENT, { detail: { tab: 'team' } }))
+  }
+
   return (
     <>
       <AnnouncementBanner />
@@ -77,7 +83,7 @@ export default function Navbar() {
             display: 'flex', alignItems: 'center', gap: '12px', 
             textDecoration: 'none', transition: 'transform 0.2s'
           }}>
-            <img loading="lazy" src="/stmsalamlogo.png" alt="Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+            <SmartImage src="/stmsalamlogo.png" alt="Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
           </Link>
 
           {/* DESKTOP NAV (Hidden < 968px) */}
@@ -135,6 +141,20 @@ export default function Navbar() {
                   <User size={18} /> {isGuest ? 'Guest' : 'Sign In'}
                 </Link>
               )}
+
+              <button
+                type="button"
+                onClick={openChatWithAdmin}
+                title="Chat with Admin"
+                style={{
+                  padding: '8px 14px', borderRadius: '14px',
+                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+                  color: 'white', display: 'flex', alignItems: 'center', gap: '8px',
+                  fontSize: '13px', fontWeight: 800, cursor: 'pointer',
+                }}
+              >
+                <MessageCircle size={18} /> <span className="nav-chat-label">Chat with Admin</span>
+              </button>
               
               <Link to="/cart" style={{ 
                 background: 'var(--gold)', color: 'var(--green-dark)', 
@@ -162,6 +182,7 @@ export default function Navbar() {
             .desktop-nav { display: none !important; }
             .mobile-toggle { display: flex !important; }
             .container { padding: 0 16px !important; }
+            .nav-chat-label { display: none; }
           }
         `}</style>
       </nav>
@@ -181,6 +202,17 @@ export default function Navbar() {
               {l.label}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={() => { openChatWithAdmin(); setMenuOpen(false) }}
+            style={{
+              fontSize: '28px', fontWeight: 950, color: 'var(--gold)',
+              background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 12, padding: 0,
+            }}
+          >
+            <MessageCircle size={32} /> Chat with Admin
+          </button>
           <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '40px' }}>
             <div style={{ display: 'flex', gap: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>
               <span>Marine Terrace</span>

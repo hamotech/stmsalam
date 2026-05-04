@@ -48,4 +48,27 @@ module.exports = defineConfig([
       'import/first': 'off',
     },
   },
+  {
+    files: ['**/*.{js,jsx,ts,tsx,mjs,cjs}'],
+    ignores: ['node_modules/**', 'scripts/check-metro-safe-require.mjs'],
+    rules: {
+      // Metro: require() first argument must be a string literal (not Identifier/Template/CallExpression).
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.name='require'] > :first-child:not(Literal)",
+          message:
+            'Metro bundler requires static require("path") string literals. No variables or template expressions.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/bootstrap/loadApp.ts'],
+    rules: {
+      // Intentional Metro boundary: string-literal requires only (see `no-restricted-syntax` above).
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ]);

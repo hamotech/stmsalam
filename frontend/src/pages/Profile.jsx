@@ -361,28 +361,40 @@ export default function Profile() {
 }
 
 function ActiveOrderTracker() {
+  const { user } = useAuth() || {}
   const [activeOrder, setActiveOrder] = useState(null)
-  const orderId = localStorage.getItem('stm_last_order_id')
-  
+  const normalizeStatus = (raw) =>
+    String(raw || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+
   useEffect(() => {
-    if (!orderId) return
-    const checkOrder = async () => {
-      try {
-        const data = await dataService.fetchOrderById(orderId);
-        if (data && data.stage !== 'delivered') setActiveOrder(data)
-        else setActiveOrder(null)
-      } catch (e) { }
-    }
-    checkOrder(); 
-    const interval = setInterval(checkOrder, 15000);
-    return () => clearInterval(interval);
-  }, [orderId])
+    if (!user) return undefined
+    const unsub = dataService.subscribeOrders((allOrders) => {
+      const mine = allOrders.filter((o) =>
+        o.userId === user.id ||
+        o.customer?.email === user.email ||
+        o.customer?.phone === user.phone
+      )
+      const ACTIVE_ALLOWED = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up']
+      const active = mine.find((o) => {
+        const st = normalizeStatus(o.status || o.stage || o.orderStatus)
+        return ACTIVE_ALLOWED.includes(st)
+      })
+      setActiveOrder(active || null)
+      if (import.meta.env.DEV && active?.id) {
+        console.log('Received live update:', normalizeStatus(active.status || active.stage || active.orderStatus))
+      }
+    })
+    return () => { if (typeof unsub === 'function') unsub() }
+  }, [user])
   
   if (!activeOrder) return null
   
   return (
      <div style={{ position: 'fixed', top: '100px', left: '50%', transform: 'translateX(-50%)', zIndex: 900, width: 'calc(100% - 40px)', maxWidth: '560px' }}>
-        <Link to={`/tracking/${orderId}`} style={{ textDecoration: 'none', background: 'white', borderRadius: '24px', padding: '16px 24px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', border: '2px solid var(--gold)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <Link to={`/tracking/${activeOrder.id}`} style={{ textDecoration: 'none', background: 'white', borderRadius: '24px', padding: '16px 24px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', border: '2px solid var(--gold)', display: 'flex', alignItems: 'center', gap: '16px' }}>
            <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--green-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Activity size={24} color="var(--gold)" /></div>
            <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>

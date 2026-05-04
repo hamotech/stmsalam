@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { buildPublicTrackingFromOrder } = require('./mirrorPayload');
 
 admin.initializeApp();
@@ -162,6 +162,45 @@ function buildOrderDocumentForSet({
   return doc;
 }
 
+function buildStripePendingOrderDocument({
+  uid,
+  items,
+  totalAmount,
+  normalizedMode,
+  idempotencyKeyHash,
+  customerName,
+  customerPhone,
+  mode,
+  notes,
+  address,
+}) {
+  const doc = {
+    userId: uid,
+    items,
+    totalAmount,
+    paymentMode: normalizedMode,
+    paymentMethod: 'STRIPE',
+    flow: 'grab',
+    orderStatus: 'PENDING',
+    metaData: {},
+    paymentStatus: 'PENDING',
+    status: 'pending_payment',
+    customerName: customerName || '',
+    customerPhone: customerPhone || '',
+    mode: mode === 'pickup' ? 'pickup' : 'delivery',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (notes) doc.notes = String(notes).slice(0, 2000);
+  if (address) doc.address = String(address).slice(0, 2000);
+
+  if (idempotencyKeyHash) {
+    doc.idempotencyKey = idempotencyKeyHash;
+  }
+
+  return doc;
+}
+
 /* -------------------- FUNCTIONS -------------------- */
 
 exports.createGrabOrder = onCall(
@@ -229,7 +268,7 @@ exports.createGrabOrder = onCall(
       let hash = null;
 
       if (data.idempotencyKey) {
-        const normalized = normalizeIdempotencyKeyInput(data.idempotencyKey);
+  rmalizeIdempotencyKeyInput(data.idempotencyKey);
         if (!normalized || normalized.length > MAX_IDEMPOTENCY_RAW_LEN) {
           throw new HttpsError('invalid-argument', 'Invalid idempotencyKey');
         }
@@ -314,6 +353,131 @@ exports.createGrabOrder = onCall(
   }
 );
 
+exports.createStripePendingOrder = onCall(
+  { region: REGION, invoker: 'public' },
+  async (request) => {
+    console.log('[CF] START createStripePendingOrder');
+
+    const data = request.data || {};
+    let traceId = '';
+
+    try {
+      const uid = request.auth?.uid;
+      if (!uid) {
+        throw new HttpsError('unauthenticated', 'User not authenticated');
+      }
+
+      traceId = `${uid}-${Date.now()}`;
+
+      const items = coerceItemsOrThrow(data.items);
+
+      const totalAmount = items.reduce((sum, item) => {
+        const line = item.qty * item.price;
+        if (!Number.isFinite(line)) {
+          throw new HttpsError('invalid-argument', 'Invalid item calculation');
+        }
+        return sum + line;
+      }, 0);
+
+      if (totalAmount <= 0) {
+        throw new HttpsError('invalid-argument', 'Invalid total');
+      }
+
+      const clientTotal = Number(data.totalAmount);
+      if (!Number.isFinite(clientTotal) || Math.abs(clientTotal - totalAmount) > 0.02) {
+        throw new HttpsError('invalid-argument', 'Total does not match items');
+      }
+
+      const customerName = String(data.customerName || '').trim().slice(0, 200);
+      if (!customerName) {
+        throw new HttpsError('invalid-argument', 'Missing customerName');
+      }
+
+      const customerPhone = String(data.customerPhone || '').trim().slice(0, 40);
+      const modeRaw = String(data.mode || 'delivery').trim().toLowerCase();
+      const mode = modeRaw === 'pickup' ? 'pickup' : 'delivery';
+      const notes = typeof data.notes === 'string' ? data.notes : '';
+      const address = typeof data.address === 'string' ? data.address : '';
+
+      const normalizedMode = 'ONLINE';
+
+      let hash = null;
+
+      if (data.idempotencyKey) {
+        const normalized = normalizeIdempotencyKeyInput(data.idempotencyKey);
+        if (!normalized || normalized.length > MAX_IDEMPOTENCY_RAW_LEN) {
+          throw new HttpsError('invalid-argument', 'Invalid idempotencyKey');
+        }
+        hash = sha256HexUtf8(normalized);
+      }
+
+      const db = admin.firestore();
+      let orderId;
+
+      const orderDoc = deepClean(
+        buildStripePendingOrderDocument({
+          uid,
+          items,
+          totalAmount,
+          normalizedMode,
+          idempotencyKeyHash: hash,
+          customerName,
+          customerPhone,
+          mode,
+          notes,
+          address,
+        })
+      );
+
+      if (hash) {
+        const idemRef = db.doc(`${IDEMPOTENCY_COLLECTION}/${uid}_${hash}_stripe`);
+
+        const result = await db.runTransaction(async (tx) => {
+          const snap = await tx.get(idemRef);
+
+          if (snap.exists) {
+            return { kind: 'hit', orderId: snap.data().orderId };
+          }
+
+          const newId = db.collection('orders').doc().id;
+
+          tx.set(db.doc(`orders/${newId}`), orderDoc);
+          tx.set(idemRef, {
+            orderId: newId,
+            uid,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          return { kind: 'created', orderId: newId };
+        });
+
+        orderId = result.orderId;
+      } else {
+        const ref = db.collection('orders').doc();
+        await ref.set(orderDoc);
+        orderId = ref.id;
+      }
+
+      if (!orderId) {
+        throw new HttpsError('internal', 'Order creation failed');
+      }
+
+      console.log('[createStripePendingOrder SUCCESS]', { orderId, traceId });
+
+      return { success: true, orderId };
+    } catch (error) {
+      const unwrapped = unwrapHttpsError(error);
+      if (unwrapped) throw unwrapped;
+
+      console.error('[CF][createStripePendingOrder ERROR]', error);
+
+      throw new HttpsError('internal', error.message || 'Unknown error', {
+        traceId,
+      });
+    }
+  }
+);
+
 /* -------------------- MIRROR -------------------- */
 
 exports.syncOrderToPublicTracking = onDocumentCreated(
@@ -325,6 +489,25 @@ exports.syncOrderToPublicTracking = onDocumentCreated(
     if (!snap?.exists) return;
 
     const payload = buildPublicTrackingFromOrder(orderId, snap.data());
+    if (!payload) return;
+
+    await admin
+      .firestore()
+      .collection('public_tracking')
+      .doc(orderId)
+      .set(payload, { merge: true });
+  }
+);
+
+/** Keeps customer-readable docs aligned after payment / pipeline edits (create-only mirror misses updates). */
+exports.syncOrderUpdatesToPublicTracking = onDocumentUpdated(
+  { region: REGION, document: 'orders/{orderId}' },
+  async (event) => {
+    const orderId = event.params.orderId;
+    const after = event.data?.after;
+    if (!after?.exists) return;
+
+    const payload = buildPublicTrackingFromOrder(orderId, after.data());
     if (!payload) return;
 
     await admin
@@ -564,3 +747,10 @@ exports.migrateProductImagePaths = onCall(
     return summary;
   }
 );
+
+const { createStripeCheckout, stripeWebhook } = require('./stripeCheckoutHttp');
+const { refundOrderByAdmin } = require('./stripeRefundAdmin');
+
+exports.createStripeCheckout = createStripeCheckout;
+exports.stripeWebhook = stripeWebhook;
+exports.refundOrderByAdmin = refundOrderByAdmin;

@@ -4,7 +4,7 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { ROUTES } from "../core/routes";
 import OrderScreen from "../screens/OrderScreen";
 
@@ -46,8 +46,11 @@ class NavigatorErrorBoundary extends React.Component {
 
 function AppV2Stack() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName={ROUTES.ORDER}>
+    <NavigationContainer style={styles.navRoot}>
+      <Stack.Navigator
+        initialRouteName={ROUTES.ORDER}
+        screenOptions={{ contentStyle: styles.stackContent }}
+      >
         <Stack.Screen
           name={ROUTES.ORDER}
           component={OrderScreen}
@@ -72,6 +75,14 @@ export default function AppV2Navigator() {
 }
 
 const styles = StyleSheet.create({
+  navRoot: { flex: 1 },
+  stackContent: {
+    flex: 1,
+    ...Platform.select({
+      web: { minHeight: 0 },
+      default: {},
+    }),
+  },
   centered: {
     flex: 1,
     alignItems: "center",

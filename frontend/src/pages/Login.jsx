@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Phone, Lock, User, ArrowRight, ShieldCheck, Mail, Eye, EyeOff, UserPlus, LogIn, UserX } from 'lucide-react'
+import { Phone, Lock, User, ArrowRight, ShieldCheck, Mail, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react'
 import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
 import { API_URL } from '../config/api'
@@ -11,19 +11,66 @@ import {
   createUserWithEmailAndPassword, 
   updateProfile, 
   sendEmailVerification,
+  sendPasswordResetEmail,
   setPersistence, 
-  browserLocalPersistence 
+  browserLocalPersistence,
+  getIdTokenResult,
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { resolveUserRole } from '../config/adminAccess'
+import { normalizePhone } from '../utils/runtimeSafety'
+
+/** Firebase Auth / Firestore error code for logging and branching (never logs PII). */
+function getAuthCode(err) {
+  if (err && typeof err === 'object' && 'code' in err && typeof err.code === 'string') {
+    return err.code.trim().toLowerCase()
+  }
+  return undefined
+}
+
+function newRequestId() {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+}
+
+/** Fire-and-forget analytics hook — no email/uid; optional `code` on failures only. */
+function trackAuthAnalytics(eventName, detail = {}) {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent('stm-auth-analytics', { detail: { event: eventName, ...detail } }))
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Use with `getAuthCode(err)` — unknown / malformed codes → generic copy. */
+function friendlyLoginFailureMessage(rawCode) {
+  const code = typeof rawCode === 'string' ? rawCode.trim().toLowerCase() : ''
+  if (code === 'auth/user-not-found' || code === 'auth/invalid-email' || code === 'auth/invalid-credential') {
+    return 'Invalid account or credentials. Please try again.'
+  }
+  if (code === 'auth/wrong-password') {
+    return 'Incorrect password. Please try again.'
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many failed attempts. Account temporarily locked.'
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network error. Please check your internet connection.'
+  }
+  return 'Sign-in failed. Please try again.'
+}
 
 export default function Login() {
-  const [mode, setMode] = useState('login') // 'login' | 'register' | 'guest'
+  const [mode, setMode] = useState('login') // 'login' | 'register'
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  /** Consecutive failed Firebase sign-in attempts (login mode only); resets on success or tab switch away from login. */
+  const [loginFailCount, setLoginFailCount] = useState(0)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,7 +79,7 @@ export default function Login() {
     confirmPassword: ''
   })
   const navigate = useNavigate()
-  const { login, loginAsGuest } = useAuth()
+  const { login } = useAuth()
   const query = new URLSearchParams(window.location.search)
   const redirectPath = query.get('redirect') || '/'
 
@@ -71,7 +118,8 @@ export default function Login() {
       try {
         await sendEmailVerification(user);
       } catch (vErr) {
-        console.warn('[Verification Email] Could not send:', vErr.message);
+        const vCode = getAuthCode(vErr)
+        console.warn('[Verification Email]', { code: vCode }, vErr);
       }
 
       // 3. Update the user profile with their name
@@ -84,12 +132,17 @@ export default function Login() {
       const userSnap = await getDoc(userRef);
       
       if (!userSnap.exists()) {
+        const initialRole = resolveUserRole(safeEmail, 'user');
+        const normalizedPhone = normalizePhone(formData.phone);
         await setDoc(userRef, {
           uid: user.uid,
           name: formData.name,
           email: safeEmail,
-          phone: formData.phone,
-          role: 'user',
+          phone: normalizedPhone,
+          role: initialRole,
+          ...(initialRole === 'rider'
+            ? { status: 'offline', assignedOrders: [] }
+            : {}),
           createdAt: serverTimestamp() // Use server-side time
         });
       }
@@ -97,15 +150,16 @@ export default function Login() {
       setSuccess('Account created! A verification link has also been sent to your email.');
       
       // Auto-login after registration (Maintains existing flow)
-      login({ id: user.uid, name: formData.name, email: safeEmail, role: 'user' });
+      const registeredRole = resolveUserRole(safeEmail, 'user');
+      login({ id: user.uid, name: formData.name, email: safeEmail, role: registeredRole });
       
-      setTimeout(() => navigate(redirectPath), 2000);
+      setTimeout(() => navigate(registeredRole === 'rider' ? '/rider' : redirectPath), 2000);
 
     } catch (err) {
-      console.error('[Registration Error]', err.code, err.message);
+      const code = getAuthCode(err)
+      console.error('[Registration Error]', { code }, err);
       
-      // Improved Error Handling
-      switch (err.code) {
+      switch (code) {
         case 'auth/email-already-in-use':
           setError('This email is already registered. Try logging in instead.');
           break;
@@ -122,7 +176,7 @@ export default function Login() {
           setError('Connection error. Please check your internet and try again.');
           break;
         default:
-          setError(err.message || 'Signup failed. Please try again later.');
+          setError((err && err.message) || 'Signup failed. Please try again later.');
       }
     } finally {
       setIsSubmitting(false);
@@ -132,6 +186,7 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
 
     const errors = {};
@@ -144,16 +199,30 @@ export default function Login() {
       return;
     }
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('No internet connection. Please check and try again.');
+      return;
+    }
+
+    const reqId = newRequestId()
+    try {
+      sessionStorage.setItem('stm_last_login_req', reqId);
+    } catch {
+      /* quota / privacy mode */
+    }
     setIsSubmitting(true);
     const safeEmail = formData.email.trim().toLowerCase();
+    trackAuthAnalytics('login_attempt', { reqId })
+    console.log('[AUTH_START]', { reqId, email: safeEmail });
 
     try {
-      // 1. Attempt to sync with real Firebase Auth first
       await setPersistence(auth, browserLocalPersistence);
       const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
       const fbUser = firebaseResult.user;
+      setLoginFailCount(0)
+      trackAuthAnalytics('login_success', { reqId })
+      console.log('[AUTH_SUCCESS]', { reqId, email: fbUser.email ?? safeEmail, uid: fbUser.uid });
 
-      // 2. Resolve role from Firestore profile (source of truth)
       let role = 'user';
       let profileName = fbUser.displayName || 'Customer';
       try {
@@ -167,42 +236,71 @@ export default function Login() {
           role = resolveUserRole(safeEmail, null);
         }
       } catch (profileErr) {
-        console.warn('Failed to read user profile for role:', profileErr);
+        const pCode = getAuthCode(profileErr)
+        console.error('[AUTH_PROFILE_READ_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: pCode }, profileErr);
         role = resolveUserRole(safeEmail, null);
+      }
+
+      await fbUser.getIdToken(true);
+      try {
+        const tr = await getIdTokenResult(fbUser);
+        if (tr.claims?.admin === true) {
+          role = 'admin';
+        }
+      } catch (claimErr) {
+        const cCode = getAuthCode(claimErr)
+        console.error('[AUTH_TOKEN_CLAIMS_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: cCode }, claimErr);
       }
 
       if (role === 'admin') {
         login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
         setSuccess('Admin authenticated! Accessing Command Center...');
         setTimeout(() => navigate('/admin'), 1200);
+      } else if (role === 'rider') {
+        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'rider' });
+        setSuccess('Rider authenticated! Opening Delivery Dashboard...');
+        setTimeout(() => navigate('/rider'), 1200);
       } else {
         login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'user' });
         setSuccess('Welcome back! Redirecting...');
         setTimeout(() => navigate(redirectPath), 1200);
       }
     } catch (err) {
-      console.error('[Auth Error]', err.code, err.message);
-      
-      // Clear specific error messages for the user
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email' || err.code === 'auth/invalid-credential') {
-        setError('Invalid account or credentials. Please try again.');
-      } else if (err.code === 'auth/wrong-password') {
-        setError('Incorrect password. Please try again.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Account temporarily locked.');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your internet connection.');
-      } else {
-        setError('Firebase login failed. Please sign in with a valid admin account.');
-      }
+      const code = getAuthCode(err)
+      trackAuthAnalytics('login_fail', { reqId, code })
+      console.error('[AUTH_FAIL]', { reqId, email: safeEmail, code }, err);
+      setLoginFailCount((c) => c + 1)
+      setError(friendlyLoginFailureMessage(code));
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const handleGuest = () => {
-    loginAsGuest()
-    navigate(redirectPath)
+  const handleForgotPassword = async () => {
+    if (isSubmitting) return
+    setError('')
+    setSuccess('')
+    const safeEmail = formData.email.trim().toLowerCase()
+    const emailError = validateEmail(safeEmail)
+    if (emailError) {
+      setFieldErrors((prev) => ({ ...prev, email: emailError }))
+      setError('Enter your email first to receive a reset link.')
+      return
+    }
+    try {
+      await sendPasswordResetEmail(auth, safeEmail)
+      setSuccess('Password reset link sent. Please check your email inbox.')
+    } catch (err) {
+      const code = getAuthCode(err)
+      console.error('[AUTH_PASSWORD_RESET_FAIL]', { email: safeEmail, code }, err)
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+        setError('Unable to send reset link. Please verify your email.')
+      } else if (code === 'auth/too-many-requests') {
+        setError('Too many requests. Please wait and try again.')
+      } else {
+        setError('Could not send reset email right now. Please try again later.')
+      }
+    }
   }
 
   const inputStyle = {
@@ -220,28 +318,61 @@ export default function Login() {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
   })
 
-  const renderInput = ({ icon: Icon, name, type, placeholder, maxLength, isPassword }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <div style={{ position: 'relative' }}>
-        <Icon size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
-        <input 
-          name={name} 
-          type={isPassword && showPass ? 'text' : type} 
-          placeholder={placeholder} 
-          value={formData[name]} 
-          onChange={handleChange} 
-          maxLength={maxLength}
-          style={{ ...inputStyle, borderColor: fieldErrors[name] ? '#dc2626' : 'var(--border)' }} 
-        />
-        {isPassword && (
-          <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)' }} tabIndex="-1">
-            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        )}
+  const renderInput = ({ icon: Icon, name, type, placeholder, maxLength, isPassword, dataTestId, disabled, maskAlways, label, inputId, ariaErrorContainerId }) => {
+    const masked = isPassword && !maskAlways && showPass ? 'text' : type
+    const autoComplete =
+      name === 'password' && maskAlways ? 'current-password'
+      : name === 'confirmPassword' ? 'new-password'
+      : name === 'password' ? 'new-password'
+      : name === 'email' ? 'email'
+      : name === 'phone' ? 'tel'
+      : name === 'name' ? 'name'
+      : undefined
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+        {label && inputId ? (
+          <label
+            htmlFor={inputId}
+            style={{ fontSize: '13px', fontWeight: 800, color: 'var(--green-dark)', marginBottom: '2px', letterSpacing: '0.02em' }}
+          >
+            {label}
+          </label>
+        ) : null}
+        <div style={{ position: 'relative' }}>
+          <Icon size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} aria-hidden />
+          <input 
+            id={inputId}
+            name={name} 
+            type={masked}
+            placeholder={placeholder} 
+            value={formData[name]} 
+            onChange={handleChange} 
+            maxLength={maxLength}
+            disabled={disabled}
+            data-testid={dataTestId}
+            autoComplete={autoComplete}
+            aria-invalid={ariaErrorContainerId ? !!fieldErrors[name] : fieldErrors[name] ? true : undefined}
+            aria-describedby={ariaErrorContainerId ? ariaErrorContainerId : fieldErrors[name] && inputId ? `${inputId}-error` : undefined}
+            style={{ ...inputStyle, borderColor: fieldErrors[name] ? '#dc2626' : 'var(--border)', opacity: disabled ? 0.65 : 1 }} 
+          />
+          {isPassword && !maskAlways && (
+            <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)' }} tabIndex="-1">
+              {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          )}
+        </div>
+        {ariaErrorContainerId ? (
+          <div id={ariaErrorContainerId} role="alert" aria-live="polite" style={{ color: fieldErrors[name] ? '#dc2626' : 'transparent', fontSize: '13px', textAlign: 'left', marginLeft: '16px', fontWeight: 600, minHeight: fieldErrors[name] ? undefined : '1em' }}>
+            {fieldErrors[name] || ''}
+          </div>
+        ) : fieldErrors[name] ? (
+          <div id={inputId ? `${inputId}-error` : undefined} role="alert" aria-live="polite" style={{ color: '#dc2626', fontSize: '13px', textAlign: 'left', marginLeft: '16px', fontWeight: 600 }}>
+            {fieldErrors[name]}
+          </div>
+        ) : null}
       </div>
-      {fieldErrors[name] && <div style={{ color: '#dc2626', fontSize: '13px', textAlign: 'left', marginLeft: '16px', fontWeight: 600 }}>{fieldErrors[name]}</div>}
-    </div>
-  )
+    )
+  }
 
   return (
     <div style={{
@@ -274,8 +405,7 @@ export default function Login() {
           </h1>
           <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 600 }}>
             {mode === 'register' ? 'Join STM Salam for exclusive deals' :
-             mode === 'login' ? 'Sign in to your STM Salam account' :
-             'Browse and order without an account'}
+             'Sign in to your STM Salam account'}
           </p>
         </div>
 
@@ -284,21 +414,27 @@ export default function Login() {
           display: 'flex', gap: '6px', background: 'var(--cream)', borderRadius: '18px',
           padding: '6px', marginBottom: '32px'
         }}>
-          <button onClick={() => { setMode('login'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'login')}>
+          <button type="button" disabled={isSubmitting} onClick={() => { if (isSubmitting) return; setMode('login'); setError(''); setSuccess(''); setFieldErrors({}); setLoginFailCount(0); }} style={{ ...tabStyle(mode === 'login'), opacity: isSubmitting ? 0.6 : 1 }}>
             <LogIn size={16} /> Login
           </button>
-          <button onClick={() => { setMode('register'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'register')}>
+          <button type="button" data-testid="login-register-button" disabled={isSubmitting} onClick={() => { if (isSubmitting) return; setMode('register'); setError(''); setSuccess(''); setFieldErrors({}); setLoginFailCount(0); }} style={{ ...tabStyle(mode === 'register'), opacity: isSubmitting ? 0.6 : 1 }}>
             <UserPlus size={16} /> Register
-          </button>
-          <button onClick={() => { setMode('guest'); setError(''); setSuccess(''); setFieldErrors({}); }} style={tabStyle(mode === 'guest')}>
-            <UserX size={16} /> Guest
           </button>
         </div>
 
         {/* Error / Success */}
         {error && (
-          <div style={{ background: '#fef2f2', color: '#dc2626', padding: '14px 20px', borderRadius: '14px', marginBottom: '20px', fontSize: '14px', fontWeight: 700, border: '1px solid #fecaca' }}>
+          <div
+            role="alert"
+            aria-live="assertive"
+            style={{ background: '#fef2f2', color: '#dc2626', padding: '14px 20px', borderRadius: '14px', marginBottom: '20px', fontSize: '14px', fontWeight: 700, border: '1px solid #fecaca' }}
+          >
             {error}
+            {mode === 'login' && loginFailCount >= 5 ? (
+              <p style={{ margin: '10px 0 0', fontSize: '13px', fontWeight: 600, lineHeight: 1.45 }}>
+                Several sign-in attempts failed in a row. Wait a few minutes before trying again, or use &quot;Forgot password?&quot; if you are unsure of your password.
+              </p>
+            ) : null}
           </div>
         )}
         {success && (
@@ -310,10 +446,52 @@ export default function Login() {
         {/* === LOGIN FORM === */}
         {mode === 'login' && (
           <form onSubmit={handleLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {renderInput({ icon: Mail, name: 'email', type: 'email', placeholder: 'Email Address' })}
-            {renderInput({ icon: Lock, name: 'password', type: 'password', placeholder: 'Password', isPassword: true })}
-            <button type="submit" disabled={isSubmitting} className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-              {isSubmitting ? 'Processing...' : 'Sign In'} <ArrowRight size={20} />
+            {renderInput({
+              icon: Mail,
+              name: 'email',
+              type: 'email',
+              placeholder: 'you@example.com',
+              label: 'Email',
+              inputId: 'login-email',
+              ariaErrorContainerId: 'login-email-error',
+              dataTestId: 'login-email-input',
+              disabled: isSubmitting,
+            })}
+            {renderInput({
+              icon: Lock,
+              name: 'password',
+              type: 'password',
+              placeholder: 'Password',
+              label: 'Password',
+              inputId: 'login-password',
+              ariaErrorContainerId: 'login-password-error',
+              isPassword: true,
+              maskAlways: true,
+              dataTestId: 'login-password-input',
+              disabled: isSubmitting,
+            })}
+            <div style={{ textAlign: 'right', marginTop: '-4px' }}>
+              <button
+                type="button"
+                data-testid="login-forgot-password"
+                disabled={isSubmitting}
+                onClick={handleForgotPassword}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--green-mid)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  textDecoration: 'underline',
+                  opacity: isSubmitting ? 0.6 : 1,
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+            <button type="submit" data-testid="login-submit-button" disabled={isSubmitting} className="btn btn-gold" aria-busy={isSubmitting} style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+              {isSubmitting ? 'Processing...' : 'Sign In'} <ArrowRight size={20} aria-hidden />
             </button>
           </form>
         )}
@@ -321,50 +499,15 @@ export default function Login() {
         {/* === REGISTER FORM === */}
         {mode === 'register' && (
           <form onSubmit={handleRegister} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {renderInput({ icon: User, name: 'name', type: 'text', placeholder: 'Full Name' })}
-            {renderInput({ icon: Mail, name: 'email', type: 'email', placeholder: 'Email Address' })}
-            {renderInput({ icon: Phone, name: 'phone', type: 'tel', placeholder: 'Phone (e.g. 91234567)', maxLength: 15 })}
-            {renderInput({ icon: Lock, name: 'password', type: 'password', placeholder: 'Create Password (min 6 chars)', isPassword: true })}
-            {renderInput({ icon: ShieldCheck, name: 'confirmPassword', type: 'password', placeholder: 'Confirm Password', isPassword: true })}
+            {renderInput({ icon: User, name: 'name', type: 'text', placeholder: 'Full Name', label: 'Full name', inputId: 'register-name' })}
+            {renderInput({ icon: Mail, name: 'email', type: 'email', placeholder: 'Email address', label: 'Email', inputId: 'register-email' })}
+            {renderInput({ icon: Phone, name: 'phone', type: 'tel', placeholder: 'Phone (e.g. 91234567)', maxLength: 15, label: 'Phone', inputId: 'register-phone' })}
+            {renderInput({ icon: Lock, name: 'password', type: 'password', placeholder: 'Create Password (min 6 chars)', label: 'Password', inputId: 'register-password', isPassword: true })}
+            {renderInput({ icon: ShieldCheck, name: 'confirmPassword', type: 'password', placeholder: 'Confirm Password', label: 'Confirm password', inputId: 'register-confirm', isPassword: true })}
             <button type="submit" disabled={isSubmitting} className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
               {isSubmitting ? 'Processing...' : 'Create Account'} <UserPlus size={20} />
             </button>
           </form>
-        )}
-
-        {/* === GUEST MODE === */}
-        {mode === 'guest' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'center' }}>
-            <div style={{ background: 'var(--cream)', borderRadius: '24px', padding: '32px', border: '1px solid var(--border)' }}>
-              <div style={{ width: '64px', height: '64px', background: 'var(--gold-tint)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <UserX size={28} color="var(--gold)" />
-              </div>
-              <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '12px' }}>Browse as Guest</h3>
-              <p style={{ fontSize: '14px', color: 'var(--text-light)', lineHeight: 1.7, fontWeight: 600, marginBottom: '8px' }}>
-                You can browse our full menu and place orders via WhatsApp without creating an account.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', margin: '20px 0', fontSize: '13px', fontWeight: 700 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-mid)' }}>
-                  <span style={{ color: '#16a34a' }}>✓</span> Browse full 99+ item menu
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-mid)' }}>
-                  <span style={{ color: '#16a34a' }}>✓</span> Add items to cart
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-mid)' }}>
-                  <span style={{ color: '#16a34a' }}>✓</span> Order via WhatsApp
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-light)' }}>
-                  <span style={{ color: '#dc2626' }}>✗</span> No order history saved
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-light)' }}>
-                  <span style={{ color: '#dc2626' }}>✗</span> No exclusive deals
-                </div>
-              </div>
-            </div>
-            <button onClick={handleGuest} className="btn btn-gold" style={{ width: '100%', padding: '18px', fontSize: '17px', borderRadius: '18px', boxShadow: 'var(--shadow-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              Continue as Guest <ArrowRight size={20} />
-            </button>
-          </div>
         )}
 
         {/* FOOTER */}

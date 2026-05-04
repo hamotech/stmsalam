@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getIdTokenResult } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { resolveUserRole } from '../config/adminAccess';
@@ -28,6 +28,8 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(true);
         let role = 'user';
         let name = firebaseUser.displayName || 'Customer';
+        let profilePhone = '';
+        let profileAddress = '';
 
         try {
           const profileRef = doc(db, 'users', firebaseUser.uid);
@@ -36,6 +38,16 @@ export function AuthProvider({ children }) {
             const profileData = profileSnap.data();
             role = resolveUserRole(firebaseUser.email, profileData.role);
             name = profileData.name || name;
+            if (typeof profileData.phone === 'string' && profileData.phone.trim()) {
+              profilePhone = profileData.phone.trim();
+            } else if (typeof profileData.mobile === 'string' && profileData.mobile.trim()) {
+              profilePhone = profileData.mobile.trim();
+            }
+            if (typeof profileData.address === 'string' && profileData.address.trim()) {
+              profileAddress = profileData.address.trim();
+            } else if (typeof profileData.defaultAddress === 'string' && profileData.defaultAddress.trim()) {
+              profileAddress = profileData.defaultAddress.trim();
+            }
           } else {
             role = resolveUserRole(firebaseUser.email, null);
           }
@@ -44,10 +56,25 @@ export function AuthProvider({ children }) {
           role = resolveUserRole(firebaseUser.email, null);
         }
 
+        try {
+          const tokenResult = await getIdTokenResult(firebaseUser);
+          if (tokenResult.claims?.admin === true) {
+            role = 'admin';
+          }
+        } catch (tokenErr) {
+          console.warn('Could not read ID token claims:', tokenErr);
+        }
+
+        const fbPhone =
+          typeof firebaseUser.phoneNumber === 'string' && firebaseUser.phoneNumber.trim()
+            ? firebaseUser.phoneNumber.trim()
+            : '';
         const userData = {
           id: firebaseUser.uid,
           name: role === 'admin' ? (name || 'Admin Master') : name,
           email: firebaseUser.email,
+          phone: profilePhone || fbPhone || '',
+          address: profileAddress || '',
           role,
         };
         setUser(userData);

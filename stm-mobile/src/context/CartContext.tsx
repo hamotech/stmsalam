@@ -1,8 +1,3 @@
-/**
- * Cart — mirrors web CartContext (`stm_salam_cart` key). Web API: addToCart, removeFromCart, updateQty, clearCart.
- * Aliases addItem/removeItem provided for naming parity with product specs.
- */
-
 import React, {
   createContext,
   useCallback,
@@ -12,168 +7,240 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/src/context/AuthContext';
+import { sanitizeCartOptions, type ProductLike } from '@/src/utils/productOptionsEngine';
 
-const STORAGE_KEY = 'stm_salam_cart';
+const STORAGE_KEY_BASE = 'stm_mobile_cart_v1';
 
-/** Line shape aligned with web cart rows (product fields + qty). */
-export type CartProduct = {
+/** Payload when adding a line — optional classification for order-time sanitization. */
+export type AddToCartProduct = {
   id: string;
   name: string;
   price: number;
-  img?: string;
   image?: string;
-  categoryId?: string;
-  description?: string;
-  badge?: string;
-  qty: number;
+  type?: string;
+  category?: string;
 };
 
+export type CartLineOptions = {
+  size?: string;
+  sugar?: string;
+  ice?: string;
+  /** Dessert / pack-style choice from smart options (distinct from line `qty`). */
+  quantity?: string;
+  addons?: string[];
+};
+
+export type CartLine = {
+  variantKey: string;
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+  image?: string;
+  options?: CartLineOptions;
+  /** Base product title (unformatted); improves reorder / Firestore name rebuild. */
+  catalogName?: string;
+  productType?: string;
+  productCategory?: string;
+};
+
+function makeVariantKey(productId: string, options?: CartLineOptions): string {
+  if (!options || !Object.keys(options).length) return productId;
+  const normalized = {
+    size: options.size,
+    sugar: options.sugar,
+    ice: options.ice,
+    quantity: options.quantity,
+    addons: options.addons?.length ? [...options.addons].sort() : undefined,
+  };
+  return `${productId}:${JSON.stringify(normalized)}`;
+}
+
+/** Grab-style: `Burger (Large) + Cheese` — size in parens, addons with ` + `. */
+function formatLineName(name: string, options?: CartLineOptions): string {
+  if (!options) return name;
+  const addons = options.addons?.filter(Boolean) ?? [];
+  const drinkBits: string[] = [];
+  if (options.ice) drinkBits.push(options.ice);
+  if (options.sugar) drinkBits.push(options.sugar);
+  if (options.quantity) drinkBits.push(options.quantity);
+
+  if (options.size) {
+    const tail = addons.length ? ` + ${addons.join(' + ')}` : '';
+    return `${name} (${options.size})${tail}`;
+  }
+  if (addons.length) {
+    return `${name} + ${addons.join(' + ')}`;
+  }
+  if (drinkBits.length) {
+    return `${name} (${drinkBits.join(' · ')})`;
+  }
+  return name;
+}
+
+function lineCatalogTitle(l: CartLine): string {
+  if (l.catalogName?.trim()) return l.catalogName.trim();
+  const i = l.name.indexOf(' (');
+  return i > 0 ? l.name.slice(0, i).trim() : l.name;
+}
+
 type CartContextValue = {
-  cartItems: CartProduct[];
-  /** Web naming */
-  isCartReady: boolean;
-  addToCart: (product: Omit<CartProduct, 'qty'> & { qty?: number }) => void;
-  /** Alias === addToCart */
-  addItem: (product: Omit<CartProduct, 'qty'> & { qty?: number }) => void;
-  removeFromCart: (id: string) => void;
-  /** Alias === removeFromCart */
-  removeItem: (id: string) => void;
-  updateQty: (id: string, delta: number) => void;
-  setQty: (id: string, qty: number) => void;
-  clearCart: () => void;
+  lines: CartLine[];
+  loaded: boolean;
+  addProduct: (p: AddToCartProduct, qty?: number, options?: CartLineOptions) => void;
+  setQty: (variantKey: string, qty: number) => void;
+  remove: (variantKey: string) => void;
+  clear: () => void;
+  itemCount: number;
   subtotal: number;
-  totalItems: number;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-/** Strip invalid rows so AsyncStorage corruption cannot crash the app (web JSON.parse is equally fragile). */
-function sanitizeCartRows(raw: unknown): CartProduct[] {
-  if (!Array.isArray(raw)) return [];
-  const out: CartProduct[] = [];
-  for (const row of raw) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const id = String(r.id ?? '');
-    const name = String(r.name ?? 'Item');
-    const price = Number(r.price);
-    const qty = Math.max(0, Math.floor(Number(r.qty ?? 0)));
-    if (!id || qty <= 0 || !Number.isFinite(price)) continue;
-    out.push({
-      id,
-      name,
-      price,
-      qty,
-      img: r.img != null ? String(r.img) : undefined,
-      image: r.image != null ? String(r.image) : undefined,
-      categoryId: r.categoryId != null ? String(r.categoryId) : undefined,
-      description: r.description != null ? String(r.description) : undefined,
-      badge: r.badge != null ? String(r.badge) : undefined,
-    });
-  }
-  return out;
+function normalizeLoaded(lines: CartLine[]): CartLine[] {
+  return lines.map((x) => ({
+    ...x,
+    variantKey: x.variantKey || x.productId,
+  }));
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [cartItems, setCartItems] = useState<CartProduct[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const { user } = useAuth();
+  const [lines, setLines] = useState<CartLine[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const storageKey = useMemo(
+    () => (user?.uid ? `${STORAGE_KEY_BASE}_u_${user.uid}` : `${STORAGE_KEY_BASE}_guest`),
+    [user?.uid]
+  );
 
   useEffect(() => {
-    let alive = true;
+    let cancelled = false;
+    setLoaded(false);
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!alive) return;
+        const raw = await AsyncStorage.getItem(storageKey);
+        if (cancelled) return;
         if (raw) {
-          try {
-            const parsed = JSON.parse(raw) as unknown;
-            setCartItems(sanitizeCartRows(parsed));
-          } catch {
-            setCartItems([]);
-          }
+          const parsed = JSON.parse(raw) as CartLine[];
+          if (Array.isArray(parsed)) setLines(normalizeLoaded(parsed));
+        } else {
+          setLines([]);
         }
+      } catch {
+        /* ignore */
       } finally {
-        if (alive) setHydrated(true);
+        if (!cancelled) setLoaded(true);
       }
     })();
     return () => {
-      alive = false;
+      cancelled = true;
     };
-  }, []);
+  }, [storageKey]);
 
-  // Never persist until hydration finished — avoids clobbering disk with initial [].
   useEffect(() => {
-    if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cartItems)).catch(() => {});
-  }, [cartItems, hydrated]);
-
-  const addToCart = useCallback((product: Omit<CartProduct, 'qty'> & { qty?: number }) => {
-    setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      const add = product.qty ?? 1;
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + add } : item
-        );
+    if (!loaded) return;
+    (async () => {
+      try {
+        await AsyncStorage.setItem(storageKey, JSON.stringify(lines));
+      } catch {
+        /* ignore */
       }
-      const { qty: _q, ...rest } = product;
-      return [...prev, { ...rest, qty: add }];
+    })();
+  }, [lines, loaded, storageKey]);
+
+  const addProduct = useCallback((p: AddToCartProduct, qty = 1, options?: CartLineOptions) => {
+    const q = Math.max(1, Math.floor(qty));
+    const productLike: ProductLike = {
+      name: p.name,
+      type: p.type,
+      category: p.category,
+    };
+    const safeOptions = options ? sanitizeCartOptions(productLike, options) : undefined;
+    const variantKey = makeVariantKey(p.id, safeOptions);
+    const displayName = formatLineName(p.name, safeOptions);
+    setLines((prev) => {
+      const i = prev.findIndex((x) => x.variantKey === variantKey);
+      if (i === -1) {
+        return [
+          ...prev,
+          {
+            variantKey,
+            productId: p.id,
+            name: displayName,
+            price: p.price,
+            qty: q,
+            image: p.image,
+            options: safeOptions,
+            catalogName: p.name,
+            productType: p.type,
+            productCategory: p.category,
+          },
+        ];
+      }
+      const next = [...prev];
+      next[i] = { ...next[i], qty: next[i].qty + q };
+      return next;
     });
   }, []);
 
-  const removeFromCart = useCallback((id: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
-
-  const updateQty = useCallback((id: string, delta: number) => {
-    setCartItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.id !== id) return item;
-          const next = Math.max(0, item.qty + delta);
-          return { ...item, qty: next };
-        })
-        .filter((item) => item.qty > 0)
+  const setQty = useCallback((variantKey: string, qty: number) => {
+    const q = Math.floor(qty);
+    if (q < 1) {
+      setLines((prev) => prev.filter((x) => x.variantKey !== variantKey));
+      return;
+    }
+    setLines((prev) =>
+      prev.map((x) => (x.variantKey === variantKey ? { ...x, qty: q } : x))
     );
   }, []);
 
-  const setQty = useCallback((id: string, qty: number) => {
-    const q = Math.max(0, Math.floor(qty));
-    setCartItems((prev) =>
-      q === 0 ? prev.filter((item) => item.id !== id) : prev.map((item) => (item.id === id ? { ...item, qty: q } : item))
-    );
+  const remove = useCallback((variantKey: string) => {
+    setLines((prev) => prev.filter((x) => x.variantKey !== variantKey));
   }, []);
 
-  const clearCart = useCallback(() => setCartItems([]), []);
+  const clear = useCallback(() => setLines([]), []);
 
+  const itemCount = useMemo(() => lines.reduce((s, x) => s + x.qty, 0), [lines]);
   const subtotal = useMemo(
-    () => cartItems.reduce((sum, item) => sum + Number(item.price) * item.qty, 0),
-    [cartItems]
+    () => lines.reduce((s, x) => s + x.price * x.qty, 0),
+    [lines]
   );
-  const totalItems = useMemo(() => cartItems.reduce((sum, item) => sum + item.qty, 0), [cartItems]);
 
   const value = useMemo(
     () => ({
-      cartItems,
-      isCartReady: hydrated,
-      addToCart,
-      addItem: addToCart,
-      removeFromCart,
-      removeItem: removeFromCart,
-      updateQty,
+      lines,
+      loaded,
+      addProduct,
       setQty,
-      clearCart,
+      remove,
+      clear,
+      itemCount,
       subtotal,
-      totalItems,
     }),
-    [cartItems, hydrated, addToCart, removeFromCart, updateQty, setQty, clearCart, subtotal, totalItems]
+    [lines, loaded, addProduct, setQty, remove, clear, itemCount, subtotal]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
-export function useCart() {
+export function useCart(): CartContextValue {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error('useCart must be used within CartProvider');
   return ctx;
+}
+
+/** Map cart lines to Firestore order items — final sanitize so payloads stay clean even for legacy lines. */
+export function cartLinesToOrderItems(lines: CartLine[]): { name: string; qty: number; price: number }[] {
+  return lines.map((l) => {
+    const base = lineCatalogTitle(l);
+    const pl: ProductLike = {
+      name: base,
+      type: l.productType,
+      category: l.productCategory,
+    };
+    const safeOpts = l.options ? sanitizeCartOptions(pl, l.options) : undefined;
+    const displayName = formatLineName(base, safeOpts);
+    return { name: displayName, qty: l.qty, price: l.price };
+  });
 }

@@ -2,16 +2,8 @@
 // Presentation layer: renders UI and delegates business/data actions to hook + domain.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import OrderListItem from "../components/OrderListItem";
 import { useOrder } from "../hooks/useOrder";
 
@@ -53,7 +45,8 @@ export default function OrderScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["bottom", "left", "right"]}>
+      <View style={styles.topBlock}>
       <Text style={styles.title}>Order (V2 - Clean Architecture)</Text>
       <Text style={styles.subtitle}>UI -> Hook -> Domain -> Repository -> Service</Text>
 
@@ -92,6 +85,7 @@ export default function OrderScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {successMessage ? <Text style={styles.success}>{successMessage}</Text> : null}
+      </View>
 
       <FlatList
         data={orders}
@@ -99,6 +93,8 @@ export default function OrderScreen() {
         renderItem={renderOrderItem}
         ListEmptyComponent={<Text style={styles.empty}>No orders yet.</Text>}
         contentContainerStyle={styles.list}
+        style={styles.listFlex}
+        keyboardShouldPersistTaps="handled"
       />
     </SafeAreaView>
   );
@@ -109,6 +105,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
     padding: 16,
+  },
+  topBlock: {
+    flexShrink: 0,
+  },
+  listFlex: {
+    flex: 1,
+    minHeight: 0,
   },
   title: {
     fontSize: 20,
