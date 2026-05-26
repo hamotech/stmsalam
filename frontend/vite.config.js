@@ -8,6 +8,7 @@ const functionsRoot = path.resolve(__dirname, 'functions')
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  base: './',
   /** Block dev server from serving Cloud Functions tree (prevents accidental client imports of Node CJS). */
   server: {
     fs: {

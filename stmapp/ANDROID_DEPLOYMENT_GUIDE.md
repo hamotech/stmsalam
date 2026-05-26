@@ -44,6 +44,8 @@ The frontend automatically uses:
 - Local browser dev: `http://localhost:5000/api`
 - Hosted production web: `https://teh-tarik-app-k4w4.onrender.com/api`
 
+Capacitor itself serves the packaged app from `http://localhost` inside the WebView. Do not use `10.0.2.2` as the Capacitor app hostname; it is only for calling the backend from the emulator.
+
 For a real Android device on the same Wi-Fi as your computer, set:
 
 ```bat

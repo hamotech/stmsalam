@@ -62,7 +62,7 @@ function ensureCapacitorConfig() {
     webDir: 'stmapp',
     server: {
       androidScheme: 'http',
-      hostname: '10.0.2.2',
+      hostname: 'localhost',
       cleartext: true,
     },
   };

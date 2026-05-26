@@ -5,7 +5,11 @@ const { spawnSync } = require('child_process');
 const wrapperDir = path.resolve(__dirname, '..');
 const androidDir = path.join(wrapperDir, 'android');
 const outDir = path.join(wrapperDir, 'dist', 'android');
-const releaseApk = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+const releaseDir = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release');
+const releaseApkCandidates = [
+  path.join(releaseDir, 'app-release.apk'),
+  path.join(releaseDir, 'app-release-unsigned.apk'),
+];
 const copiedApk = path.join(outDir, 'STMAPP-release.apk');
 
 function run(command, args, cwd) {
@@ -27,8 +31,9 @@ run('node', ['scripts/prepare-web-assets.cjs'], wrapperDir);
 run('npx', ['cap', 'sync', 'android'], wrapperDir);
 run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleRelease'], androidDir);
 
-if (!fs.existsSync(releaseApk)) {
-  console.error(`[release] Expected APK not found: ${releaseApk}`);
+const releaseApk = releaseApkCandidates.find((candidate) => fs.existsSync(candidate));
+if (!releaseApk) {
+  console.error(`[release] Expected APK not found in ${releaseDir}`);
   process.exit(1);
 }
 
