@@ -14,7 +14,7 @@ const ORDER_TRACKING_PATHNAME = '/order-tracking/[orderId]' as const;
 function hrefForOrderTracking(orderId: string): Href {
   const id = orderId.trim();
   if (!id) {
-    return '/(tabs)';
+    return '/(tabs)/home';
   }
   return {
     pathname: ORDER_TRACKING_PATHNAME,
@@ -113,7 +113,7 @@ export function hrefFromIntent(intent: AppNavIntent): Href {
 export function pathFromIntent(intent: AppNavIntent): string {
   switch (intent.kind) {
     case 'tabs':
-      return '/(tabs)';
+      return '/(tabs)/home';
     case 'tabsMenu': {
       const q = new URLSearchParams();
       if (intent.cat) q.set('cat', intent.cat);
@@ -159,7 +159,7 @@ export function pathFromIntent(intent: AppNavIntent): string {
     case 'legacyOrderTracking': {
       const id = intent.orderId.trim();
       if (!id) {
-        return '/(tabs)';
+        return '/(tabs)/home';
       }
       return `/order-tracking/${encodeURIComponent(id)}`;
     }

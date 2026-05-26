@@ -1,0 +1,1 @@
+function s(a,n){try{}catch{}}function i(a,n="+65"){const e=String(a||"").trim();if(!e)return"";const r=e.replace(/\s+/g,"");if(r.startsWith("+"))return r;const t=r.replace(/[^\d]/g,"");return t?t.startsWith("65")?`+${t}`:`${n}${t}`:""}export{i as n,s};

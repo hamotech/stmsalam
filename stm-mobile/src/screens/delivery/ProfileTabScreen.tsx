@@ -49,7 +49,7 @@ export default function ProfileTabScreen() {
             </Text>
             <TouchableOpacity
               style={styles.primary}
-              onPress={() => router.replace('/(auth)/login')}
+              onPress={() => router.replace('/login')}
             >
               <Text style={styles.primaryTxt}>Sign in or register</Text>
             </TouchableOpacity>

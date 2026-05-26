@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { subscribeProducts, subscribeCategories, subscribeGallery } from '../admin/services/dataService';
-import { API_URL } from '../config/api';
+import { subscribeCategories, subscribeGallery } from '../admin/services/dataService';
 import { galleryMedia } from '../data/galleryData';
 import { findImageForProduct, hasBrokenImage } from '../utils/imageMatcher';
+import { useProducts } from '../hooks/useProducts';
 
 // Non-destructive runtime enrichment: if a product arrives without an image,
 // (or with an obvious placeholder) fall back to a real photo from the
@@ -23,50 +23,31 @@ const enrichProductImages = (products = []) => {
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
+  const { products: liveProducts, loading: productsLoading } = useProducts({ orderByCreatedDesc: true });
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [gallery, setGallery] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [catsLoaded, setCatsLoaded] = useState(false);
+  const [galleryLoaded, setGalleryLoaded] = useState(false);
 
   useEffect(() => {
-    let prodsLoaded = false;
-    let catsLoaded = false;
-    let galleryLoaded = false;
-
-    const checkLoading = () => {
-      if (prodsLoaded && catsLoaded && galleryLoaded) {
-        setLoading(false);
-      }
-    };
-
-    const unsubProducts = subscribeProducts((data) => {
-      const nextProducts = enrichProductImages(data.filter((p) => p.active !== false));
-      setProducts((prev) => {
-        if (nextProducts.length === 0 && prev.length > 0) return prev;
-        return nextProducts;
-      });
-      prodsLoaded = true;
-      checkLoading();
-    });
-
     const unsubCategories = subscribeCategories((data) => {
       setCategories((prev) => {
         if (data.length === 0 && prev.length > 0) return prev;
         return data;
       });
-      catsLoaded = true;
-      checkLoading();
+      setCatsLoaded(true);
     });
 
     const unsubGallery = subscribeGallery((data) => {
-      const nextGallery = data.filter((i) => i.active !== false);
+      const nextGallery = data;
       setGallery((prev) => {
         if (nextGallery.length === 0 && prev.length > 0) return prev;
         return nextGallery;
       });
-      galleryLoaded = true;
-      checkLoading();
+      setGalleryLoaded(true);
     });
 
     const buildFallbackGallery = () => {
@@ -83,30 +64,6 @@ export function DataProvider({ children }) {
     };
 
     const applyFallbackData = async () => {
-      try {
-        const [menuRes, categoriesRes] = await Promise.all([
-          fetch(`${API_URL}/menu`),
-          fetch(`${API_URL}/categories`),
-        ]);
-
-        if (menuRes.ok) {
-          const menuData = await menuRes.json();
-          if (Array.isArray(menuData) && menuData.length > 0) {
-            const enriched = enrichProductImages(menuData.filter((p) => p.active !== false));
-            setProducts((prev) => (prev.length > 0 ? prev : enriched));
-          }
-        }
-
-        if (categoriesRes.ok) {
-          const categoriesData = await categoriesRes.json();
-          if (Array.isArray(categoriesData) && categoriesData.length > 0) {
-            setCategories((prev) => (prev.length > 0 ? prev : categoriesData));
-          }
-        }
-      } catch (fallbackErr) {
-        console.warn('Fallback API load failed:', fallbackErr);
-      }
-
       setGallery((prev) => (prev.length > 0 ? prev : buildFallbackGallery()));
       setLoading(false);
     };
@@ -117,12 +74,22 @@ export function DataProvider({ children }) {
     }, 5000);
 
     return () => {
-      unsubProducts();
       unsubCategories();
       unsubGallery();
       clearTimeout(timeout);
     };
   }, []);
+
+  useEffect(() => {
+    const nextProducts = enrichProductImages(liveProducts);
+    setProducts(nextProducts);
+  }, [liveProducts]);
+
+  useEffect(() => {
+    if (!productsLoading && catsLoaded && galleryLoaded) {
+      setLoading(false);
+    }
+  }, [productsLoading, catsLoaded, galleryLoaded]);
 
   const value = {
     products,

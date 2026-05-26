@@ -7,12 +7,15 @@ import {
   signInAnonymously,
   sendPasswordResetEmail,
   getIdTokenResult,
+  EmailAuthProvider,
+  linkWithCredential,
   type User,
   type ActionCodeSettings,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import * as Linking from 'expo-linking';
 import { auth, db } from '@/src/services/firebase';
+import { normalizeAuthEmail } from '@/src/utils/passwordRules';
 
 export type UserProfile = {
   name?: string;
@@ -59,7 +62,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             await signInAnonymously(auth);
           } catch (err) {
-            console.error('[AUTH_FAIL]', err);
+            const code =
+              typeof err === 'object' && err !== null && 'code' in err && typeof (err as { code: unknown }).code === 'string'
+                ? (err as { code: string }).code
+                : '';
+            if (code === 'auth/admin-restricted-operation' || code === 'auth/operation-not-allowed') {
+              if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn(
+                  '[AUTH_ANON_DISABLED] Anonymous sign-in is off in Firebase (Authentication → Sign-in methods). Guest checkout needs it enabled, or users sign in with email.'
+                );
+              }
+            } else {
+              console.error('[AUTH_FAIL]', err);
+            }
           }
         }
         await auth.authStateReady();
@@ -113,17 +128,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email.trim(), password);
+    const normalizedEmail = normalizeAuthEmail(email);
+    /**
+     * Any existing session (anonymous **or** restored email user) must be cleared before
+     * `signInWithEmailAndPassword`, or Firebase often returns `auth/invalid-credential` even
+     * when the email/password pair is correct.
+     */
+    if (auth.currentUser) {
+      await firebaseSignOut(auth);
+      await auth.authStateReady();
+      for (let i = 0; i < 5 && auth.currentUser; i += 1) {
+        await firebaseSignOut(auth);
+        await auth.authStateReady();
+      }
+    }
+    await signInWithEmailAndPassword(auth, normalizedEmail, password);
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-    await setDoc(doc(db, 'users', cred.user.uid), {
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      role: 'user',
-      createdAt: new Date().toISOString(),
-    });
+    const normalizedEmail = normalizeAuthEmail(email);
+    const trimmedName = name.trim();
+    const cu = auth.currentUser;
+
+    /**
+     * App bootstraps with `signInAnonymously` when no user. Creating a second
+     * email/password user while still signed in as anonymous is the wrong API;
+     * Firebase can surface `auth/email-already-in-use` incorrectly. Upgrade the
+     * anonymous session by linking email/password credentials instead.
+     */
+    let uid: string;
+    if (cu?.isAnonymous) {
+      const credential = EmailAuthProvider.credential(normalizedEmail, password);
+      const { user } = await linkWithCredential(cu, credential);
+      uid = user.uid;
+    } else if (!cu) {
+      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      uid = cred.user.uid;
+    } else {
+      await firebaseSignOut(auth);
+      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      uid = cred.user.uid;
+    }
+
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        name: trimmedName,
+        email: normalizedEmail,
+        role: 'user',
+        createdAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
   };
 
   const signOut = async () => {
@@ -148,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         bundleId: 'com.hamotech.stmmobile',
       },
     };
-    await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
+    await sendPasswordResetEmail(auth, normalizeAuthEmail(email), actionCodeSettings);
   }, []);
 
   const refreshIdTokenClaims = useCallback(async () => {

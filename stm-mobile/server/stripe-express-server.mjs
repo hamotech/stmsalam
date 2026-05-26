@@ -304,13 +304,7 @@ app.post('/verify-checkout-session', async (req, res) => {
         throw new Error('AMOUNT_MISMATCH');
       }
 
-      const orderStatus = 'PLACED';
-      const legacy = toLegacyTrackingStatus(orderStatus);
-
       const patch = {
-        paymentStatus: 'PAID',
-        orderStatus,
-        status: legacy,
         stripePaymentIntentId: paymentIntentId,
         paymentVerifiedAt: FieldValue.serverTimestamp(),
         isNewForAdmin: true,
@@ -490,13 +484,7 @@ app.post('/verify-payment', async (req, res) => {
         throw new Error('AMOUNT_MISMATCH');
       }
 
-      const orderStatus = 'PLACED';
-      const legacy = toLegacyTrackingStatus(orderStatus);
-
       const patch = {
-        paymentStatus: 'PAID',
-        orderStatus,
-        status: legacy,
         stripePaymentIntentId: paymentIntentId,
         paymentVerifiedAt: FieldValue.serverTimestamp(),
         isNewForAdmin: true,

@@ -104,7 +104,7 @@ export async function processOfflineOrderQueue(): Promise<{
         const orderId = await placeGrabOrderAtCheckout({
           items: item.items,
           totalAmount: Number(item.draft.total),
-          paymentMode: 'cod',
+          paymentMethod: 'COD',
           /** Queue-only scope: never reuse as interactive checkout idempotency / pending-resolution (`offline-queue:` is filtered everywhere else). */
           idempotencyKey: `offline-queue:${item.queueId}`,
         });

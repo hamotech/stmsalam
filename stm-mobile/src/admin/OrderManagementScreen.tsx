@@ -24,6 +24,7 @@ import {
   normalizeGrabOrderStatus,
   canTransitionTo,
   paymentAllowsConfirm,
+  isNewOrderQueueEligible,
 } from '@/src/domain/orderPipeline';
 import { advanceGrabOrderPipeline } from '@/src/admin/services/advanceGrabPipeline';
 import {
@@ -34,22 +35,17 @@ import {
 const DARK_GREEN = '#013220';
 const THEME_GREEN = '#0A8754';
 
-/** Next pipeline targets shown as step buttons (after the order is accepted). */
-const ADMIN_ACTIONS: GrabOrderStatus[] = [
-  'PREPARING',
-  'READY',
-  'OUT_FOR_DELIVERY',
-  'DELIVERED',
-];
+/** Admin may advance kitchen stages only; delivery is rider / dispatch. */
+const ADMIN_ACTIONS: GrabOrderStatus[] = ['PREPARING', 'READY'];
 
 type BoardBucket = 'pending' | 'cooking' | 'ready' | 'delivered' | 'cancelled';
 
-function boardBucket(st: GrabOrderStatus): BoardBucket {
-  if (st === 'CANCELLED') return 'cancelled';
-  if (st === 'PLACED' || st === 'CONFIRMED') return 'pending';
-  if (st === 'PREPARING') return 'cooking';
-  if (st === 'READY') return 'ready';
-  if (st === 'OUT_FOR_DELIVERY' || st === 'DELIVERED') return 'delivered';
+function boardBucket(st: string): BoardBucket {
+  if (st === 'cancelled') return 'cancelled';
+  if (isNewOrderQueueEligible(st) || st === 'pending_payment' || st === 'failed') return 'pending';
+  if (st === 'preparing') return 'cooking';
+  if (st === 'ready_for_pickup') return 'ready';
+  if (st === 'out_for_delivery' || st === 'delivered') return 'delivered';
   return 'pending';
 }
 
@@ -66,7 +62,7 @@ function isGrabOrder(o: OrderDoc): boolean {
   return anyO.flow === 'grab';
 }
 
-function grabOrderStatus(o: OrderDoc): GrabOrderStatus {
+function grabOrderStatus(o: OrderDoc): string {
   return normalizeGrabOrderStatus(o as OrderDoc & { orderStatus?: string; status?: string });
 }
 
@@ -134,7 +130,7 @@ export default function OrderManagementScreen() {
       const id = order.id;
       if (!id) return;
       const st = grabOrderStatus(order);
-      if (next === 'CONFIRMED' && st === 'PLACED') {
+      if (next === 'CONFIRMED' && (st === 'paid' || st === 'placed')) {
         const gate = paymentAllowsConfirm(order as OrderDoc & Record<string, unknown>);
         if (!gate.ok) {
           Alert.alert('Payment', gate.reason);
@@ -142,6 +138,7 @@ export default function OrderManagementScreen() {
         }
       }
       if (!canTransitionTo(st, next)) {
+        Alert.alert('Update', 'Invalid order state transition');
         return;
       }
       Alert.alert(
@@ -189,9 +186,9 @@ export default function OrderManagementScreen() {
         (item as OrderDoc & { paymentStatus?: string }).paymentStatus ?? '—'
       );
       const busy = busyId === id;
-      const delivered = st === 'DELIVERED';
-      const cancelled = st === 'CANCELLED';
-      const isPlaced = st === 'PLACED';
+      const delivered = st === 'delivered';
+      const cancelled = st === 'cancelled';
+      const isPlaced = isNewOrderQueueEligible(st);
 
       return (
         <View style={styles.card}>

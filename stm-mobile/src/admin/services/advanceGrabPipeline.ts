@@ -7,7 +7,9 @@ import {
   canTransitionTo,
   normalizeGrabOrderStatus,
   paymentAllowsConfirm,
+  isNewOrderQueueEligible,
 } from '@/src/domain/orderPipeline';
+import { coerceAdminIntentToCanonical } from '@/src/domain/orderStateMachine';
 import type { OrderDoc } from '@/src/admin/services/orderNotificationService';
 import type { AppRole } from '@/src/auth/resolveAppRole';
 
@@ -19,7 +21,7 @@ export type AdvancePipelineOptions = {
 export async function advanceGrabOrderPipeline(
   firestore: Firestore,
   order: OrderDoc,
-  next: GrabOrderStatus,
+  next: GrabOrderStatus | string,
   opts: AdvancePipelineOptions
 ): Promise<void> {
   if (opts.actor !== 'admin') {
@@ -30,18 +32,17 @@ export async function advanceGrabOrderPipeline(
   if (!id) throw new Error('Order id missing');
 
   const current = normalizeGrabOrderStatus(order);
-  if (next === 'CONFIRMED' && current === 'PLACED') {
+  if (next === 'CONFIRMED' && isNewOrderQueueEligible(current)) {
     const gate = paymentAllowsConfirm(order as OrderDoc & Record<string, unknown>);
     if (!gate.ok) throw new Error(gate.reason);
   }
   if (!canTransitionTo(current, next)) {
-    throw new Error(`Invalid transition ${current} → ${next} (no skipping)`);
+    throw new Error('Invalid order state transition');
   }
 
-  const lower = next.toLowerCase();
+  const nextCanon = coerceAdminIntentToCanonical(next);
   await updateGrabPipelineStatus(firestore, id, next, {
-    order_status: lower,
     updatedAt: new Date().toISOString(),
-    chatEnabled: next !== 'PLACED' && next !== 'CANCELLED',
+    chatEnabled: !['paid', 'placed', 'cancelled', 'pending_payment'].includes(nextCanon),
   });
 }

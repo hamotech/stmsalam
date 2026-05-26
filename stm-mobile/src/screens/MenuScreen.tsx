@@ -18,10 +18,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   subscribeCategories,
-  subscribeProducts,
   Category,
   Product,
 } from '@/src/services/menuService';
+import { useProducts } from '@/src/hooks/useProducts';
 import { useCart } from '@/src/context/CartContext';
 import SupportFloatingButtons from '@/src/components/SupportFloatingButtons';
 import ProductCard from '@/src/components/stm/ProductCard';
@@ -57,11 +57,17 @@ export default function MenuScreen() {
   const [sheetProduct, setSheetProduct] = useState<ProductOptionsSheetProduct | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
   const [activeCat, setActiveCat] = useState<string>('all');
+  const {
+    products,
+    loading,
+    error: productsError,
+  } = useProducts({
+    categoryId: activeCat === 'all' ? undefined : activeCat,
+    orderByCreatedDesc: true,
+  });
 
   const chipScrollRef = useRef<ScrollView>(null);
   const chipScrollXRef = useRef(0);
@@ -109,7 +115,7 @@ export default function MenuScreen() {
     if (!authReady) return undefined;
     const u1 = subscribeCategories(
       (c) => {
-        setCategories(c.filter((x) => x.active !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+        setCategories([...c].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
         setMenuError(null);
       },
       (err) => {
@@ -121,23 +127,14 @@ export default function MenuScreen() {
   }, [authReady, retryTick]);
 
   useEffect(() => {
-    if (!authReady) return undefined;
-    setLoading(true);
-    const u2 = subscribeProducts(
-      (p) => {
-        setProducts(p);
-        setLoading(false);
-        setMenuError(null);
-      },
-      (err) => {
-        console.error('[MENU]', err);
-        setMenuError('Something went wrong. Please try again.');
-        setLoading(false);
-      },
-      activeCat === 'all' ? undefined : activeCat
-    );
-    return u2;
-  }, [authReady, activeCat, retryTick]);
+    if (!authReady) return;
+    if (productsError) {
+      console.error('[MENU]', productsError);
+      setMenuError('Something went wrong. Please try again.');
+      return;
+    }
+    setMenuError(null);
+  }, [authReady, productsError, retryTick]);
 
   const chips = useMemo(
     () => [{ id: 'all', name: 'All' } as Category, ...categories],

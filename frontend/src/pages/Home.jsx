@@ -924,89 +924,245 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ══════════ APP DOWNLOAD — GOOGLE PLAY & APP STORE ══════════ */}
-        <section id="app-download" style={{ marginBottom: '64px' }}>
-          <div className="app-download-box" style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%)', borderRadius: '40px', padding: '64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
-            {/* Floating food in anti-gravity */}
-            <motion.div animate={{ y: [-8, 12, -8] }} transition={{ duration: 3, repeat: Infinity }} style={{ position: 'absolute', right: '15%', top: '15%', fontSize: '60px', opacity: 0.3 }}>☕</motion.div>
-            <motion.div animate={{ y: [10, -15, 10] }} transition={{ duration: 4, repeat: Infinity }} style={{ position: 'absolute', right: '30%', bottom: '15%', fontSize: '50px', opacity: 0.2 }}>🍔</motion.div>
-            <motion.div animate={{ y: [-5, 10, -5], rotate: [0, 10, 0] }} transition={{ duration: 3.5, repeat: Infinity }} style={{ position: 'absolute', right: '8%', bottom: '25%', fontSize: '45px', opacity: 0.25 }}>🥟</motion.div>
+        {/* ══════════ STM MOBILE APP SHOWCASE ══════════ */}
+        <section id="app-download" style={{ marginBottom: '80px' }}>
 
-            <div style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <Smartphone size={20} color="var(--gold)" />
-                <span style={{ color: 'var(--gold)', fontWeight: 800, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '2px' }}>Mobile App</span>
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: '56px' }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--gold-tint)', color: 'var(--gold)', padding: '8px 20px', borderRadius: '100px', fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '20px' }}
+            >
+              <Smartphone size={16} /> STM Mobile App
+            </motion.div>
+            <motion.h2
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 950, color: 'var(--green-dark)', letterSpacing: '-2px', lineHeight: 1.1, marginBottom: '20px' }}
+            >
+              Your STM Salam,<br /><span style={{ color: 'var(--green-mid)' }}>in your pocket.</span>
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              style={{ color: 'var(--text-light)', fontSize: '18px', fontWeight: 500, maxWidth: '580px', margin: '0 auto', lineHeight: 1.6 }}
+            >
+              Browse the full menu, order in seconds, track live delivery, and pay securely — all from the STM Mobile app.
+            </motion.p>
+          </div>
+
+          {/* Feature Cards Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '64px' }}>
+            {[
+              { icon: '🏠', title: 'Smart Home Feed', desc: 'Curated favourites, seasonal highlights & live promotions front and centre.', color: '#e0f2fe', accent: '#0ea5e9' },
+              { icon: '🍽️', title: 'Full Menu Browsing', desc: 'Filter by category, search, and add to cart with one tap — just like the web.', color: '#d1fae5', accent: 'var(--green-mid)' },
+              { icon: '📍', title: 'Live Order Tracking', desc: 'Watch your rider on the map in real-time from kitchen to your door.', color: '#fef3c7', accent: '#f59e0b' },
+              { icon: '💳', title: 'In-App Payments', desc: 'PayNow QR, Stripe card payments, and wallet — all secured in the app.', color: '#ede9fe', accent: '#7c3aed' },
+              { icon: '💬', title: 'Order Chat & Support', desc: 'Message the STM team directly via in-app chat or WhatsApp any time.', color: '#fce7f3', accent: '#db2777' },
+              { icon: '👤', title: 'Profile & History', desc: 'View past orders, re-order favourites, and manage your account settings.', color: '#ecfdf5', accent: 'var(--green-dark)' },
+            ].map((f, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.06 }}
+                whileHover={{ y: -6, boxShadow: '0 20px 40px rgba(0,0,0,0.08)' }}
+                style={{ background: 'white', borderRadius: '28px', padding: '32px 28px', border: '1px solid #eef2f6', transition: 'all 0.3s ease', cursor: 'default' }}
+              >
+                <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', marginBottom: '20px' }}>
+                  {f.icon}
+                </div>
+                <h4 style={{ fontSize: '17px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '10px', letterSpacing: '-0.3px' }}>{f.title}</h4>
+                <p style={{ fontSize: '14px', color: 'var(--text-light)', fontWeight: 500, lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Big CTA Banner with phone mockups */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            style={{ background: 'linear-gradient(135deg, #011a0e 0%, #013220 45%, #024a30 100%)', borderRadius: '48px', padding: 'clamp(40px,6vw,72px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '48px', flexWrap: 'wrap', position: 'relative', overflow: 'hidden' }}
+          >
+            {/* Background decoration */}
+            <motion.div animate={{ y: [-10, 14, -10] }} transition={{ duration: 3.5, repeat: Infinity }} style={{ position: 'absolute', right: '38%', top: '10%', fontSize: '64px', opacity: 0.12, pointerEvents: 'none' }}>📱</motion.div>
+            <motion.div animate={{ y: [8, -12, 8], rotate: [0, 8, 0] }} transition={{ duration: 4.5, repeat: Infinity }} style={{ position: 'absolute', right: '20%', bottom: '10%', fontSize: '52px', opacity: 0.1, pointerEvents: 'none' }}>☕</motion.div>
+            <motion.div animate={{ y: [-6, 10, -6] }} transition={{ duration: 3, repeat: Infinity }} style={{ position: 'absolute', left: '55%', top: '20%', fontSize: '44px', opacity: 0.08, pointerEvents: 'none' }}>🥙</motion.div>
+
+            {/* Text side */}
+            <div style={{ maxWidth: '520px', position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', color: 'var(--gold)', padding: '8px 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '24px' }}>
+                <Smartphone size={14} /> STM Mobile · React Native
               </div>
-              <h2 style={{ color: 'white', fontSize: '38px', fontWeight: 950, marginBottom: '16px', lineHeight: 1.1, letterSpacing: '-1px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                Download STM Salam App 
-                <span style={{ background: 'var(--gold)', color: 'var(--green-dark)', padding: '6px 16px', borderRadius: '12px', fontSize: '14px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase' }}>Coming Soon</span>
+              <h2 style={{ color: 'white', fontSize: 'clamp(28px,4vw,46px)', fontWeight: 950, marginBottom: '20px', lineHeight: 1.1, letterSpacing: '-1.5px' }}>
+                Download the STM Salam App
+                <span style={{ display: 'inline-block', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase', marginLeft: '12px', verticalAlign: 'middle' }}>
+                  Coming Soon
+                </span>
               </h2>
-              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '16px', fontWeight: 600, marginBottom: '32px', lineHeight: 1.7 }}>
-                Get exclusive app-only deals. Order in seconds, track your Zero-G delivery in real-time, and earn double loyalty points.
+              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '16px', fontWeight: 500, marginBottom: '36px', lineHeight: 1.7 }}>
+                Built with React Native &amp; Expo for iOS and Android. Enjoy native-speed ordering, live tracking on a map, in-app payments, and real-time chat with the STM team — wherever you are.
               </p>
 
-              <div className="app-store-btns" style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
-                {/* Google Play */}
-                <a href="https://play.google.com/store" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', color: '#1a1a1a', padding: '14px 24px', borderRadius: '16px', textDecoration: 'none', transition: '0.3s' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734c0-.382.218-.712.609-.92z" fill="#4285F4"/><path d="M17.219 8.381l-3.427 3.62 3.427 3.618 3.87-2.174a1.123 1.123 0 000-1.89l-3.87-2.174z" fill="#FBBC04"/><path d="M3.609 1.814L13.792 12l3.427-3.619L5.64.596c-.4-.224-.87-.23-1.292-.009-.133.07-.3.185-.74.627v.6z" fill="#34A853"/><path d="M13.792 12L3.61 22.186c.44.442.607.557.74.627.421.22.891.215 1.291-.01l11.578-6.804L13.792 12z" fill="#EA4335"/></svg>
-                  <div><div style={{ fontSize: '10px', fontWeight: 600 }}>GET IT ON</div><div style={{ fontSize: '16px', fontWeight: 900, marginTop: '-2px' }}>Google Play</div></div>
-                </a>
-                {/* App Store */}
-                <a href="https://apps.apple.com" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', color: '#1a1a1a', padding: '14px 24px', borderRadius: '16px', textDecoration: 'none', transition: '0.3s' }}>
-                  <Apple size={28} />
-                  <div><div style={{ fontSize: '10px', fontWeight: 600 }}>Download on the</div><div style={{ fontSize: '16px', fontWeight: 900, marginTop: '-2px' }}>App Store</div></div>
-                </a>
+              {/* Store buttons */}
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '36px' }}>
+                <motion.a
+                  href="https://play.google.com/store"
+                  target="_blank"
+                  rel="noreferrer"
+                  whileHover={{ y: -3, boxShadow: '0 16px 32px rgba(0,0,0,0.25)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', color: '#111', padding: '14px 24px', borderRadius: '18px', textDecoration: 'none', transition: '0.3s', minWidth: '170px' }}
+                >
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734c0-.382.218-.712.609-.92z" fill="#4285F4"/><path d="M17.219 8.381l-3.427 3.62 3.427 3.618 3.87-2.174a1.123 1.123 0 000-1.89l-3.87-2.174z" fill="#FBBC04"/><path d="M3.609 1.814L13.792 12l3.427-3.619L5.64.596c-.4-.224-.87-.23-1.292-.009-.133.07-.3.185-.74.627v.6z" fill="#34A853"/><path d="M13.792 12L3.61 22.186c.44.442.607.557.74.627.421.22.891.215 1.291-.01l11.578-6.804L13.792 12z" fill="#EA4335"/></svg>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, opacity: 0.6, letterSpacing: '0.5px' }}>GET IT ON</div>
+                    <div style={{ fontSize: '16px', fontWeight: 900, marginTop: '-2px' }}>Google Play</div>
+                  </div>
+                </motion.a>
+                <motion.a
+                  href="https://apps.apple.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  whileHover={{ y: -3, boxShadow: '0 16px 32px rgba(0,0,0,0.25)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', color: '#111', padding: '14px 24px', borderRadius: '18px', textDecoration: 'none', transition: '0.3s', minWidth: '170px' }}
+                >
+                  <Apple size={26} />
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, opacity: 0.6, letterSpacing: '0.5px' }}>DOWNLOAD ON THE</div>
+                    <div style={{ fontSize: '16px', fontWeight: 900, marginTop: '-2px' }}>App Store</div>
+                  </div>
+                </motion.a>
               </div>
 
-              <div style={{ display: 'flex', gap: '24px' }}>
-                {[{ icon: <Shield size={18} />, text: 'Secure Payments' }, { icon: <Wifi size={18} />, text: 'Real-time Tracking' }, { icon: <Zap size={18} />, text: '2x Loyalty Points' }].map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.5)', fontSize: '13px', fontWeight: 700 }}>
+              {/* Trust features */}
+              <div style={{ display: 'flex', gap: '28px', flexWrap: 'wrap' }}>
+                {[
+                  { icon: <Shield size={16} />, text: 'Secure Payments' },
+                  { icon: <Wifi size={16} />, text: 'Live Map Tracking' },
+                  { icon: <Zap size={16} />, text: '2× Loyalty Points' },
+                  { icon: <CheckCircle size={16} />, text: 'Halal Verified' },
+                ].map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'rgba(255,255,255,0.5)', fontSize: '13px', fontWeight: 700 }}>
                     <span style={{ color: 'var(--gold)' }}>{f.icon}</span> {f.text}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Phone Mockup */}
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <motion.div animate={{ y: [-8, 8, -8] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                style={{ width: '240px', height: '480px', background: 'var(--green-dark)', borderRadius: '36px', border: '3px solid rgba(255,255,255,0.15)', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', position: 'relative' }}>
-                <div style={{ padding: '24px 16px 16px', background: '#0d3320' }}>
-                  <div style={{ fontWeight: 800, fontSize: '18px', color: 'white' }}>Our Location</div>
-                  <div style={{ opacity: 0.7, color: 'white', fontSize: '12px' }}>Blk 59 Marine Terrace, #01-95, Singapore 440059</div>
-                  <div style={{ color: 'var(--gold)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', marginTop: '8px' }}>ZERO-G DELIVERY</div>
+            {/* Dual phone mockups */}
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
+              {/* Back phone — slightly smaller + offset */}
+              <motion.div
+                animate={{ y: [6, -10, 6] }}
+                transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+                style={{ width: '200px', height: '420px', background: '#0a2414', borderRadius: '32px', border: '2.5px solid rgba(255,255,255,0.1)', overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.5)', flexShrink: 0, display: 'flex', flexDirection: 'column', transform: 'translateY(24px)' }}
+              >
+                {/* Status bar */}
+                <div style={{ padding: '14px 14px 8px', background: '#062410', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--gold)', fontSize: '9px', fontWeight: 900, letterSpacing: '1px' }}>STM SALAM</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} />
+                  </div>
                 </div>
-                <div style={{ padding: '16px', flex: 1, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    <img loading="lazy" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400" style={{ width: '100%', height: '140px', objectFit: 'cover' }} alt="Classic Lamb Burger" />
-                    <div style={{ padding: '12px' }}>
-                      <div style={{ fontWeight: 900, color: 'var(--green-dark)', fontSize: '14px', marginBottom: '4px' }}>Classic Lamb Burger</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontWeight: 800, color: 'var(--green-mid)', fontSize: '14px' }}>$10.00</div>
-                        <div style={{ background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>ADD</div>
-                      </div>
+                {/* Order tracking screen */}
+                <div style={{ flex: 1, background: '#f8fafc', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ background: 'var(--green-dark)', borderRadius: '14px', padding: '14px', color: 'white' }}>
+                    <div style={{ fontSize: '9px', fontWeight: 800, opacity: 0.7, letterSpacing: '1px', marginBottom: '4px' }}>LIVE TRACKING</div>
+                    <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Order #STM-8821</div>
+                    <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '8px', height: '6px', overflow: 'hidden' }}>
+                      <div style={{ width: '72%', height: '100%', background: '#22c55e', borderRadius: '8px' }} />
                     </div>
+                    <div style={{ marginTop: '6px', fontSize: '10px', fontWeight: 700, color: 'var(--gold)' }}>Rider assigned · Arriving in 8 min</div>
                   </div>
-                  <div style={{ background: 'white', borderRadius: '12px', padding: '8px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                    <img loading="lazy" src="https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Hummus Falafel" />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, color: 'var(--green-dark)', fontSize: '12px', marginBottom: '2px' }}>Hummus Falafel</div>
-                      <div style={{ fontWeight: 800, color: 'var(--green-mid)', fontSize: '11px' }}>$8.50</div>
-                    </div>
-                    <div style={{ width: '24px', height: '24px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px' }}>+</div>
+                  <div style={{ background: 'white', borderRadius: '12px', padding: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ height: '90px', background: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>🗺️</div>
+                    <div style={{ marginTop: '8px', fontSize: '10px', fontWeight: 700, color: 'var(--text-light)' }}>Tracking on map</div>
                   </div>
-                  <div style={{ background: 'white', borderRadius: '12px', padding: '8px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                    <img loading="lazy" src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Onion Rings" />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, color: 'var(--green-dark)', fontSize: '12px', marginBottom: '2px' }}>Onion Rings</div>
-                      <div style={{ fontWeight: 800, color: 'var(--green-mid)', fontSize: '11px' }}>$5.00</div>
+                  <div style={{ background: 'white', borderRadius: '12px', padding: '10px', display: 'flex', gap: '8px', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                    <div style={{ fontSize: '22px' }}>🛵</div>
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)' }}>Ahmad · Rider</div>
+                      <div style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-light)' }}>On his way to you</div>
                     </div>
-                    <div style={{ width: '24px', height: '24px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px' }}>+</div>
+                    <div style={{ marginLeft: 'auto', background: 'var(--green-tint)', color: 'var(--green-dark)', padding: '4px 10px', borderRadius: '8px', fontSize: '9px', fontWeight: 900 }}>CHAT</div>
                   </div>
                 </div>
               </motion.div>
+
+              {/* Front phone — main */}
+              <motion.div
+                animate={{ y: [-10, 8, -10] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                style={{ width: '220px', height: '460px', background: '#062410', borderRadius: '36px', border: '3px solid rgba(255,255,255,0.15)', overflow: 'hidden', boxShadow: '0 40px 80px rgba(0,0,0,0.6)', flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+              >
+                {/* Top bar */}
+                <div style={{ padding: '18px 16px 12px', background: 'var(--green-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '8px', color: 'var(--gold)', fontWeight: 800, letterSpacing: '1px' }}>STM SALAM</div>
+                    <div style={{ fontSize: '13px', color: 'white', fontWeight: 900 }}>Home</div>
+                  </div>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👤</div>
+                </div>
+                {/* Home screen body */}
+                <div style={{ flex: 1, background: '#f8fafc', padding: '12px', overflowY: 'hidden', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Search bar */}
+                  <div style={{ background: 'white', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ fontSize: '12px' }}>🔍</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Search food, drinks…</div>
+                  </div>
+                  {/* Quick cats */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {['🍽️ Food', '🥤 Drinks', '🥪 Snacks'].map((c, i) => (
+                      <div key={i} style={{ background: i === 0 ? 'var(--green-dark)' : 'white', color: i === 0 ? 'white' : 'var(--text-dark)', fontSize: '9px', fontWeight: 800, padding: '5px 8px', borderRadius: '8px', whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                        {c}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Hero card */}
+                  <div style={{ background: 'var(--green-dark)', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
+                    <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=300" alt="burger" style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.6 }} />
+                    <div style={{ position: 'absolute', inset: 0, padding: '10px' }}>
+                      <div style={{ fontSize: '7px', color: 'var(--gold)', fontWeight: 900, letterSpacing: '1px' }}>TODAY'S HIGHLIGHT</div>
+                      <div style={{ fontSize: '11px', color: 'white', fontWeight: 900, marginTop: '2px' }}>Teh Tarik &amp; more</div>
+                      <div style={{ marginTop: '4px', background: 'var(--gold)', color: 'var(--green-dark)', display: 'inline-block', padding: '3px 8px', borderRadius: '5px', fontSize: '8px', fontWeight: 900 }}>Order →</div>
+                    </div>
+                  </div>
+                  {/* Favourite items */}
+                  <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)' }}>Customer Favorites</div>
+                  {[
+                    { name: 'Fresh Juice', price: '$4.20', emoji: '🥤' },
+                    { name: 'Chicken Biryani', price: '$11.90', emoji: '🍛' },
+                    { name: 'Shawarma', price: '$8.90', emoji: '🌯' },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: 'white', borderRadius: '10px', padding: '8px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>{item.emoji}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--green-dark)' }}>{item.name}</div>
+                        <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--green-mid)' }}>{item.price}</div>
+                      </div>
+                      <div style={{ width: '20px', height: '20px', background: 'var(--green-dark)', color: 'white', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900 }}>+</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Tab bar */}
+                <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 8px 14px', background: 'white', borderTop: '1px solid #eef2f6' }}>
+                  {['🏠', '🍽️', '🛒', '📦', '👤'].map((icon, i) => (
+                    <div key={i} style={{ fontSize: '18px', opacity: i === 0 ? 1 : 0.4 }}>{icon}</div>
+                  ))}
+                </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
         </section>
 
       </div>

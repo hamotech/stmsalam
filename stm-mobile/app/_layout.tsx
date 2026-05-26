@@ -16,6 +16,7 @@ import '@/src/services/firebase';
 import { CartProvider } from '@/src/context/CartContext';
 import { AuthProvider } from '@/src/context/AuthContext';
 import AuthReadyGate from '@/src/components/AuthReadyGate';
+import AuthNavigationSync from '@/src/components/AuthNavigationSync';
 import StripeProviderGate from '@/src/providers/StripeProviderGate';
 import AppBottomSheetProvider from '@/src/providers/AppBottomSheetProvider';
 import PasswordResetDeepLinkHandler from '@/src/components/PasswordResetDeepLinkHandler';
@@ -77,6 +78,7 @@ function NavigationTree() {
         <Stack.Screen name="grab-stripe-payment" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="grab-payment-qr" options={{ headerShown: false, presentation: 'card' }} />
         </Stack>
+        <AuthNavigationSync />
         <LayoutEffects />
         <PasswordResetDeepLinkHandler />
       </View>

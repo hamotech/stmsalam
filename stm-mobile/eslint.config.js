@@ -71,4 +71,23 @@ module.exports = defineConfig([
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  {
+    files: ['app/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
+    ignores: ['src/domain/orderPipeline.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/src/domain/orderPipeline',
+              importNames: ['normalizePaymentMethod', 'normalizeCanonicalPaymentStatus'],
+              message:
+                'Use getOrderContext(order).paymentMethodNorm / .paymentStatusNorm (versioned read model). Low-level helpers stay domain-internal.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);

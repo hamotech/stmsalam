@@ -30,6 +30,8 @@ export function friendlyFirebaseAuthMessage(e: unknown, fallback: string): strin
     switch (e.code) {
       case 'auth/email-already-in-use':
         return 'This email is already registered. Try signing in.';
+      case 'auth/credential-already-in-use':
+        return 'This email is already registered with another account. Try signing in.';
       case 'auth/invalid-email':
         return 'Please enter a valid email address.';
       case 'auth/weak-password':
@@ -41,7 +43,10 @@ export function friendlyFirebaseAuthMessage(e: unknown, fallback: string): strin
       case 'auth/user-not-found':
       case 'auth/wrong-password':
       case 'auth/invalid-credential':
-        return 'Email or password is incorrect.';
+        return 'Email or password is incorrect. Check for spaces in the email, or use Forgot password if you only use Google sign-in on the website.';
+      case 'auth/admin-restricted-operation':
+      case 'auth/operation-not-allowed':
+        return 'This sign-in method is turned off in Firebase. Ask the owner to enable Email/Password (and Anonymous if you use guest mode) under Authentication → Sign-in methods.';
       case 'auth/too-many-requests':
         return 'Too many attempts. Wait a moment and try again.';
       default:

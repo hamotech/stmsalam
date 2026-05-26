@@ -3,10 +3,41 @@ const admin = require('firebase-admin');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { buildPublicTrackingFromOrder } = require('./mirrorPayload');
+const { getService } = require('./shared/bootstrap/functionBootstrap.cjs');
 
 admin.initializeApp();
+const IS_DEPLOY_MODE = String(process.env.FUNCTIONS_DEPLOY_MODE || '').toLowerCase() === 'true';
+if (!IS_DEPLOY_MODE) {
+  console.log('Functions loaded successfully with shared modules');
+}
+
+const performOrderTransition = (...args) =>
+  getService('orderTransitionService').performOrderTransition(...args);
+const createInitialOrderSnapshot = (...args) =>
+  getService('createOrderService').createInitialOrderSnapshot(...args);
+const checkRateLimit = (...args) =>
+  getService('rateLimiter').checkRateLimit(...args);
+const increment = (...args) =>
+  getService('rateLimiter').increment(...args);
+const assertProductionSecurityMode = (...args) =>
+  getService('appCheckGuard').assertProductionSecurityMode(...args);
+const enforceCallableAppCheck = (...args) =>
+  getService('appCheckGuard').enforceCallableAppCheck(...args);
+const getProcessedResult = (...args) =>
+  getService('idempotencyService').getProcessedResult(...args);
+const reserveKey = (...args) =>
+  getService('idempotencyService').reserveKey(...args);
+const completeKey = (...args) =>
+  getService('idempotencyService').completeKey(...args);
 
 const REGION = 'us-central1';
+
+/*
+ * Stripe Hosted Checkout contract (web + mobile Grab “stripe” rail):
+ *   Firestore `orders/{id}` MUST have `status: 'pending_payment'` before Cloud Run `createStripeCheckout`.
+ *   Shared builder: `buildPendingPaymentStripeOrderDocument` (used by createStripePendingOrder + createGrabOrder).
+ *   COD / QR (non-card) grab orders still use `buildOrderDocumentForSet` with legacy `status: 'PENDING'` until a full pipeline migration.
+ */
 const DEFAULT_ADMIN_UID = '9xMUEfOE4EhsDWTAo8d3NnE12Oh2';
 
 const IDEMPOTENCY_COLLECTION = 'order_idempotency';
@@ -15,6 +46,10 @@ const CHECKOUT_LEASE_TTL_MS = 45 * 60 * 1000;
 const MAX_CHECKOUT_FENCE_LEN = 128;
 const MAX_DEVICE_ID_LEN = 200;
 const MAX_IDEMPOTENCY_RAW_LEN = 4096;
+const RATE_LIMIT_UID_WINDOW_MS = 10 * 1000;
+const RATE_LIMIT_UID_MAX = 10;
+const RATE_LIMIT_IP_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_IP_MAX = 30;
 const CATEGORY_FOLDER_MAP = {
   snacks: 'snacks',
   'burgers-kebabs': 'BURGER_KABABAB',
@@ -60,6 +95,27 @@ function unwrapHttpsError(err) {
   if (err instanceof HttpsError) return err;
   if (err?.cause) return unwrapHttpsError(err.cause);
   return null;
+}
+
+async function enforceRateLimitOrThrow({
+  db,
+  key,
+  limit,
+  windowMs,
+  payload,
+  idemKey = null,
+  metadata = {},
+}) {
+  const pre = await checkRateLimit({ db, key, limit, windowMs });
+  if (!pre.allowed) {
+    if (idemKey) await completeKey({ db, key: idemKey, result: payload });
+    throw new HttpsError('resource-exhausted', payload.message, payload);
+  }
+  const post = await increment({ db, key, limit, windowMs, metadata });
+  if (!post.allowed) {
+    if (idemKey) await completeKey({ db, key: idemKey, result: payload });
+    throw new HttpsError('resource-exhausted', payload.message, payload);
+  }
 }
 
 function normalizeCategoryFolder(value) {
@@ -134,6 +190,24 @@ function coerceItemsOrThrow(items) {
   });
 }
 
+/**
+ * DTO sanitization for createGrabOrder:
+ * - clients must not control lifecycle fields (`status`, `paymentStatus`)
+ * - only normalized checkout input is passed downstream
+ */
+function sanitizeCreateGrabOrderInput(raw) {
+  const data = raw && typeof raw === 'object' ? raw : {};
+  return {
+    items: data.items,
+    totalAmount: data.totalAmount,
+    paymentMethod: data.paymentMethod,
+    paymentStatus: data.paymentStatus,
+    idempotencyKey: data.idempotencyKey,
+    checkoutFence: data.checkoutFence,
+    metaData: data.metaData,
+  };
+}
+
 function buildOrderDocumentForSet({
   uid,
   items,
@@ -141,25 +215,81 @@ function buildOrderDocumentForSet({
   normalizedMode,
   idempotencyKeyHash,
 }) {
-  const doc = {
+  const isCod = normalizedMode === 'COD';
+  const doc = createInitialOrderSnapshot({
     userId: uid,
     items,
     totalAmount,
-    paymentMode: normalizedMode,
     paymentMethod: normalizedMode,
     flow: 'grab',
-    orderStatus: 'PLACED',
     metaData: {},
-    paymentStatus: 'PENDING',
-    status: 'PENDING',
+    paymentStatus: isCod ? 'NOT_APPLICABLE' : 'PENDING',
+    status: 'placed',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
+  });
 
   if (idempotencyKeyHash) {
     doc.idempotencyKey = idempotencyKeyHash;
   }
 
   return doc;
+}
+
+
+
+/**
+ * ONE Firestore document shape for Stripe Hosted Checkout (web `createStripePendingOrder` OR mobile Grab rail).
+ * Cloud Run `createStripeCheckout` requires `status === 'pending_payment'` (no other status may open checkout).
+ */
+function buildPendingPaymentStripeOrderDocument({
+  uid,
+  items,
+  totalAmount,
+  normalizedMode,
+  idempotencyKeyHash,
+  customerName,
+  customerPhone,
+  mode,
+  notes,
+  address,
+  metaData,
+}) {
+  const phoneNorm = String(customerPhone || '')
+    .replace(/\s|-/g, '')
+    .trim()
+    .slice(0, 40);
+  const nameNorm = String(customerName || '').trim().slice(0, 200);
+  const modeNorm = mode === 'pickup' ? 'pickup' : 'delivery';
+  const meta =
+    metaData && typeof metaData === 'object' && Object.keys(metaData).length > 0
+      ? deepClean(metaData)
+      : {};
+
+  const doc = {
+    userId: uid,
+    items,
+    totalAmount,
+    paymentMethod: 'STRIPE',
+    flow: 'grab',
+    metaData: meta,
+    paymentStatus: 'PENDING',
+    status: 'pending_payment',
+    customerName: nameNorm,
+    customerPhone: phoneNorm,
+    mode: modeNorm,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+
+
+  if (notes) doc.notes = String(notes).slice(0, 2000);
+  if (address) doc.address = String(address).slice(0, 2000);
+
+  if (idempotencyKeyHash) {
+    doc.idempotencyKey = idempotencyKeyHash;
+  }
+
+  return createInitialOrderSnapshot(doc);
 }
 
 function buildStripePendingOrderDocument({
@@ -173,32 +303,66 @@ function buildStripePendingOrderDocument({
   mode,
   notes,
   address,
-}) {
-  const doc = {
-    userId: uid,
+  const pmo = 'stripe';
+  return buildPendingPaymentStripeOrderDocument({
+    uid,
     items,
     totalAmount,
-    paymentMode: normalizedMode,
-    paymentMethod: 'STRIPE',
-    flow: 'grab',
-    orderStatus: 'PENDING',
-    metaData: {},
-    paymentStatus: 'PENDING',
-    status: 'pending_payment',
+    normalizedMode,
+    idempotencyKeyHash,
     customerName: customerName || '',
     customerPhone: customerPhone || '',
     mode: mode === 'pickup' ? 'pickup' : 'delivery',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
+    notes,
+    address,
+    metaData: {},
+  });
+}
 
-  if (notes) doc.notes = String(notes).slice(0, 2000);
-  if (address) doc.address = String(address).slice(0, 2000);
+/**
+ * Mobile Grab checkout — Stripe Hosted only: customer + draft from `metaData` (must match web field semantics).
+ */
+function buildStripeHostedGrabOrderDocument({
+  uid,
+  items,
+  totalAmount,
+  normalizedMode,
+  idempotencyKeyHash,
+  meta,
+}) {
+  const m = meta && typeof meta === 'object' ? meta : {};
+  const c = m.customer && typeof m.customer === 'object' ? m.customer : {};
+  const customerName = String(c.name || '').trim().slice(0, 200);
+  const customerPhone = String(c.phone || '')
+    .replace(/\s|-/g, '')
+    .trim()
+    .slice(0, 40);
+  const mode = m.mode === 'pickup' || m.orderType === 'pickup' ? 'pickup' : 'delivery';
+  const address =
+    mode === 'delivery' ? String(c.address || '').trim().slice(0, 2000) : '';
+  const notes = c.notes != null ? String(c.notes).trim().slice(0, 2000) : '';
 
-  if (idempotencyKeyHash) {
-    doc.idempotencyKey = idempotencyKeyHash;
+  if (!customerName) {
+    throw new HttpsError('invalid-argument', 'Missing customer name for online card payment');
+  }
+  if (!customerPhone) {
+    throw new HttpsError('invalid-argument', 'Missing customer phone for online card payment');
   }
 
-  return doc;
+  return buildPendingPaymentStripeOrderDocument({
+    uid,
+    items,
+    totalAmount,
+    normalizedMode,
+    idempotencyKeyHash,
+    customerName,
+    customerPhone,
+    mode,
+    notes,
+    address,
+    metaData: m,
+
+  });
 }
 
 /* -------------------- FUNCTIONS -------------------- */
@@ -206,9 +370,11 @@ function buildStripePendingOrderDocument({
 exports.createGrabOrder = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'createGrabOrder');
     console.log('[CF] START createGrabOrder');
 
-    const data = request.data || {};
+    const data = sanitizeCreateGrabOrderInput(request.data);
     let traceId = '';
 
     try {
@@ -218,29 +384,32 @@ exports.createGrabOrder = onCall(
       }
 
       traceId = `${uid}-${Date.now()}`;
-
-      console.log('[CREATE ORDER RAW INPUT]', JSON.stringify(data));
-
-      const paymentModeKey = String(data.paymentMode ?? '').trim().toUpperCase();
-      const PAYMENT_ALIASES = {
-        CASH: 'COD',
-        COD: 'COD',
-        PAYNOW: 'ONLINE',
-        CARD: 'ONLINE',
-        STRIPE: 'ONLINE',
-        PAYPAL: 'ONLINE',
-        SCANPAY: 'ONLINE',
-        QR: 'ONLINE',
-        PHONE: 'ONLINE',
-        ONLINE: 'ONLINE',
+      const ip = String(request?.rawRequest?.ip || '').trim() || 'unknown';
+      const db = admin.firestore();
+      const createGrabRatePayload = {
+        code: 'RATE_LIMITED',
+        message: 'Too many createGrabOrder requests',
+        debug: { from: null, to: null, actor: 'customer' },
       };
-      const normalizedMode = PAYMENT_ALIASES[paymentModeKey];
-      if (!normalizedMode) {
-        throw new HttpsError(
-          'invalid-argument',
-          `Invalid payment mode: ${paymentModeKey || '(empty)'}`
-        );
-      }
+      await enforceRateLimitOrThrow({
+        db,
+        key: `createGrabOrder:uid:${uid}`,
+        limit: RATE_LIMIT_UID_MAX,
+        windowMs: RATE_LIMIT_UID_WINDOW_MS,
+        payload: createGrabRatePayload,
+        metadata: { functionName: 'createGrabOrder', scope: 'uid', uid, ip },
+      });
+      await enforceRateLimitOrThrow({
+        db,
+        key: `createGrabOrder:ip:${ip}`,
+        limit: RATE_LIMIT_IP_MAX,
+        windowMs: RATE_LIMIT_IP_WINDOW_MS,
+        payload: createGrabRatePayload,
+        metadata: { functionName: 'createGrabOrder', scope: 'ip', uid, ip },
+      });
+
+      const pmRaw = String(data.paymentMethod || "ONLINE").trim().toUpperCase() || "ONLINE";
+      const normalizedMode = pmRaw;
 
       const items = coerceItemsOrThrow(data.items);
 
@@ -263,35 +432,51 @@ exports.createGrabOrder = onCall(
 
       console.log('[CF][VALIDATION OK]', { totalAmount, count: items.length });
 
+
+      // Contract: createGrabOrder persists canonical non-stripe lifecycle only.
+      // Stripe-specific pending-payment lifecycle is handled exclusively by
+      // `createStripePendingOrder` + `createStripeCheckout`.
+      const useStripeHostedCheckout = false;
+
       /* -------- IDEMPOTENCY -------- */
 
       let hash = null;
 
       if (data.idempotencyKey) {
-  rmalizeIdempotencyKeyInput(data.idempotencyKey);
+        const normalized = normalizeIdempotencyKeyInput(data.idempotencyKey);
         if (!normalized || normalized.length > MAX_IDEMPOTENCY_RAW_LEN) {
           throw new HttpsError('invalid-argument', 'Invalid idempotencyKey');
         }
         hash = sha256HexUtf8(normalized);
       }
 
-      const db = admin.firestore();
       let orderId;
+
+      const buildResolvedOrderDoc = (idemHash) =>
+        deepClean(
+          buildOrderDocumentForSet({
+            uid,
+            items,
+            totalAmount,
+            normalizedMode,
+            idempotencyKeyHash: idemHash,
+          })
+        );
+      const logOrderStateForSave = (orderDoc) => {
+        console.log('[CREATE ORDER STATE BEFORE SAVE]', {
+          status: orderDoc?.status ?? null,
+          paymentStatus: orderDoc?.paymentStatus ?? null,
+          paymentMethod: orderDoc?.paymentMethod ?? null,
+        });
+      };
 
       /* -------- TRANSACTION PATH -------- */
 
       if (hash) {
         const idemRef = db.doc(`${IDEMPOTENCY_COLLECTION}/${uid}_${hash}`);
 
-        const orderDoc = deepClean(
-          buildOrderDocumentForSet({
-            uid,
-            items,
-            totalAmount,
-            normalizedMode,
-            idempotencyKeyHash: hash,
-          })
-        );
+        const orderDoc = buildResolvedOrderDoc(hash);
+        logOrderStateForSave(orderDoc);
 
         const result = await db.runTransaction(async (tx) => {
           const snap = await tx.get(idemRef);
@@ -316,15 +501,8 @@ exports.createGrabOrder = onCall(
       } else {
         /* -------- SIMPLE WRITE -------- */
 
-        const orderDoc = deepClean(
-          buildOrderDocumentForSet({
-            uid,
-            items,
-            totalAmount,
-            normalizedMode,
-            idempotencyKeyHash: null,
-          })
-        );
+        const orderDoc = buildResolvedOrderDoc(null);
+        logOrderStateForSave(orderDoc);
 
         const ref = db.collection('orders').doc();
         await ref.set(orderDoc);
@@ -336,7 +514,21 @@ exports.createGrabOrder = onCall(
         throw new HttpsError('internal', 'Order creation failed');
       }
 
-      console.log('[CREATE ORDER SUCCESS]', { orderId, traceId });
+      if (normalizedMode === 'COD' && useStripeHostedCheckout) {
+        throw new HttpsError(
+          'internal',
+          'Invariant violation: COD must not use Stripe hosted checkout document shape'
+        );
+      }
+
+      console.log('[CREATE ORDER SUCCESS]', {
+        orderId,
+        traceId,
+        paymentMode: normalizedMode,
+
+        useStripeHostedCheckout,
+        committedPath: 'grab_non_stripe',
+      });
       console.log('[CF][SUCCESS]', orderId);
 
       return { success: true, orderId };
@@ -356,6 +548,8 @@ exports.createGrabOrder = onCall(
 exports.createStripePendingOrder = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'createStripePendingOrder');
     console.log('[CF] START createStripePendingOrder');
 
     const data = request.data || {};
@@ -414,8 +608,10 @@ exports.createStripePendingOrder = onCall(
       const db = admin.firestore();
       let orderId;
 
+      const pmoWeb = 'stripe';
+
       const orderDoc = deepClean(
-        buildStripePendingOrderDocument({
+        buildPendingPaymentStripeOrderDocument({
           uid,
           items,
           totalAmount,
@@ -426,6 +622,7 @@ exports.createStripePendingOrder = onCall(
           mode,
           notes,
           address,
+          paymentMethod: 'STRIPE',
         })
       );
 
@@ -518,11 +715,62 @@ exports.syncOrderUpdatesToPublicTracking = onDocumentUpdated(
   }
 );
 
+exports.auditOrderLifecycleWrites = onDocumentUpdated(
+  { region: REGION, document: 'orders/{orderId}' },
+  async (event) => {
+    const before = event.data?.before?.data() || {};
+    const after = event.data?.after?.data() || {};
+    const orderId = String(event.params?.orderId || '').trim();
+    if (!orderId) return;
+
+    const normalize = (v) => String(v ?? '').trim().toUpperCase();
+    const normalizeStatus = (v) => String(v ?? '').trim().toLowerCase();
+
+    const beforeState = {
+      status: normalizeStatus(before.status),
+      paymentStatus: normalize(before.paymentStatus),
+      paymentMethod: normalize(before.paymentMethod),
+    };
+    const afterState = {
+      status: normalizeStatus(after.status),
+      paymentStatus: normalize(after.paymentStatus),
+      paymentMethod: normalize(after.paymentMethod),
+    };
+
+    const lifecycleChanged =
+      beforeState.status !== afterState.status ||
+      beforeState.paymentStatus !== afterState.paymentStatus ||
+      beforeState.paymentMethod !== afterState.paymentMethod;
+    if (!lifecycleChanged) return;
+
+    const likelyFsmWrite =
+      String(before.lastTransitionId || '').trim() !== String(after.lastTransitionId || '').trim() &&
+      String(after.lastTransitionId || '').trim() !== '';
+    if (likelyFsmWrite) return;
+
+    console.trace('ORDER WRITE SOURCE');
+    console.error('[FSM AUDIT] lifecycle write outside FSM context detected', {
+      orderId,
+      before: beforeState,
+      after: afterState,
+      source: {
+        lastTransitionId: after.lastTransitionId || null,
+        lastTransitionKey: after.lastTransitionKey || null,
+        updatedBy: after.updatedBy || null,
+        source: after.source || null,
+      },
+      message: 'FSM VIOLATION: direct lifecycle write blocked',
+    });
+  }
+);
+
 /* -------------------- ADMIN MAINTENANCE -------------------- */
 
 exports.repairProductImages = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'repairProductImages');
     const uid = request.auth?.uid;
     if (!uid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -585,6 +833,8 @@ exports.repairProductImages = onCall(
 exports.makeUserAdmin = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'makeUserAdmin');
     const callerUid = request.auth?.uid;
     if (!callerUid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -621,6 +871,8 @@ exports.makeUserAdmin = onCall(
 exports.deleteCustomerAccount = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'deleteCustomerAccount');
     const callerUid = request.auth?.uid;
     if (!callerUid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -653,6 +905,8 @@ exports.deleteCustomerAccount = onCall(
 exports.deleteOrderByAdmin = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'deleteOrderByAdmin');
     const callerUid = request.auth?.uid;
     if (!callerUid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -682,6 +936,8 @@ exports.deleteOrderByAdmin = onCall(
 exports.migrateProductImagePaths = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'migrateProductImagePaths');
     const callerUid = request.auth?.uid;
     if (!callerUid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -745,6 +1001,119 @@ exports.migrateProductImagePaths = onCall(
 
     console.log('[migrateProductImagePaths] summary:', summary);
     return summary;
+  }
+);
+
+exports.transitionOrderStatus = onCall(
+  { region: REGION, invoker: 'public' },
+  async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'transitionOrderStatus');
+    const uid = request?.auth?.uid || null;
+    if (!uid) throw new HttpsError('unauthenticated', 'Auth required');
+
+    const orderId = String(request?.data?.orderId || '').trim();
+    const nextStatus = String(request?.data?.nextStatus || '').trim();
+    const metadataIn =
+      request?.data?.metadata && typeof request.data.metadata === 'object'
+        ? request.data.metadata
+        : {};
+    const requestId =
+      String(request?.data?.requestId || metadataIn.requestId || '').trim() ||
+      `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    if (!orderId || !nextStatus) {
+      throw new HttpsError('invalid-argument', 'orderId and nextStatus are required');
+    }
+    const toStatusNorm = String(nextStatus || '').trim().toLowerCase();
+    const statusToEventMap = {
+      placed: 'ORDER_ACCEPTED',
+      preparing: 'ORDER_PREPARING',
+      ready_for_pickup: 'ORDER_READY_FOR_PICKUP',
+      out_for_delivery: 'ORDER_OUT_FOR_DELIVERY',
+      delivered: 'ORDER_DELIVERED',
+      cancelled: 'ORDER_CANCELLED',
+    };
+    const mappedEventType = statusToEventMap[toStatusNorm] || '';
+    if (!mappedEventType) {
+      throw new HttpsError(
+        'invalid-argument',
+        `Unsupported transition target "${toStatusNorm || '(empty)'}". Use one of: ${Object.keys(statusToEventMap).join(', ')}`
+      );
+    }
+    const transitionEvent = { type: mappedEventType };
+
+    const userSnap = await admin.firestore().doc(`users/${uid}`).get();
+    const role = String(userSnap.data()?.role || '').toLowerCase();
+    const actor = role === 'admin' ? 'admin' : role === 'rider' ? 'rider' : 'system';
+    const db = admin.firestore();
+    const ip = String(request?.rawRequest?.ip || '').trim() || 'unknown';
+
+    const idemKey = `transition:${requestId}`;
+    const cached = await getProcessedResult({ db, key: idemKey });
+    if (cached) return cached;
+
+    const reserved = await reserveKey({
+      db,
+      key: idemKey,
+      metadata: { kind: 'transitionOrderStatus', uid, orderId, actor, requestId },
+    });
+    if (!reserved.reserved && reserved.result) return reserved.result;
+
+    const rateLimitPayload = {
+      code: 'RATE_LIMITED',
+      message: 'Too many transition requests',
+      debug: { from: null, to: nextStatus, actor },
+    };
+    await enforceRateLimitOrThrow({
+      db,
+      key: `transitionOrderStatus:uid:${uid}`,
+      limit: RATE_LIMIT_UID_MAX,
+      windowMs: RATE_LIMIT_UID_WINDOW_MS,
+      payload: rateLimitPayload,
+      idemKey,
+      metadata: { functionName: 'transitionOrderStatus', scope: 'uid', uid, ip, orderId, actor, requestId },
+    });
+    await enforceRateLimitOrThrow({
+      db,
+      key: `transitionOrderStatus:ip:${ip}`,
+      limit: RATE_LIMIT_IP_MAX,
+      windowMs: RATE_LIMIT_IP_WINDOW_MS,
+      payload: rateLimitPayload,
+      idemKey,
+      metadata: { functionName: 'transitionOrderStatus', scope: 'ip', uid, ip, orderId, actor, requestId },
+    });
+
+    try {
+      const result = await performOrderTransition({
+        db,
+        orderRef: db.doc(`orders/${orderId}`),
+        actor,
+        actorUid: uid,
+        event: transitionEvent,
+        metadata: { source: 'transitionOrderStatus', requestId, transitionEvent, ...metadataIn },
+      });
+      const out = { ok: true, ...result };
+      await completeKey({ db, key: idemKey, result: out });
+      return out;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Transition failed';
+      const debug = e && typeof e === 'object' && e.debug ? e.debug : { from: null, to: nextStatus, actor };
+      const code =
+        e && typeof e === 'object' && e.code
+          ? e.code
+          : msg.includes('Unauthorized')
+            ? 'UNAUTHORIZED'
+            : msg.includes('Stale')
+              ? 'STALE_STATE'
+              : 'INVALID_TRANSITION';
+      const payload = {
+        code,
+        message: msg,
+        debug,
+      };
+      await completeKey({ db, key: idemKey, result: payload });
+      throw new HttpsError('failed-precondition', msg, payload);
+    }
   }
 );
 

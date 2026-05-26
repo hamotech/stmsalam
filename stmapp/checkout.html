@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Checkout your STM Salam order â€” choose delivery or pickup, enter your details, and pay securely." />
+  <title>Checkout â€” STM Salam</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- ══ SPLASH FAILSAFE ══ -->
+  <script>
+    (function(){function h(){var s=document.getElementById('splash-screen');if(!s)return;s.classList.add('hidden');s.style.cssText='opacity:0;visibility:hidden;pointer-events:none;';setTimeout(function(){s.style.display='none';if(s.parentNode)s.parentNode.removeChild(s);},600);}setTimeout(h,3000);document.addEventListener('DOMContentLoaded',function(){setTimeout(h,1800);});window.addEventListener('error',function(){setTimeout(h,500);});})();
+  </script>
+</head>
+<body style="padding-bottom:0">
+
+<!-- â•â• TOAST â•â• -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- â•â• APP HEADER â•â• -->
+<header class="app-header">
+  <div class="app-header-logo">
+    <a href="menu.html" class="icon-btn" style="margin-right:4px" title="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="brand-name">Finalise Order</div>
+      <div class="location-pill">Secure Checkout</div>
+    </div>
+  </div>
+  <div class="app-header-actions">
+    <a href="index.html" class="icon-btn" title="Home">
+      <img src="../stmsalamlogo.png" alt="" style="width:24px;height:24px;border-radius:6px;object-fit:contain" />
+    </a>
+  </div>
+</header>
+
+<!-- â•â• EMPTY CART STATE â•â• -->
+<div id="empty-checkout" style="display:none;min-height:80vh;display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center">
+  <div style="font-size:64px;margin-bottom:20px">✅</div>
+  <div style="font-size:22px;font-weight:900;color:#0D1B0F;margin-bottom:10px">Your cart is empty</div>
+  <div style="font-size:14px;font-weight:500;color:#6B7280;margin-bottom:28px;line-height:1.6">Add some delicious items from our menu to start your order.</div>
+  <a href="menu.html" class="cta-btn">🍽️ Browse Menu</a>
+</div>
+
+<!-- â•â• CHECKOUT CONTENT â•â• -->
+<div id="checkout-content" style="padding-bottom:160px;display:none">
+
+  <!-- Progress Steps -->
+  <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;background:white;border-bottom:1px solid #E5E7EB">
+    <div id="step-1-indicator" style="display:flex;align-items:center;gap:5px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#013220;color:white;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center">1</div>
+      <span style="font-size:12px;font-weight:800;color:#013220">Order</span>
+    </div>
+    <div style="width:24px;height:2px;background:#E5E7EB;border-radius:999px"></div>
+    <div id="step-2-indicator" style="display:flex;align-items:center;gap:5px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#E5E7EB;color:#9CA3AF;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center">2</div>
+      <span style="font-size:12px;font-weight:700;color:#9CA3AF">Details</span>
+    </div>
+    <div style="width:24px;height:2px;background:#E5E7EB;border-radius:999px"></div>
+    <div id="step-3-indicator" style="display:flex;align-items:center;gap:5px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#E5E7EB;color:#9CA3AF;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center">3</div>
+      <span style="font-size:12px;font-weight:700;color:#9CA3AF">Pay</span>
+    </div>
+  </div>
+
+  <!-- 1. Order Summary -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">1</span> Order Summary
+    </div>
+    <div id="order-items-list"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid #E5E7EB">
+      <span style="font-size:13px;font-weight:700;color:#6B7280">Items Subtotal</span>
+      <span style="font-size:14px;font-weight:900;color:#013220" id="items-subtotal">SGD 0.00</span>
+    </div>
+    <a href="menu.html" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px;padding:10px;border-radius:12px;background:#F3F4F6;color:#013220;font-size:13px;font-weight:800;text-decoration:none">
+      + Add More Items
+    </a>
+  </div>
+
+  <!-- 2. Delivery / Pickup Toggle -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">2</span> Order Type
+    </div>
+    <div class="delivery-toggle">
+      <button class="delivery-opt active" id="opt-delivery" onclick="setMode('delivery')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        <span class="delivery-opt-label">Delivery</span>
+        <span style="font-size:10px;font-weight:700;color:#6B7280">25â€“35 min</span>
+      </button>
+      <button class="delivery-opt" id="opt-pickup" onclick="setMode('pickup')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="delivery-opt-label">Pickup</span>
+        <span style="font-size:10px;font-weight:700;color:#6B7280">Free</span>
+      </button>
+    </div>
+    <div id="mode-info" style="font-size:12px;font-weight:600;color:#6B7280;background:#F9FAFB;padding:10px 12px;border-radius:12px;line-height:1.6;border:1px dashed #E5E7EB">
+      Free delivery: min SGD 10 &amp; within 5km. Otherwise SGD 2.00 delivery fee.
+    </div>
+  </div>
+
+  <!-- 3. Your Details -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">3</span> Your Details
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="inp-name">Full Name *</label>
+      <input class="form-input" id="inp-name" name="name" type="text" placeholder="e.g. Ahmad bin Ali" autocomplete="name" />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="inp-phone">Phone Number *</label>
+      <input class="form-input" id="inp-phone" name="phone" type="tel" placeholder="e.g. 91234567" autocomplete="tel" />
+    </div>
+    <div id="address-group" class="form-group">
+      <label class="form-label" for="inp-address">Delivery Address *</label>
+      <div style="position:relative">
+        <textarea class="form-input" id="inp-address" name="address" rows="2" placeholder="Block/unit, street, postal code (e.g. Blk 55 Marine Terrace #01-303 S440055)" style="resize:none;padding-right:90px"></textarea>
+        <button type="button" onclick="detectLocation()" id="detect-btn" style="position:absolute;top:10px;right:8px;background:#013220;color:white;border:none;padding:6px 10px;border-radius:10px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap">
+          📍 Detect
+        </button>
+      </div>
+      <div id="distance-info" style="font-size:11px;font-weight:700;color:#059669;margin-top:6px;display:none"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="inp-notes">Special Notes</label>
+      <textarea class="form-input" id="inp-notes" name="notes" rows="2" placeholder="Any special requests? (e.g. less sugar, extra spicy)" style="resize:none"></textarea>
+    </div>
+  </div>
+
+  <!-- 4. Promo Code -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">4</span> Promo Code
+    </div>
+    <div class="promo-input-row">
+      <input class="promo-input" type="text" id="promo-input" placeholder="STMSALAM2" maxlength="20" />
+      <button class="apply-btn" onclick="applyPromo()">Apply</button>
+    </div>
+    <div id="promo-result" style="margin-top:8px;font-size:12px;font-weight:700;display:none"></div>
+  </div>
+
+  <!-- 5. Payment Method -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">5</span> Payment Method
+    </div>
+    <div class="payment-options" id="payment-options">
+      <div class="payment-card selected" data-method="paynow" onclick="selectPayment('paynow')">
+        <div class="payment-icon" style="background:rgba(79,70,229,0.08)">📲</div>
+        <div class="payment-card-info">
+          <div class="payment-name">PayNow SGQR</div>
+          <div class="payment-desc">Scan QR with banking app Â· Instant</div>
+        </div>
+        <div class="payment-check"></div>
+      </div>
+      <div class="payment-card" data-method="stripe" onclick="selectPayment('stripe')">
+        <div class="payment-icon" style="background:rgba(99,102,241,0.08)">💳</div>
+        <div class="payment-card-info">
+          <div class="payment-name">Card (Stripe)</div>
+          <div class="payment-desc">Visa, Mastercard, Amex Â· Secure</div>
+        </div>
+        <div class="payment-check"></div>
+      </div>
+      <div class="payment-card" data-method="paypal" onclick="selectPayment('paypal')">
+        <div class="payment-icon" style="background:rgba(0,112,201,0.08)">💬</div>
+        <div class="payment-card-info">
+          <div class="payment-name">PayPal</div>
+          <div class="payment-desc">Pay via PayPal account</div>
+        </div>
+        <div class="payment-check"></div>
+      </div>
+      <div class="payment-card" data-method="cash" onclick="selectPayment('cash')">
+        <div class="payment-icon" style="background:rgba(22,163,74,0.08)">💵</div>
+        <div class="payment-card-info">
+          <div class="payment-name">Cash on Delivery</div>
+          <div class="payment-desc">Pay cash upon delivery Â· Pickup only</div>
+        </div>
+        <div class="payment-check"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Price Summary -->
+  <div class="checkout-section">
+    <div class="checkout-section-title">
+      <span class="checkout-step-num">6</span> Price Summary
+    </div>
+    <div class="price-summary">
+      <div class="price-row"><span>Subtotal</span><span id="summary-subtotal">SGD 0.00</span></div>
+      <div class="price-row"><span>Delivery Fee</span><span id="summary-delivery" class="free">Free</span></div>
+      <div class="price-row" id="promo-row" style="display:none;color:#16a34a"><span>Promo (STMSALAM2)</span><span id="summary-promo">−SGD 2.00</span></div>
+      <div class="price-row total"><span>Total</span><span id="summary-total" style="color:#013220">SGD 0.00</span></div>
+    </div>
+  </div>
+
+  <!-- Outlet Info -->
+  <div class="checkout-section" style="background:#F9FAFB">
+    <div style="font-size:12px;font-weight:900;color:#013220;margin-bottom:6px">📍 Ordering from</div>
+    <div style="font-size:13px;font-weight:700;color:#374151">STM Salam â€” Blk 50A</div>
+    <div style="font-size:12px;font-weight:500;color:#6B7280;margin-top:2px">Blk 50A Marine Terrace, #01-303, Singapore 441050</div>
+    <div style="font-size:12px;font-weight:500;color:#6B7280;margin-top:2px">⏰ Daily 9:00 AM â€“ 11:00 PM</div>
+  </div>
+
+</div>
+
+<!-- â• â•  CHECKOUT FOOTER â• â•  -->
+<div class="checkout-footer" id="checkout-footer" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <span style="font-size:12px;font-weight:700;color:#6B7280">Total to pay</span>
+    <span style="font-size:18px;font-weight:900;color:#013220" id="footer-total">SGD 0.00</span>
+  </div>
+  <button class="checkout-submit" id="checkout-submit-btn" onclick="placeOrder()">
+    🛒 Place Order
+  </button>
+</div>
+
+<!-- â• â•  PAYNOW CONFIRMATION DRAWER â• â•  -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeAllDrawers()"></div>
+<div class="drawer" id="paynow-confirm-drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <span class="drawer-title">📲 Complete PayNow Payment</span>
+    <button class="drawer-close" onclick="closeAllDrawers()">âœ•</button>
+  </div>
+  <div style="padding:20px;text-align:center">
+    <div style="background:#f8fafc;border-radius:18px;padding:20px;border:2px solid #E5E7EB;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:800;color:#013220;margin-bottom:12px">Step 1: Scan this QR with your banking app</div>
+      <div style="width:160px;height:160px;background:white;margin:0 auto;border-radius:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.06);border:1px solid #f1f5f9">
+        <div style="text-align:center;padding:16px">
+          <div style="font-size:40px;margin-bottom:8px">💳</div>
+          <a href="../frontend/public/scanner-pay.pdf" target="_blank" rel="noreferrer" style="font-size:11px;font-weight:800;color:#059669">Open QR PDF 🤝—</a>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#6B7280;font-weight:700">PayNow: <span style="color:#013220;font-weight:900">+65 9191 5766</span></div>
+      <div style="margin-top:8px;font-size:13px;font-weight:700;color:#374151">Amount: <span id="paynow-amount" style="color:#013220;font-weight:900">SGD 0.00</span></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#6B7280;margin-bottom:16px;line-height:1.6">
+      Step 2: After paying, tap <strong style="color:#013220">"I Have Paid"</strong> to send your screenshot via WhatsApp for verification.
+    </div>
+    <button onclick="confirmPayment()" style="width:100%;padding:16px;border-radius:14px;background:#D4AF37;color:#013220;border:none;font-size:15px;font-weight:900;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px">
+      âœ… I Have Paid â€” Send Screenshot
+    </button>
+    <button onclick="closeAllDrawers()" style="width:100%;padding:13px;border-radius:14px;border:1.5px solid #E5E7EB;background:transparent;color:#6B7280;font-size:14px;font-weight:800;cursor:pointer">
+      Cancel
+    </button>
+  </div>
+</div>
+
+<!-- â•â• BOTTOM NAVIGATION â•â• -->
+<nav class="bottom-nav">
+  <a href="index.html" class="nav-item" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home<span class="nav-dot"></span></a>
+  <a href="menu.html" class="nav-item" data-page="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Menu<span class="nav-dot"></span></a>
+  <a href="orders.html" class="nav-item" data-page="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>Orders<span class="nav-dot"></span></a>
+  <a href="support.html" class="nav-item" data-page="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Support<span class="nav-dot"></span></a>
+  <a href="profile.html" class="nav-item" data-page="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile<span class="nav-dot"></span></a>
+</nav>
+
+<script src="js/app.js"></script>
+<script>
+  const { SHOP_INFO, Cart, showToast, openDrawer, closeAllDrawers } = window.STMApp;
+
+  let selectedPayment = 'paynow';
+  let selectedMode = 'delivery';
+  let promoApplied = false;
+  let promoDiscount = 0;
+
+  const VALID_PROMOS = { 'STMSALAM2': { discount: 2.00, label: '$2 OFF' } };
+
+  /* â”€â”€ Init â”€â”€ */
+  function init() {
+    const items = Cart.getItems();
+    const emptyEl = document.getElementById('empty-checkout');
+    const contentEl = document.getElementById('checkout-content');
+    const footerEl = document.getElementById('checkout-footer');
+
+    if (items.length === 0) {
+      emptyEl.style.display = 'flex';
+      contentEl.style.display = 'none';
+      footerEl.style.display = 'none';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    contentEl.style.display = 'block';
+    footerEl.style.display = 'block';
+
+    renderOrderItems(items);
+    updateSummary();
+  }
+
+  function renderOrderItems(items) {
+    const list = document.getElementById('order-items-list');
+    list.innerHTML = items.map(item => `
+      <div class="checkout-item">
+        <div class="checkout-item-qty">${item.qty}</div>
+        <span class="checkout-item-name">${item.name}</span>
+        <span class="checkout-item-price">SGD ${(item.price * item.qty).toFixed(2)}</span>
+      </div>`).join('');
+    document.getElementById('items-subtotal').textContent = `SGD ${Cart.getSubtotal().toFixed(2)}`;
+  }
+
+  function updateSummary() {
+    const subtotal = Cart.getSubtotal();
+    const deliveryFee = selectedMode === 'delivery' && subtotal < SHOP_INFO.minOrderFreeDelivery
+      ? SHOP_INFO.deliveryFee : 0;
+    const discount = promoApplied ? promoDiscount : 0;
+    const total = Math.max(0, subtotal + deliveryFee - discount);
+
+    document.getElementById('summary-subtotal').textContent = `SGD ${subtotal.toFixed(2)}`;
+    document.getElementById('summary-delivery').textContent =
+      selectedMode === 'pickup' ? 'FREE (Pickup)' :
+      deliveryFee === 0 ? 'FREE' : `SGD ${deliveryFee.toFixed(2)}`;
+    document.getElementById('summary-delivery').className = deliveryFee === 0 ? 'free' : '';
+    document.getElementById('summary-total').textContent = `SGD ${total.toFixed(2)}`;
+    document.getElementById('footer-total').textContent = `SGD ${total.toFixed(2)}`;
+    document.getElementById('paynow-amount').textContent = `SGD ${total.toFixed(2)}`;
+  }
+
+  function setMode(mode) {
+    selectedMode = mode;
+    document.getElementById('opt-delivery').classList.toggle('active', mode === 'delivery');
+    document.getElementById('opt-pickup').classList.toggle('active', mode === 'pickup');
+    document.getElementById('address-group').style.display = mode === 'delivery' ? 'block' : 'none';
+    document.getElementById('mode-info').textContent = mode === 'delivery'
+      ? `Free delivery: min SGD ${SHOP_INFO.minOrderFreeDelivery} & within ${SHOP_INFO.freeDeliveryRadiusKm}km. Otherwise SGD ${SHOP_INFO.deliveryFee.toFixed(2)} fee.`
+      : `Collect from STM Salam â€” Blk 50A Marine Terrace, #01-3  async function applyPromo() {
+    const code = document.getElementById('promo-input').value.trim().toUpperCase();
+    const resultEl = document.getElementById('promo-result');
+    const promoRow = document.getElementById('promo-row');
+    const subtotal = Cart.getSubtotal();
+
+    try {
+      const data = await STMApp.API.validatePromo(code, subtotal);
+      promoApplied = true;
+      promoDiscount = data.discountValue;
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#16a34a';
+      resultEl.textContent = `✅ Promo applied! SGD ${promoDiscount.toFixed(2)} OFF`;
+      promoRow.style.display = 'flex';
+      document.getElementById('summary-promo').textContent = `−SGD ${promoDiscount.toFixed(2)}`;
+      updateSummary();
+      showToast('Promo code applied! 🎉', 'success');
+    } catch (err) {
+      promoApplied = false;
+      promoDiscount = 0;
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#dc2626';
+      resultEl.textContent = `❌ ${err.message || 'Invalid promo code'}`;
+      promoRow.style.display = 'none';
+      updateSummary();
+    }
+  }
+
+  async function detectLocation() {
+    const btn = document.getElementById('detect-btn');
+    if (!navigator.geolocation) { showToast('Geolocation not supported', 'error'); return; }
+    btn.textContent = '...';
+    btn.disabled = true;
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&addressdetails=1`, { headers: { 'User-Agent': 'STMSalamApp' } });
+          const data = await res.json();
+          document.getElementById('inp-address').value = data.display_name || `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+          showToast('Location detected! ✅', 'success');
+        } catch {
+          document.getElementById('inp-address').value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+        }
+        btn.textContent = '📍 Detect';
+        btn.disabled = false;
+      },
+      () => { showToast('Could not detect location', 'error'); btn.textContent = '📍 Detect'; btn.disabled = false; },
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  }
+
+  async function placeOrder() {
+    const name = document.getElementById('inp-name').value.trim();
+    const phone = document.getElementById('inp-phone').value.trim();
+    const address = document.getElementById('inp-address').value.trim();
+    const notes = document.getElementById('inp-notes').value.trim();
+
+    if (!name) { showToast('Please enter your name', 'error'); document.getElementById('inp-name').focus(); return; }
+    if (!phone) { showToast('Please enter your phone number', 'error'); document.getElementById('inp-phone').focus(); return; }
+    if (selectedMode === 'delivery' && !address) { showToast('Please enter your delivery address', 'error'); document.getElementById('inp-address').focus(); return; }
+
+    const items = Cart.getItems();
+    const subtotal = Cart.getSubtotal();
+    const deliveryFee = selectedMode === 'delivery' && subtotal < SHOP_INFO.minOrderFreeDelivery ? SHOP_INFO.deliveryFee : 0;
+    const discount = promoApplied ? promoDiscount : 0;
+    const total = Math.max(0, subtotal + deliveryFee - discount);
+
+    if (total < SHOP_INFO.minOrderDelivery && selectedMode === 'delivery') {
+      showToast(`Minimum order for delivery is SGD ${SHOP_INFO.minOrderDelivery.toFixed(2)}`, 'error');
+      return;
+    }
+
+    const customerEmail = localStorage.getItem('stmapp_customer_email') || 'customer@stmsalam.sg';
+
+    // Build standard database object schema parameters
+    const orderPayload = {
+      customer: {
+        name,
+        email: customerEmail,
+        phone,
+        address: selectedMode === 'delivery' ? address : SHOP_INFO.outletAddress
+      },
+      items: items.map(i => ({
+        productId: i.id,
+        name: i.name,
+        price: i.price,
+        qty: i.qty
+      })),
+      subtotal,
+      deliveryFee,
+      discount,
+      total,
+      mode: selectedMode,
+      payment: {
+        method: selectedPayment,
+        status: 'pending'
+      },
+      notes
+    };
+
+    showToast('Placing order...', 'default');
+    
+    // Call Node/Express live API order placement endpoint
+    const response = await STMApp.API.placeOrder(orderPayload);
+    
+    if (response && response.success) {
+      const orderId = response.orderId;
+      const order = {
+        id: orderId,
+        items,
+        subtotal,
+        deliveryFee,
+        discount,
+        total,
+        payment: selectedPayment,
+        mode: selectedMode,
+        name,
+        phone,
+        address: selectedMode === 'delivery' ? address : SHOP_INFO.outletAddress,
+        notes,
+        status: 'placed',
+        createdAt: new Date().toISOString(),
+      };
+
+      const savedOrders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+      savedOrders.unshift(order);
+      localStorage.setItem('stmapp_orders', JSON.stringify(savedOrders));
+      localStorage.setItem('stm_last_order_id', orderId);
+
+      if (selectedPayment === 'paynow') {
+        openDrawer('paynow-confirm-drawer');
+      } else {
+        const msg = buildWhatsAppMsg(order, selectedPayment === 'cash' ? 'Cash on Delivery' : selectedPayment.toUpperCase());
+        window.open(`https://wa.me/${SHOP_INFO.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+        finalize(order);
+      }
+    } else {
+      showToast('Order placement failed. Check connection.', 'error');
+    }
+  }
+
+  function buildWhatsAppMsg(order, method) {
+    const itemLines = order.items.map(i => `• ${i.name} x${i.qty} — SGD ${(i.price*i.qty).toFixed(2)}`).join('\n');
+    return `*New STM Salam Order* 🛍️\n\nOrder ID: ${order.id}\nCustomer: ${order.name}\nPhone: ${order.phone}\n\n*Items:*\n${itemLines}\n\n*Subtotal: SGD ${order.subtotal.toFixed(2)}*\nDelivery: ${order.deliveryFee > 0 ? `SGD ${order.deliveryFee.toFixed(2)}` : 'FREE'}\n*TOTAL: SGD ${order.total.toFixed(2)}*\n\nPayment: ${method}\nType: ${order.mode === 'delivery' ? 'Delivery' : 'Pickup'}\n${order.mode === 'delivery' ? `Address: ${order.address}` : 'Pickup at store'}\n${order.notes ? `Notes: ${order.notes}` : ''}`;
+  }
+
+  function confirmPayment() {
+    const savedOrders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+    const order = savedOrders[0];
+    if (!order) return;
+    const msg = buildWhatsAppMsg(order, 'PayNow SGQR');
+    window.open(`https://wa.me/${SHOP_INFO.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+    closeAllDrawers();
+    finalize(order);
+  }
+
+  function finalize(order) {
+    Cart.clear();
+    showToast('Order placed! Redirecting...', 'success', 2000);
+    setTimeout(() => window.location.href = 'orders.html', 1200);
+  }
+
+  Cart.subscribe(items => {
+    renderOrderItems(items);
+    updateSummary();
+  });
+
+  init();
+  setMode('delivery');der);
+  }
+
+  function finalize(order) {
+    Cart.clear();
+    showToast('Order placed! Redirecting...', 'success', 2000);
+    setTimeout(() => window.location.href = 'orders.html', 1200);
+  }
+
+  Cart.subscribe(items => {
+    renderOrderItems(items);
+    updateSummary();
+  });
+
+  init();
+  setMode('delivery');
+</script>
+</body>
+</html>

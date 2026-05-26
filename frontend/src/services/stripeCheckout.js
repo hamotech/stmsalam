@@ -7,7 +7,8 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { signInAnonymously } from 'firebase/auth';
-import { auth, functions } from '../lib/firebase';
+import { getToken as getAppCheckToken } from 'firebase/app-check';
+import { auth, functions, appCheck } from '../lib/firebase';
 
 /**
  * Gen2 Cloud Run service root (no trailing slash — avoids extra redirects; backend accepts POST on `/`).
@@ -107,6 +108,7 @@ export async function createStripePendingOrder(order) {
 }
 
 function parseHttpErrorMessage(res, data) {
+  if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim();
   if (typeof data?.error === 'string' && data.error.trim()) return data.error.trim();
   if (data?.error && typeof data.error.message === 'string') {
     return data.error.message.trim();
@@ -154,6 +156,17 @@ export async function handleStripePayment(order) {
   await ensureAuthForStripe();
   const user = auth.currentUser;
   const token = await user.getIdToken();
+  let appCheckToken = '';
+  try {
+    if (appCheck) {
+      const appCheckRes = await getAppCheckToken(appCheck, /* forceRefresh */ false);
+      appCheckToken = String(appCheckRes?.token || '').trim();
+    }
+  } catch (e) {
+    console.warn('[stripeCheckout] app-check token unavailable (continuing without header)', {
+      message: e?.message || String(e),
+    });
+  }
 
   const url = getCreateStripeCheckoutHttpUrl();
   const requestPayload = { orderId, customerName };
@@ -164,6 +177,7 @@ export async function handleStripePayment(order) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(appCheckToken ? { 'X-Firebase-AppCheck': appCheckToken } : {}),
     },
     body: JSON.stringify(requestPayload),
     cache: 'no-store',

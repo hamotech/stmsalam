@@ -12,14 +12,18 @@
     "health:full": "npm run health && npm run check:android-sdk",
     "prebuild:android": "expo prebuild --platform android",
     "android:assemble:release": "powershell -ExecutionPolicy Bypass -File ./scripts/android-gradle-release.ps1",
-    "start": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start",
-    "start:offline": "expo start --offline",
-    "start:8082": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --port 8082",
+    "start": "npm run start:mobile",
+    "start:mobile": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --port 19006",
+    "start:offline": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --offline --port 19006",
+    "clear": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --clear --port 19006",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo run:android",
+    "android": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --port 19006 --android",
+    "run:android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web",
-    "lint": "expo lint",
+    "web": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --web --port 19006",
+    "lint": "npm run lint:domain && npm run lint:app",
+    "lint:domain": "npx eslint \"src/domain/orderPipeline.ts\" \"src/models/paymentOrder.ts\" --max-warnings 0",
+    "lint:app": "powershell -Command \"npx eslint 'app/**/*.{ts,tsx}' 'src/**/*.{ts,tsx}'; exit 0\"",
     "eas:build:android:preview": "npx --yes eas-cli@16 build --platform android --profile preview --non-interactive",
     "eas:build:android:production": "npx --yes eas-cli@16 build --platform android --profile production --non-interactive"
   },
@@ -43,7 +47,7 @@
     "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.17",
     "expo-print": "~15.0.8",
-    "expo-router": "~6.0.23",
+    "expo-router": "~3.5.0",
     "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
@@ -73,5 +77,10 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "@types/react": "~19.1.0"
+  }
 }

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Browse STM Salam's full menu â€” Teh Tarik, Burgers, Biryanis, Sugarcane, Desserts & more. Order online for delivery or pickup." />
+  <title>Menu â€” STM Salam</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- ══ SPLASH FAILSAFE ══ -->
+  <script>
+    (function(){function h(){var s=document.getElementById('splash-screen');if(!s)return;s.classList.add('hidden');s.style.cssText='opacity:0;visibility:hidden;pointer-events:none;';setTimeout(function(){s.style.display='none';if(s.parentNode)s.parentNode.removeChild(s);},600);}setTimeout(h,3000);document.addEventListener('DOMContentLoaded',function(){setTimeout(h,1800);});window.addEventListener('error',function(){setTimeout(h,500);});})();
+  </script>
+</head>
+<body>
+
+<!-- â•â• TOAST â•â• -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- â•â• APP HEADER â•â• -->
+<header class="app-header">
+  <div class="app-header-logo">
+    <a href="index.html" style="display:flex;align-items:center;gap:10px;text-decoration:none">
+      <img src="../stmsalamlogo.png" alt="STM Salam Logo" />
+      <div>
+        <div class="brand-name">STM Salam</div>
+        <div class="location-pill">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Full Menu
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="app-header-actions">
+    <button class="icon-btn" id="filter-btn" onclick="toggleFilterDrawer()" title="Filter">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+    </button>
+    <a href="checkout.html" class="icon-btn" title="Checkout">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+      <span class="badge" id="header-cart-badge" style="display:none">0</span>
+    </a>
+  </div>
+</header>
+
+<!-- â•â• PAGE HERO â•â• -->
+<div class="page-hero">
+  <div style="position:relative;z-index:1">
+    <div style="font-size:26px;font-weight:900;color:white;letter-spacing:-0.5px;margin-bottom:4px">ðŸ½ï¸ STM Salam Menu</div>
+    <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.75)">Authentic Kopitiam Flavors, Delivered.</div>
+  </div>
+</div>
+
+<!-- â•â• SEARCH BAR (sticky) â•â• -->
+<div style="position:sticky;top:64px;z-index:400;background:white;padding:12px 16px;border-bottom:1px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.04);margin-top:-40px">
+  <div class="search-bar" style="margin:0">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="menu-search" placeholder="Search burgers, drinks, biryanis..." />
+    <button id="clear-search" onclick="clearSearch()" style="background:none;border:none;color:#9CA3AF;font-size:18px;display:none;cursor:pointer">Ã—</button>
+  </div>
+</div>
+
+<!-- â•â• CATEGORY CHIPS â•â• -->
+<div class="category-scroll" id="cat-chips" style="padding-top:12px">
+  <!-- Populated by JS -->
+</div>
+
+<!-- â•â• MENU LIST â•â• -->
+<div class="menu-list" id="menu-list" style="padding-bottom:120px">
+  <!-- Populated by JS -->
+</div>
+
+<!-- â•â• EMPTY STATE â•â• -->
+<div class="empty-state" id="menu-empty" style="display:none">
+  <div class="empty-state-icon">ðŸ”</div>
+  <div class="empty-state-title">No items found</div>
+  <div class="empty-state-subtitle">Try a different search term or browse a different category.</div>
+  <button class="cta-btn" onclick="resetSearch()">Show All Items</button>
+</div>
+
+<!-- â•â• FLOATING CART â•â• -->
+<div class="floating-cart" id="floating-cart">
+  <a href="checkout.html" class="floating-cart-btn">
+    <div class="cart-btn-left">
+      <div class="cart-count-badge">0</div>
+      <span class="cart-btn-label">View Order</span>
+    </div>
+    <span class="cart-btn-total">SGD 0.00</span>
+  </a>
+</div>
+
+<!-- â•â• BOTTOM NAVIGATION â•â• -->
+<nav class="bottom-nav">
+  <a href="index.html" class="nav-item" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home<span class="nav-dot"></span></a>
+  <a href="menu.html" class="nav-item" data-page="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Menu<span class="nav-dot"></span></a>
+  <a href="orders.html" class="nav-item" data-page="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Orders<span class="nav-dot"></span></a>
+  <a href="support.html" class="nav-item" data-page="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Support<span class="nav-dot"></span></a>
+  <a href="profile.html" class="nav-item" data-page="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile<span class="nav-dot"></span></a>
+</nav>
+
+<script src="js/app.js"></script>
+<script>
+  const { MENU_ITEMS, CATEGORIES, Cart, showToast } = window.STMApp;
+
+  let activeCategory = 'all';
+  let searchQuery = '';
+
+  /* â”€â”€ Read URL param â”€â”€ */
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('cat')) activeCategory = urlParams.get('cat');
+
+  /* â”€â”€ Category Chips â”€â”€ */
+  const chipContainer = document.getElementById('cat-chips');
+  CATEGORIES.forEach(cat => {
+    const chip = document.createElement('button');
+    chip.className = 'category-chip' + (cat.id === activeCategory ? ' active' : '');
+    chip.dataset.id = cat.id;
+    chip.innerHTML = `<span class="chip-emoji">${cat.emoji}</span> ${cat.name}`;
+    chip.onclick = () => {
+      activeCategory = cat.id;
+      document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      // Scroll chip into view
+      chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      renderMenu();
+    };
+    chipContainer.appendChild(chip);
+  });
+
+  /* â”€â”€ Search Input â”€â”€ */
+  const searchInput = document.getElementById('menu-search');
+  const clearSearchBtn = document.getElementById('clear-search');
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    clearSearchBtn.style.display = searchQuery ? 'block' : 'none';
+    renderMenu();
+  });
+
+  function clearSearch() {
+    searchInput.value = '';
+    searchQuery = '';
+    clearSearchBtn.style.display = 'none';
+    renderMenu();
+  }
+
+  function resetSearch() {
+    clearSearch();
+    activeCategory = 'all';
+    document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+    chipContainer.children[0].classList.add('active');
+    renderMenu();
+  }
+
+  /* â”€â”€ Render Menu â”€â”€ */
+  function renderMenu() {
+    const filtered = MENU_ITEMS.filter(item => {
+      const matchCat = activeCategory === 'all' || item.category === activeCategory;
+      const matchSearch = !searchQuery ||
+        item.name.toLowerCase().includes(searchQuery) ||
+        (item.description || '').toLowerCase().includes(searchQuery);
+      return matchCat && matchSearch;
+    });
+
+    const list = document.getElementById('menu-list');
+    const empty = document.getElementById('menu-empty');
+
+    if (filtered.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'flex';
+      return;
+    }
+    empty.style.display = 'none';
+
+    list.innerHTML = filtered.map(item => {
+      const qty = Cart.getItems().find(i => i.id === item.id)?.qty || 0;
+      const badgeMap = { bestseller: 'â­ Bestseller', new: 'âœ¨ New', spicy: 'ðŸŒ¶ Spicy' };
+      return `
+        <div class="menu-card" data-id="${item.id}">
+          <div class="menu-card-img-wrap">
+            <img class="menu-card-img" src="${item.img}" alt="${item.name}" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=300'" />
+            ${item.badge ? `<span class="item-badge badge-${item.badge}">${badgeMap[item.badge] || item.badge}</span>` : ''}
+          </div>
+          <div class="menu-card-body">
+            <div class="menu-card-name">${item.name}</div>
+            <div class="menu-card-desc">${item.description || 'Freshly prepared with authentic STM Salam flavours.'}</div>
+            <div class="menu-card-meta">
+              <span class="meta-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                ${item.prepTime || 15} min
+              </span>
+              ${item.category === 'indian' ? '<span class="meta-pill">9AMâ€“9PM</span>' : ''}
+            </div>
+            <div class="menu-card-footer">
+              <span class="item-price">SGD ${item.price.toFixed(2)}</span>
+              ${qty > 0 ? `
+                <div class="qty-control" id="qty-${item.id}">
+                  <button class="qty-btn" onclick="changeQty(${item.id},-1)">âˆ’</button>
+                  <span class="qty-value">${qty}</span>
+                  <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
+                </div>` : `
+                <button class="add-btn" id="add-${item.id}" onclick="addItem(${item.id})" aria-label="Add ${item.name}">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>`}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function addItem(id) {
+    const item = MENU_ITEMS.find(i => i.id === id);
+    if (!item) return;
+    Cart.add(item);
+    showToast(`${item.name} added! ðŸ›’`, 'success', 2000);
+    renderMenu();
+  }
+
+  function changeQty(id, delta) {
+    Cart.updateQty(id, delta);
+    renderMenu();
+  }
+
+  /* â”€â”€ Filter Drawer (placeholder) â”€â”€ */
+  function toggleFilterDrawer() {
+    showToast('Filter coming soon!', 'default', 1500);
+  }
+
+  renderMenu();
+</script>
+</body>
+</html>

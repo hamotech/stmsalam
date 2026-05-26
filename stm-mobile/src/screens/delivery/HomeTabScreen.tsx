@@ -31,7 +31,7 @@ export default function HomeTabScreen() {
   useEffect(() => {
     const unsub = subscribeCategories((cats) => {
       const sorted = [...cats].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      setCategories(sorted.filter((c) => c.active !== false));
+      setCategories(sorted);
       setLoading(false);
     });
     return unsub;

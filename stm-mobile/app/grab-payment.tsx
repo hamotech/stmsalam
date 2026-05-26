@@ -42,10 +42,10 @@ export default function GrabPaymentRoute() {
       console.log('🚨 NAV OVERRIDE SOURCE', {
         file: 'app/grab-payment.tsx',
         reason: 'Redirect_missing_draft',
-        target: '/(tabs)',
+        target: '/(tabs)/home',
       });
     }
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/(tabs)/home" />;
   }
 
   return <PaymentScreen />;

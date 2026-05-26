@@ -12,6 +12,14 @@ config.watchFolders = [...new Set([...(config.watchFolders ?? []), monorepoRoot]
 // `src_v2` is outside `projectRoot`; Metro otherwise only walks ancestor `node_modules` from that file
 // (repo root). Pin app deps used by `src_v2` so Metro loads them from `stm-mobile/node_modules`.
 const appNm = (pkg) => path.join(projectRoot, 'node_modules', pkg);
+
+// All @react-navigation/* packages MUST resolve to the same module instances
+// that expo-router bundles internally.  If any one of them (e.g. elements) is
+// loaded from a different copy of @react-navigation/core, the ThemeContext
+// React object differs and useTheme() throws "Couldn't find a theme".
+const expoRouterNm = (pkg) =>
+  path.join(projectRoot, 'node_modules', 'expo-router', 'node_modules', pkg);
+
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
   react: appNm('react'),
@@ -20,8 +28,12 @@ config.resolver.extraNodeModules = {
   'react-native-reanimated': appNm('react-native-reanimated'),
   'react-native-safe-area-context': appNm('react-native-safe-area-context'),
   'react-native-screens': appNm('react-native-screens'),
-  '@react-navigation/native': appNm('@react-navigation/native'),
-  '@react-navigation/native-stack': appNm('@react-navigation/native-stack'),
+  // Singleton: all navigation packages → expo-router's own copies
+  '@react-navigation/core':         expoRouterNm('@react-navigation/core'),
+  '@react-navigation/native':       expoRouterNm('@react-navigation/native'),
+  '@react-navigation/native-stack': expoRouterNm('@react-navigation/native-stack'),
+  '@react-navigation/elements':     expoRouterNm('@react-navigation/elements'),
+  '@react-navigation/bottom-tabs':  expoRouterNm('@react-navigation/bottom-tabs'),
   'expo-status-bar': appNm('expo-status-bar'),
 };
 
@@ -53,6 +65,24 @@ function isFromSrcV2(originModulePath) {
 
 const origResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Belt-and-suspenders for extraNodeModules: catch ANY @react-navigation/* import
+  // that slips through (e.g. deep transitive imports inside node_modules) and force
+  // it to resolve from expo-router's own bundled copies.  This guarantees a single
+  // ThemeContext React object throughout the bundle and prevents the web crash:
+  // "Couldn't find a theme. Is your component inside NavigationContainer?"
+  if (
+    typeof moduleName === 'string' &&
+    moduleName.startsWith('@react-navigation/')
+  ) {
+    const pkgDir = expoRouterNm(moduleName);
+    try {
+      const filePath = require.resolve(pkgDir);
+      return { type: 'sourceFile', filePath };
+    } catch {
+      /* package not bundled by expo-router — fall through to default */
+    }
+  }
+
   // Firebase: use the React Native Auth entry on native — otherwise `firebase/auth` can pull the
   // browser Auth implementation and `initializeAuth` + persistence silently mis-initializes.
   if (platform && platform !== 'web' && moduleName === '@firebase/auth') {

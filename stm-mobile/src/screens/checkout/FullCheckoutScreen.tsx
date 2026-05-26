@@ -24,8 +24,12 @@ import {
   placeGrabOrderAtCheckout,
   clearCheckoutIdempotencyKeyOnly,
   readPendingCheckoutForResume,
+  assertCheckoutOrderIdShape,
+  assertOrdersDocOwnedByCurrentUser,
+  invalidateCheckoutForPaymentRailChange,
   type CheckoutPaymentRail,
 } from '@/src/services/grabFlowOrderService';
+import { app, auth } from '@/src/services/firebase';
 import { enqueueOfflineCodOrder } from '@/src/services/offlineOrderQueue';
 import { isDeviceOnline } from '@/src/utils/networkState';
 import {
@@ -59,7 +63,7 @@ const PAYMENT_OPTIONS: {
   {
     id: 'stripe',
     title: 'Pay online (Stripe)',
-    description: 'Card or Apple Pay on your device.',
+    description: 'Same secure Stripe Checkout page as the website (cards, Apple Pay, Google Pay).',
     icon: 'card-outline',
   },
   {
@@ -193,6 +197,7 @@ export default function FullCheckoutScreen() {
   /** Coarse debounce: blocks duplicate submit bursts before `isPlacingOrder` is true. */
   const lastTapRef = useRef(0);
   const crashResumeHandledRef = useRef(false);
+  const prevPaymentRailRef = useRef<CheckoutPaymentRail | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -208,6 +213,17 @@ export default function FullCheckoutScreen() {
       if (crashResumeHandledRef.current) return;
       const nav = await readPendingCheckoutForResume();
       if (cancelled || !nav) return;
+      try {
+        await auth.authStateReady();
+        if (!auth.currentUser?.uid) {
+          console.warn('[CHECKOUT:CRASH_RESUME_SKIP]', { reason: 'no_uid' });
+          return;
+        }
+        await assertOrdersDocOwnedByCurrentUser(nav.orderId);
+      } catch (e) {
+        console.error('[CHECKOUT:CRASH_RESUME_BLOCK]', e);
+        return;
+      }
       crashResumeHandledRef.current = true;
       await clearCheckoutIdempotencyKeyOnly();
       navigatePostPlaceCheckoutIntent(nav as CheckoutPostPlaceIntent, { source: 'crash_resume' });
@@ -363,6 +379,10 @@ export default function FullCheckoutScreen() {
   };
 
   const selectPaymentRail = (id: CheckoutPaymentRail) => {
+    if (prevPaymentRailRef.current !== null && prevPaymentRailRef.current !== id) {
+      void invalidateCheckoutForPaymentRailChange();
+    }
+    prevPaymentRailRef.current = id;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setPaymentRail(id);
   };
@@ -509,6 +529,18 @@ export default function FullCheckoutScreen() {
     /** When navigation succeeds we must not fire `finally` loading reset — it can race `replace()` on web. */
     let suppressCheckoutLoadingReset = false;
     try {
+      await auth.authStateReady();
+      if (__DEV__) {
+        console.log('[CHECKOUT DEBUG]', {
+          orderId: null,
+          uid: auth.currentUser?.uid ?? null,
+          projectId: app.options?.projectId ?? null,
+        });
+      }
+      if (!auth.currentUser?.uid) {
+        throw new Error('User not authenticated');
+      }
+
       console.log('[CHECKOUT_START]');
       console.log('[CHECKOUT:ONLINE_BRANCH_ENTER]');
 
@@ -542,14 +574,17 @@ export default function FullCheckoutScreen() {
       await setGrabCheckoutDraft(draft);
       const items = cartLinesToOrderItems(lines);
 
+      const finalPaymentMethod = String(paymentRail || '').trim().toUpperCase() || 'ONLINE';
+      console.log('CHECKOUT_TRIGGER_PAYMENT_METHOD', finalPaymentMethod);
+
       const payload = {
         items,
         totalAmount: total,
-        paymentMode: paymentRail,
+        paymentMethod: finalPaymentMethod,
         metaData: draft,
       };
 
-      console.log('[CHECKOUT:BEFORE_CREATE_ORDER]', { paymentRail });
+      console.log('[CHECKOUT:BEFORE_CREATE_ORDER]', { paymentRail, finalPaymentMethod });
 
       const result = await raceCheckoutFirestore(
         placeGrabOrderAtCheckout(payload),
@@ -566,6 +601,8 @@ export default function FullCheckoutScreen() {
       const finalOrderId = toSnapshotId(typeof result === 'string' ? result : '');
 
       console.log('[CHECKOUT:ORDER_IDS]', { orderId: finalOrderId });
+
+      assertCheckoutOrderIdShape(finalOrderId);
 
       if (!finalOrderId || !isValidGrabOrderId(finalOrderId)) {
         console.error('[CHECKOUT:ERROR]', { phase: 'parse_order_id', finalOrderId });
@@ -619,7 +656,7 @@ export default function FullCheckoutScreen() {
       return;
     } catch (e: unknown) {
       console.error('[CHECKOUT:ERROR]', {
-        phase: 'online_place_order_try',
+        phase: 'place_order_try',
         message: e instanceof Error ? e.message : String(e),
         err: e,
       });

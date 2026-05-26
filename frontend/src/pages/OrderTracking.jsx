@@ -7,11 +7,13 @@ import ChatWindow from '../components/ChatWindow'
 import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { markMessagesAsRead } from '../admin/services/dataService'
 import { safeLog } from '../utils/runtimeSafety'
+import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import {
   Plus, CircleCheck, Clock, Package, Truck,
   ReceiptText, ArrowLeft, MessageCircle,
   FileCheck, Paperclip, RefreshCw
 } from 'lucide-react'
+import { getOrderContext } from '../admin/orderPipeline.js'
 
 export default function OrderTracking() {
   const params = useParams()
@@ -73,13 +75,14 @@ export default function OrderTracking() {
 
   /** Stripe redirect (?payment=) + Firestore fields — feedback only, non-blocking. */
   const resolvePaymentBannerMessage = (ord, paymentParam) => {
-    const ps = String(ord?.paymentStatus ?? '').trim().toLowerCase()
-    const st = String(ord?.status ?? '').trim().toLowerCase()
-    if (ps === 'failed') return 'Payment failed'
-    if (ps === 'paid') return 'Payment successful'
+    const ctx = getOrderContext(ord);
+    const ps = ctx.paymentStatusNorm;
+    const st = ctx.canonicalStatus;
+    if (ps === 'FAILED') return 'Payment failed'
+    if (ps === 'PAID') return 'Payment successful'
     if (paymentParam === 'cancel') return 'Payment cancelled'
     if (paymentParam === 'success') return 'Payment processing...'
-    if (st === 'pending_payment' || ps === 'pending')
+    if (st === 'pending_payment' || ps === 'PENDING')
       return 'Waiting for payment confirmation...'
     return ''
   }
@@ -225,9 +228,9 @@ export default function OrderTracking() {
       const url = await getDownloadURL(fileRef)
 
       try {
-        await updateDoc(doc(db, 'orders', cleanOrderId), {
-          payment_screenshot: url
-        })
+        const patch = { payment_screenshot: url }
+        assertNoDirectOrderLifecycleWrite(patch, 'OrderTracking.paymentProofUpload')
+        await updateDoc(doc(db, 'orders', cleanOrderId), patch)
       } catch (ordersErr) {
         console.warn('orders write skipped (permissions):', ordersErr.message)
       }
@@ -252,7 +255,7 @@ export default function OrderTracking() {
 
   const paymentBannerText = resolvePaymentBannerMessage(order, paymentQueryParam)
 
-  const activeStep = getActiveStep(order?.status || 'pending')
+  const activeStep = getActiveStep(getOrderContext(order).canonicalStatus)
   const orderType = order?.mode || 'delivery'
   const items = order?.items || []
   const total = Number(order?.total || 0)

@@ -11,10 +11,11 @@ import {
   getDoc,
   onSnapshot,
   query,
-  where,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import * as firestore from 'firebase/firestore';
+import { subscribeProductsSnapshot } from '../../../shared/useProductsCore.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,9 @@ export interface Product {
     | { choices: string[]; optionType?: 'single' | 'multi'; required?: boolean }
   >;
   active?: boolean;
+  available?: boolean;
+  createdAt?: unknown;
+  updatedAt?: unknown;
   /** Optional catalog copy for product detail. */
   description?: string;
 }
@@ -71,20 +75,24 @@ export const subscribeProducts = (
   onError?: (err: Error) => void,
   categoryId?: string
 ): Unsubscribe => {
-  const baseQ = categoryId && categoryId !== 'all'
-    ? query(collection(db, 'products'), where('categoryId', '==', categoryId))
-    : query(collection(db, 'products'));
-
-  return onSnapshot(
-    baseQ,
-    (snap) => {
-      const prods = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as Product))
-        .filter((p) => p.active !== false);
-      onData(prods);
+  return subscribeProductsSnapshot({
+    firestore,
+    db,
+    categoryId,
+    includeUnavailable: false,
+    orderByCreatedDesc: true,
+    onData: (products) => onData(products as Product[]),
+    onError: (err) => {
+      console.error('[menuService] products error:', err);
+      onError?.(err);
     },
-    (err) => { console.error('[menuService] products error:', err); onError?.(err); }
-  );
+    onIndexWarning: (err) => {
+      console.warn(
+        '[menuService] Missing index for categoryId + createdAt; fallback listener applied.',
+        err
+      );
+    },
+  });
 };
 
 export async function fetchProductById(id: string): Promise<Product | null> {
@@ -92,6 +100,6 @@ export async function fetchProductById(id: string): Promise<Product | null> {
   const snap = await getDoc(doc(db, 'products', id.trim()));
   if (!snap.exists()) return null;
   const p = { id: snap.id, ...snap.data() } as Product;
-  if (p.active === false) return null;
+  if (p.available === false) return null;
   return p;
 }

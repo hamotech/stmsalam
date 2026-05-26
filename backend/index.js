@@ -6,7 +6,28 @@ import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
 // Firebase Admin
-import { db, firebaseReady } from './lib/firebase.js';
+import admin, { db, firebaseReady } from './lib/firebase.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+const orderStateMachine = require('../frontend/functions/shared/orderStateMachine.core.cjs');
+const createOrderStateGuard = require('../frontend/functions/shared/orderStateGuard.cjs');
+const createOrderTransitionService = require('../frontend/functions/shared/orderTransitionService.cjs');
+
+const orderStateGuard = createOrderStateGuard({
+  assertValidOrderTransition: orderStateMachine.assertValidOrderTransition,
+  assertPaymentConsistency: orderStateMachine.assertPaymentConsistency,
+});
+
+const transitionService = createOrderTransitionService({
+  admin,
+  readCanonicalOrderStatusStrict: orderStateMachine.readCanonicalOrderStatusStrict,
+  normalizeOrderStateForRead: orderStateMachine.normalizeOrderStateForRead,
+  assertPaymentConsistency: orderStateMachine.assertPaymentConsistency,
+  assertTransitionAuthorized: orderStateGuard.assertTransitionAuthorized,
+});
+
+const performOrderTransition = transitionService.performOrderTransition;
 
 // Menu data & Parser (Now using local standalone copies for production)
 import dynamicMenu from './data/dynamicMenu.js';
@@ -78,7 +99,16 @@ if (supabaseUrl && supabaseKey) {
 }
 
 // Configured CORS for production and development
-const allowedOrigins = ['https://stmsalam.sg', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+const allowedOrigins = [
+  'https://stmsalam.sg',
+  'https://teh-tarik-app-my-own.web.app',
+  'https://teh-tarik-app-my-own.firebaseapp.com',
+  'http://10.0.2.2',
+  'http://10.0.2.2:5000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+];
 const envOrigins = (process.env.ALLOWED_ORIGIN || '')
   .split(',')
   .map((o) => o.trim())
@@ -234,9 +264,13 @@ app.post('/api/orders', async (req, res) => {
   const orderId = `STM-${Date.now()}`;
   
   try {
+    const isCod = String(payment?.method ?? payment?.mode ?? payment ?? '').toUpperCase() === 'COD';
     const orderData = { 
-      id: orderId, customer, items, total, mode, payment, notes, 
-      status: 'Pending', order_status: 'pending',
+      id: orderId, customer, items, total, mode, payment, notes,
+      // Canonical FSM initial state — single source of truth.
+      status: isCod ? 'placed' : 'pending_payment',
+      paymentStatus: isCod ? 'NOT_APPLICABLE' : 'PENDING',
+      paymentMethod: isCod ? 'COD' : 'ONLINE',
       createdAt: new Date().toISOString() 
     };
     await db.collection('orders').doc(orderId).set(orderData);
@@ -274,17 +308,49 @@ app.get('/api/orders/:id', async (req, res) => {
 
 app.patch('/api/orders/:id/status', async (req, res) => {
   const { status } = req.body;
+  if (!status || typeof status !== 'string') {
+    return res.status(400).json({ error: 'status is required' });
+  }
+  const nextStatus = status.trim().toLowerCase();
+  
+  const EVENT_MAP = {
+    placed: 'ORDER_ACCEPTED',
+    preparing: 'ORDER_PREPARING',
+    ready_for_pickup: 'ORDER_READY_FOR_PICKUP',
+    out_for_delivery: 'ORDER_OUT_FOR_DELIVERY',
+    delivered: 'ORDER_DELIVERED',
+    cancelled: 'ORDER_CANCELLED',
+    refunded: 'ADMIN_REFUND_APPROVED'
+  };
+
+  const eventType = EVENT_MAP[nextStatus];
+  if (!eventType) {
+    return res.status(400).json({ error: `Invalid status. Allowed: ${Object.keys(EVENT_MAP).join(', ')}` });
+  }
+  
   try {
-    await db.collection('orders').doc(req.params.id).update({ 
-      status, 
-      order_status: status.toLowerCase(),
-      updatedAt: new Date().toISOString()
+    const orderRef = db.collection('orders').doc(req.params.id);
+    
+    // Use the canonical FSM transition service for ALL status updates.
+    // This enforces atomic reads, transition validation, and consistency guards.
+    await performOrderTransition({
+      db,
+      orderRef,
+      actor: 'admin',
+      actorUid: null, // Admin API context
+      event: { type: eventType },
+      metadata: {
+        source: 'backend_api_patch',
+        patch: {} // No direct field mutations allowed for admin via patch metadata
+      }
     });
+
     if (supabase) {
-      await supabase.from('orders').update({ status }).eq('id', req.params.id);
+      await supabase.from('orders').update({ status: nextStatus }).eq('id', req.params.id);
     }
     res.json({ success: true });
   } catch (err) {
+    console.error('[PATCH ORDER ERROR]', err);
     res.status(400).json({ error: err.message });
   }
 });

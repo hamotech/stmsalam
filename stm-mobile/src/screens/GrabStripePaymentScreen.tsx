@@ -1,6 +1,5 @@
 /**
- * Grab flow — Pay online via Stripe PaymentSheet (order already created at checkout).
- * Success UI only after server verification (POST /verify-payment).
+ * Grab flow — Pay online via Stripe Hosted Checkout (same Cloud Run + redirect as the Vite website).
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -18,7 +17,6 @@ import { useNavigation } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { navReplace } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
-import { useAuth } from '@/src/context/AuthContext';
 import HeaderBar from '@/src/components/stm/HeaderBar';
 import { Brand, cardShadow } from '@/src/theme/brand';
 import { useCart } from '@/src/context/CartContext';
@@ -27,28 +25,54 @@ import {
   clearGrabCheckoutDraft,
   type GrabCheckoutDraft,
 } from '@/src/utils/checkoutDraft';
-import { db } from '@/src/services/firebase';
-import {
-  initPaymentSheet,
-  presentPaymentSheet,
-  verifyStripePaymentOnServer,
-} from '@/src/services/payment/stripeService';
 import { clearPendingCheckoutResolutionIfMatchesOrder } from '@/src/services/grabFlowOrderService';
+import {
+  openStripeHostedCheckout,
+  sanitizeStripeOrderId,
+  getStripeCheckoutHttpUrl,
+  hashStripeOrderIdForDebug,
+  requireStripeCheckoutHttpUrlForRequest,
+} from '@/src/services/payment/stripeHostedCheckout';
 
-type Phase = 'idle' | 'paying' | 'verifying';
+type Phase = 'idle' | 'paying';
 
 export default function GrabStripePaymentScreen() {
   const router = useRouter();
-  const { user, profile } = useAuth();
   const navRole = useAppRole();
   const navigation = useNavigation();
   const { orderId: rawOrderId } = useLocalSearchParams<{ orderId?: string }>();
-  const orderId = rawOrderId ? String(rawOrderId).trim().split(',')[0] : '';
+  const orderId = rawOrderId
+    ? sanitizeStripeOrderId(String(rawOrderId).split(',')[0] ?? '')
+    : '';
+
+  useEffect(() => {
+    if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+    const first = rawOrderId ? String(rawOrderId).split(',')[0] ?? '' : '';
+    const sanitized = first ? sanitizeStripeOrderId(first) : '';
+    console.log('MOBILE_ROUTE_ORDER_ID_RAW:', rawOrderId);
+    console.log('ORDER_ID_RAW:', rawOrderId);
+    console.log('ORDER_ID_SANITIZED:', sanitized);
+    console.log('ORDER_ID_LENGTH:', sanitized.length);
+    console.log('ORDER_ID_HASH:', sanitized ? hashStripeOrderIdForDebug(sanitized) : '');
+    console.log('CHECKOUT_URL:', getStripeCheckoutHttpUrl());
+    const resolved = requireStripeCheckoutHttpUrlForRequest();
+    if (resolved.ok) {
+      console.log('CHECKOUT_HOSTNAME:', resolved.hostname);
+    } else {
+      console.warn('CHECKOUT_URL_INVALID:', resolved.message);
+    }
+    console.log('EXPO_PUBLIC_STRIPE_CHECKOUT_URL:', process.env.EXPO_PUBLIC_STRIPE_CHECKOUT_URL ?? '(unset)');
+  }, [rawOrderId]);
 
   const { clear, loaded } = useCart();
   const [draft, setDraft] = useState<GrabCheckoutDraft | null>(null);
   const [draftLoading, setDraftLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>('idle');
+
+  const customerNameForStripe = useMemo(() => {
+    const n = draft?.customer?.name?.trim();
+    return n || 'Customer';
+  }, [draft]);
 
   useEffect(() => {
     let c = false;
@@ -92,64 +116,24 @@ export default function GrabStripePaymentScreen() {
     }
 
     try {
-      if (Platform.OS === 'web') {
-        Alert.alert(
-          'Pay in the app',
-          'Stripe card checkout runs in the iOS or Android app. On web, choose QR payment or cash on delivery, or open STM Salam on your phone.',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
-        return;
-      }
-
       setPhase('paying');
-
-      const init = await initPaymentSheet(orderId, draft.total);
-      if (!init.ok || !init.paymentIntentId) {
-        setPhase('idle');
-        Alert.alert('Pay online', init.error || 'Could not start payment.');
+      const r = await openStripeHostedCheckout(orderId, customerNameForStripe);
+      if (r.kind === 'opened_web') {
         return;
       }
-
-      const pay = await presentPaymentSheet();
-      if (!pay.ok) {
-        setPhase('idle');
-        if (pay.error && !/cancel/i.test(pay.error)) {
-          navReplace(
-            router,
-            {
-              kind: 'paymentFailed',
-              orderId,
-              paymentIntentId: init.paymentIntentId,
-              total: String(draft.total),
-              reason: pay.error,
-            },
-            navRole
-          );
-        }
+      if (r.kind === 'error') {
+        Alert.alert('Pay online', r.message);
         return;
       }
-
-      setPhase('verifying');
-      const verified = await verifyStripePaymentOnServer(orderId, init.paymentIntentId);
-      if (!verified.ok) {
-        setPhase('idle');
-        navReplace(
-          router,
-          {
-            kind: 'paymentFailed',
-            orderId,
-            paymentIntentId: init.paymentIntentId,
-            total: String(draft.total),
-            reason: verified.error,
-          },
-          navRole
-        );
+      if (r.kind === 'cancel') {
+        Alert.alert('Payment cancelled', 'You can retry when ready.');
         return;
       }
-
+      if (r.kind === 'dismiss') {
+        return;
+      }
       clear();
       void clearGrabCheckoutDraft();
-      setPhase('idle');
       navReplace(
         router,
         {
@@ -162,10 +146,11 @@ export default function GrabStripePaymentScreen() {
       );
     } catch (e) {
       console.error('[GrabStripePayment]', e);
-      setPhase('idle');
       Alert.alert('Payment', e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setPhase('idle');
     }
-  }, [draft, orderId, router, clear, navRole]);
+  }, [draft, orderId, router, clear, navRole, customerNameForStripe]);
 
   if (!loaded || draftLoading) {
     return (
@@ -187,17 +172,14 @@ export default function GrabStripePaymentScreen() {
   }
 
   if (processing) {
-    const verifying = phase === 'verifying';
     return (
       <View style={styles.processingRoot}>
         <ActivityIndicator color={Brand.green} size="large" />
-        <Text style={styles.processingTitle}>
-          {verifying ? 'Verifying payment…' : 'Processing payment…'}
-        </Text>
+        <Text style={styles.processingTitle}>Opening secure Stripe checkout…</Text>
         <Text style={styles.processingSub}>
-          {verifying
-            ? 'Confirming with our servers. Please keep the app open.'
-            : 'Please wait — do not close the app. Your payment is secured by Stripe.'}
+          {Platform.OS === 'web'
+            ? 'You will be redirected in this browser. After paying, your order tracking opens automatically.'
+            : 'Complete payment in the browser. When finished, you return to the app automatically.'}
         </Text>
       </View>
     );
@@ -207,7 +189,7 @@ export default function GrabStripePaymentScreen() {
 
   return (
     <View style={styles.root}>
-      <HeaderBar title="Pay online" subtitle="Stripe · cards & wallets" showBack />
+      <HeaderBar title="Pay online" subtitle="Stripe · same checkout as the website" showBack />
       <View style={styles.body}>
         <View style={[styles.card, cardShadow]}>
           <Text style={styles.label}>Order</Text>
@@ -220,8 +202,8 @@ export default function GrabStripePaymentScreen() {
           </Text>
         </View>
         <Text style={styles.hint}>
-          Your order is already placed. Complete payment here — we only show success after our server confirms
-          the charge.
+          Your order is saved. Tap below to open Stripe’s secure payment page (cards, Apple Pay, Google Pay where
+          available). Confirmation is written by our server when Stripe completes the session.
         </Text>
         <View style={styles.ctaSpacer} />
         <TouchableOpacity
@@ -230,7 +212,7 @@ export default function GrabStripePaymentScreen() {
           disabled={!canPay}
           activeOpacity={0.9}
         >
-          <Text style={styles.ctaText}>Pay SGD {draft.total.toFixed(2)}</Text>
+          <Text style={styles.ctaText}>Pay SGD {draft.total.toFixed(2)} with Stripe</Text>
         </TouchableOpacity>
       </View>
     </View>

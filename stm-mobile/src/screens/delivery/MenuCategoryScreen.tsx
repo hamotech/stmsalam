@@ -15,9 +15,10 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { subscribeProducts, type Product } from '@/src/services/menuService';
+import type { Product } from '@/src/services/menuService';
 import { useCart } from '@/src/context/CartContext';
 import CartFab from '@/src/components/CartFab';
+import { useProducts } from '@/src/hooks/useProducts';
 
 const GREEN = '#013220';
 const GOLD = '#D4AF37';
@@ -32,20 +33,10 @@ export default function MenuCategoryScreen() {
     : 'all';
   const { addToCart, updateQty, cartItems } = useCart();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsub = subscribeProducts(
-      (prods) => {
-        setProducts(prods);
-        setLoading(false);
-      },
-      undefined,
-      categoryId === 'all' ? undefined : categoryId
-    );
-    return unsub;
-  }, [categoryId]);
+  const { products, loading } = useProducts({
+    categoryId: categoryId === 'all' ? undefined : categoryId,
+    orderByCreatedDesc: true,
+  });
 
   const title =
     categoryId === 'all' ? 'Full menu' : categoryId.charAt(0).toUpperCase() + categoryId.slice(1);

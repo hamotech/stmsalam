@@ -179,7 +179,7 @@ export default function PaymentScreen() {
       const orderId = await placeGrabOrderAtCheckout({
         items,
         totalAmount: totals.total,
-        paymentMode: 'paypal',
+        paymentMethod: 'ONLINE',
         metaData: draft,
       });
 
@@ -219,7 +219,7 @@ export default function PaymentScreen() {
       const orderId = await placeGrabOrderAtCheckout({
         items,
         totalAmount: totals.total,
-        paymentMode: 'phone',
+        paymentMethod: 'ONLINE',
         metaData: draft,
       });
       goOrderConfirmation(orderId);

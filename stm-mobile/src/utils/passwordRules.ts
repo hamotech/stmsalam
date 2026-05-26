@@ -2,8 +2,16 @@
 
 export type PasswordValidation = { ok: boolean; errors: string[] };
 
+/** Firebase sign-in/up: trim, strip invisible chars, lowercase (matches stored profile email). */
+export function normalizeAuthEmail(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .toLowerCase();
+}
+
 export function validateEmailFormat(email: string): boolean {
-  const s = email.trim();
+  const s = normalizeAuthEmail(email);
   if (s.length < 5) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }

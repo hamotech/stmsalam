@@ -12,9 +12,13 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Link, useRouter } from 'expo-router';
-import { navReplaceUnsafe } from '@/src/navigation/appNavigation';
+import { getIdTokenResult } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { navReplaceUnsafe, resolveAppRole } from '@/src/navigation/appNavigation';
+import { applyPendingPostAuthNavigation } from '@/src/navigation/applyPendingPostAuthNavigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '@/src/context/AuthContext';
+import { useAuth, type UserProfile } from '@/src/context/AuthContext';
+import { auth, db } from '@/src/services/firebase';
 import { Brand, cardShadow } from '@/src/theme/brand';
 import { friendlyFirebaseAuthMessage } from '@/src/utils/firebaseAuthErrors';
 import {
@@ -66,6 +70,22 @@ export default function RegisterScreen() {
     setBusy(true);
     try {
       await signUp(email, password, name);
+      const u = auth.currentUser;
+      if (u) {
+        const [tokenResult, snap] = await Promise.all([
+          getIdTokenResult(u),
+          getDoc(doc(db, 'users', u.uid)),
+        ]);
+        const profile = snap.exists() ? (snap.data() as UserProfile) : { email: u.email ?? undefined };
+        const role = resolveAppRole(u, profile, tokenResult.claims as Record<string, unknown>);
+        if (applyPendingPostAuthNavigation(router, role)) {
+          return;
+        }
+        if (role === 'admin' || role === 'kitchen') {
+          navReplaceUnsafe(router, { kind: 'admin' });
+          return;
+        }
+      }
       navReplaceUnsafe(router, { kind: 'tabs' });
     } catch (e: unknown) {
       setErr(friendlyFirebaseAuthMessage(e, 'Could not complete sign-up. Please try again.'));

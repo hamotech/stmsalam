@@ -2,6 +2,7 @@
 // Firebase initialization for STM Salam Teh Tarik App (Vite setup)
 
 import { initializeApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import {
   getFirestore,
   enableMultiTabIndexedDbPersistence,
@@ -26,8 +27,53 @@ console.log("Firebase Config Initialization:", {
   projectId: !!firebaseConfig.projectId,
 });
 
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  throw new Error(
+    'Missing Firebase web config (need at least VITE_FIREBASE_API_KEY and VITE_FIREBASE_PROJECT_ID). ' +
+      'Copy frontend/.env.example to frontend/.env.local and fill the VITE_FIREBASE_* values from Firebase Console → Project settings → Your apps.'
+  );
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+/**
+ * App Check (Vite web)
+ *
+ * - Production: reCAPTCHA v3 only, no debug token support.
+ * - Development: optional debug token via VITE_APPCHECK_DEBUG_TOKEN.
+ * - If app is not registered yet in Firebase Console, do not crash app.
+ */
+const appCheckSiteKey = String(import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY || "").trim();
+
+function initWebAppCheck(firebaseApp) {
+  if (!appCheckSiteKey) {
+    console.warn("[app-check] VITE_RECAPTCHA_V3_SITE_KEY is missing. App Check not initialized.");
+    return null;
+  }
+
+  if (import.meta.env.DEV) {
+    const debugToken = String(import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || "").trim();
+    // Debug token support is strictly dev-only.
+    if (debugToken) {
+      globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+      console.info("[app-check] Debug token enabled (DEV only).");
+    }
+  }
+
+  try {
+    return initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (error) {
+    // Prevent UI hard-fail if app is not registered yet / setup is incomplete.
+    console.warn("[app-check] Initialization skipped. App may be not registered yet.", error);
+    return null;
+  }
+}
+
+export const appCheck = initWebAppCheck(app);
 
 // Services
 export const db = getFirestore(app);

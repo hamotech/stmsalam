@@ -6,4 +6,4 @@ export {
   initPaymentSheet,
   presentPaymentSheet,
   verifyStripePaymentOnServer,
-} from './stripeService.web';
+} from '@/src/services/payment/stripeService.web';

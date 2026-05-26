@@ -18,9 +18,11 @@ const IGNORE_DIRS = new Set([
   'dist',
   'build',
   '.expo',
+  '.expo-export-test-web',
   'android',
   'ios',
   'coverage',
+  'server',
 ]);
 
 /** Strip // and /* *\/ comments so examples in comments do not false-positive. */

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { subscribeOrders } from '../services/dataService';
-import { normalizeGrabOrderStatus, normalizePaymentMethod, normalizeCanonicalPaymentStatus } from '../orderPipeline.js';
+import { getOrderContext } from '../orderPipeline.js';
 import { CreditCard } from 'lucide-react';
 
 const PaymentsOps = () => {
@@ -37,9 +37,10 @@ const PaymentsOps = () => {
           </thead>
           <tbody>
             {recent.map((o, idx) => {
-              const method = normalizePaymentMethod(o);
-              const ps = normalizeCanonicalPaymentStatus(o);
-              const st = normalizeGrabOrderStatus(o);
+              const ctx = getOrderContext(o);
+              const method = ctx.paymentMethodNorm;
+              const ps = ctx.paymentStatusNorm;
+              const st = ctx.canonicalStatus;
               const qrPending = method === 'qr' && ps !== 'PAID';
               const stripePending = (method === 'stripe' || method === 'paypal') && ps !== 'PAID';
               return (

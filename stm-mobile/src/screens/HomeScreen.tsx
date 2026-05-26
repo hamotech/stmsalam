@@ -26,7 +26,8 @@ import { navPush } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
 import { useAuth } from '@/src/context/AuthContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeCategories, subscribeProducts, Category, Product } from '@/src/services/menuService';
+import { subscribeCategories, Category, Product } from '@/src/services/menuService';
+import { useProducts } from '@/src/hooks/useProducts';
 import SupportFloatingButtons from '../components/SupportFloatingButtons';
 import { useTabBarBottomInset } from '@/src/navigation/useTabBarBottomInset';
 import SearchBar from '@/src/components/stm/SearchBar';
@@ -352,25 +353,12 @@ export default function HomeScreen() {
   const [homeSearch, setHomeSearch] = useState('');
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [menuLoading, setMenuLoading] = useState(true);
+  const { products, loading: menuLoading } = useProducts({ orderByCreatedDesc: true });
 
   useEffect(() => {
     const u = subscribeCategories((c) => {
-      setCategories(c.filter((x) => x.active !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      setCategories([...c].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
     });
-    return u;
-  }, []);
-
-  useEffect(() => {
-    setMenuLoading(true);
-    const u = subscribeProducts(
-      (p) => {
-        setProducts(p);
-        setMenuLoading(false);
-      },
-      () => setMenuLoading(false)
-    );
     return u;
   }, []);
 

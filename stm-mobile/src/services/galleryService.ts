@@ -18,7 +18,7 @@ export function subscribeGallery(
     q,
     (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as GalleryItem));
-      onData(items.filter((i) => i.active !== false));
+      onData(items);
     },
     (err) => {
       console.error('[galleryService]', err);

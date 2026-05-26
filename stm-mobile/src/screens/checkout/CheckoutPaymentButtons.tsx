@@ -18,11 +18,7 @@ import { useRouter } from 'expo-router';
 import { navPush, navReplace } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
 import { useAuth } from '@/src/context/AuthContext';
-import {
-  initPaymentSheet,
-  presentPaymentSheet,
-  verifyStripePaymentOnServer,
-} from '@/src/services/payment/stripeService';
+import { openStripeHostedCheckout } from '@/src/services/payment/stripeHostedCheckout';
 
 const GREEN = '#013220';
 const GOLD = '#D4AF37';
@@ -79,23 +75,20 @@ export default function CheckoutPaymentButtons({
     if (!ensureValidPhoneForWeb()) return;
     setBusy('stripe');
     try {
-      const init = await initPaymentSheet(orderId.trim(), amount);
-      if (!init.ok) {
-        Alert.alert('Pay Online unavailable', init.error || 'Stripe could not start.');
+      const name = (customerName || profile?.name || user?.displayName || '').trim() || 'Customer';
+      const r = await openStripeHostedCheckout(orderId.trim(), name);
+      if (r.kind === 'opened_web') {
         return;
       }
-      const pay = await presentPaymentSheet();
-      if (!pay.ok) {
-        Alert.alert('Payment failed', pay.error || 'Payment was not completed.');
+      if (r.kind === 'error') {
+        Alert.alert('Pay Online unavailable', r.message);
         return;
       }
-      if (!init.paymentIntentId) {
-        Alert.alert('Payment', 'Missing payment reference. Please try again.');
+      if (r.kind === 'cancel') {
+        Alert.alert('Payment cancelled', 'You can retry when ready.');
         return;
       }
-      const verified = await verifyStripePaymentOnServer(orderId.trim(), init.paymentIntentId);
-      if (!verified.ok) {
-        Alert.alert('Payment not confirmed', verified.error);
+      if (r.kind === 'dismiss') {
         return;
       }
       navReplace(

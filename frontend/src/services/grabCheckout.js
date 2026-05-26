@@ -24,41 +24,22 @@ async function ensureAuthBeforeCallable() {
 
 /* ---------------- PAYMENT ---------------- */
 
-export function normalizePaymentModeForCallable(raw) {
-  let p = String(raw ?? '').trim().toLowerCase();
-  if (p === 'qr') p = 'scanpay';
-  if (p === 'cash') p = 'cod';
-  return p;
-}
-
-/** Maps UI / alias labels to `COD` | `ONLINE` for the callable. Returns null if unknown. */
-export function toCallablePaymentModeCodOnline(mode) {
-  const m = String(mode || '').trim().toUpperCase();
-
-  if (m === 'COD' || m === 'CASH') return 'COD';
-
-  if (
-    m === 'PAYNOW' ||
-    m === 'CARD' ||
-    m === 'STRIPE' ||
-    m === 'SCANPAY' ||
-    m === 'QR' ||
-    m === 'PHONE' ||
-    m === 'PAYPAL' ||
-    m === 'ONLINE'
-  ) {
-    return 'ONLINE';
+/**
+ * Maps UI payment method to canonical payload fields.
+ * ENSURES single source of truth for paymentStatus/Method.
+ */
+export function buildPaymentPayload(method) {
+  const m = String(method || '').trim().toUpperCase();
+  if (m === 'COD' || m === 'CASH') {
+    return {
+      paymentMethod: 'COD',
+      paymentStatus: 'NOT_APPLICABLE',
+    };
   }
-
-  return null;
-}
-
-export function assertPaymentModeForCallable(raw) {
-  const n = toCallablePaymentModeCodOnline(raw);
-  if (!n) {
-    throw new Error(`Invalid payment mode: ${raw}`);
-  }
-  return n;
+  return {
+    paymentMethod: 'ONLINE',
+    paymentStatus: 'PENDING',
+  };
 }
 
 /* ---------------- IDENTITY ---------------- */
@@ -135,14 +116,7 @@ export function cartItemsToGrabLineItems(cartItems) {
   });
 }
 
-export function webPaymentModeFromUi(uiPaymentId) {
-  const x = String(uiPaymentId || '').toLowerCase();
-  if (x === 'paynow') return 'scanpay';
-  if (x === 'cash') return 'cod';
-  if (x === 'stripe') return 'stripe';
-  if (x === 'paypal') return 'paypal';
-  return 'cod';
-}
+
 
 export function clearPersistedCheckoutIdempotencyKey() {
   try {
@@ -289,9 +263,11 @@ export function validateCheckoutSessionController() {
 export async function placeGrabOrderAtCheckout({
   items,
   totalAmount,
-  paymentMode,
+  paymentMethod,
   idempotencyKey,
 }) {
+  const finalPaymentMethod = String(paymentMethod || '').trim().toUpperCase() || 'ONLINE';
+  console.log('CHECKOUT_TRIGGER_PAYMENT_METHOD', finalPaymentMethod);
   console.log('[CHECKOUT] START');
 
   if (!items?.length) throw new Error('Your cart is empty.');
@@ -304,10 +280,7 @@ export async function placeGrabOrderAtCheckout({
     throw new Error('Invalid totalAmount');
   }
 
-  const normalized = toCallablePaymentModeCodOnline(paymentMode);
-  if (!normalized) {
-    throw new Error(`Invalid payment mode: ${paymentMode}`);
-  }
+  const paymentInfo = buildPaymentPayload(finalPaymentMethod);
 
   const idemRaw =
     typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
@@ -328,14 +301,22 @@ export async function placeGrabOrderAtCheckout({
     return cached;
   }
 
+  const safeMethod = String(paymentInfo?.paymentMethod || 'ONLINE').trim().toUpperCase() || 'ONLINE';
+  const safeStatus = String(paymentInfo?.paymentStatus || 'PENDING').trim().toUpperCase() || 'PENDING';
+
   const payload = jsonSafeForCallable({
     items,
     totalAmount: total,
-    paymentMode: normalized,
+    paymentMethod: finalPaymentMethod,
+    paymentStatus: safeStatus,
     idempotencyKey: idem,
   });
 
-  console.log('[UI][ORDER PAYLOAD]', payload);
+  console.log("PAYMENT_METHOD_OUTGOING", safeMethod);
+
+  if (import.meta.env.DEV) {
+    console.log('PAYLOAD_BEFORE_SEND', payload);
+  }
   console.log('[CHECKOUT] BEFORE FUNCTION');
 
   let callableResult;

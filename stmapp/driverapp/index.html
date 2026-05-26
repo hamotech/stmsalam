@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#080f0c">
+  <title>STMAPP Driver Portal</title>
+  <link rel="stylesheet" href="css/driver.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <div class="driver-app-container">
+
+    <!-- ================= APP HEADER ================= -->
+    <header class="app-header">
+      <div class="app-brand">
+        <img src="../stmsalamlogo.png" alt="STM Logo">
+        <span class="app-title">STMAPP Driver</span>
+      </div>
+      <div id="driver-profile-name" style="font-size: 12px; font-weight: 800; color: var(--secondary-color);">Offline</div>
+    </header>
+
+    <!-- ================= AUTH VIEW ================= -->
+    <div id="auth-view">
+      <div class="auth-card">
+        <h2 style="font-size: 20px; font-weight: 900; margin-bottom: 8px;">Courier Authorization</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 24px;">Sign in to accept delivery jobs and track earnings.</p>
+        
+        <form id="driver-login-form">
+          <input type="email" id="login-email" class="form-input" placeholder="Driver Email Address" required autocomplete="username">
+          <input type="password" id="login-password" class="form-input" placeholder="Courier Password" required autocomplete="current-password">
+          <button type="submit" class="btn-primary">⚡ Sign In as Courier</button>
+        </form>
+
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">
+          Want to become an STM courier? <a href="#" onclick="showRegisterPanel()" style="color: var(--secondary-color); font-weight: 800; text-decoration: none;">Register Now</a>
+        </p>
+      </div>
+
+      <!-- Registration Form Card (Hidden by default) -->
+      <div class="auth-card" id="driver-register-card" style="display: none; margin-top: 20px;">
+        <h2 style="font-size: 18px; font-weight: 900; margin-bottom: 8px;">Become an STM Rider</h2>
+        <form id="driver-register-form">
+          <input type="text" id="reg-name" class="form-input" placeholder="Full Name" required autocomplete="name">
+          <input type="email" id="reg-email" class="form-input" placeholder="Email Address" required autocomplete="email">
+          <input type="password" id="reg-password" class="form-input" placeholder="Choose Password" required autocomplete="new-password">
+          <input type="tel" id="reg-phone" class="form-input" placeholder="Mobile Phone" required autocomplete="tel">
+          <select id="reg-vehicle" class="form-select" required>
+            <option value="motorcycle">🏍️ Motorcycle</option>
+            <option value="bicycle">🚲 Bicycle</option>
+            <option value="car">🚗 Car</option>
+            <option value="walker">🚶 Walker</option>
+          </select>
+          <input type="text" id="reg-plate" class="form-input" placeholder="Vehicle Plate (Optional)">
+          <button type="submit" class="btn-primary" style="background:#10b981; color:#fff">Submit Application</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= DRIVER HUB VIEW ================= -->
+    <div id="driver-hub" style="display: none;">
+      <!-- Status switcher -->
+      <div class="status-bar">
+        <div>
+          <div style="font-size: 13px; font-weight: 800;" id="status-label">Rider Status: OFFLINE</div>
+          <div style="font-size: 10px; color: var(--text-muted); font-weight: 600;">Switch online to receive jobs</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="status-toggle" onchange="toggleOnlineStatus()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Overview stats -->
+      <div class="earnings-widget">
+        <div class="earnings-label">Today's Courier Earnings</div>
+        <div class="earnings-amount" id="driver-earnings">SGD 0.00</div>
+        <div style="font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 700;">Payouts are processed instantly</div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-val" id="driver-trips">0</div>
+          <div class="stat-lbl">Completed Trips</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val">⭐ 5.0</div>
+          <div class="stat-lbl">Rider Rating</div>
+        </div>
+      </div>
+
+      <!-- AVAILABLE JOBS CONTAINER -->
+      <div id="available-jobs-section" style="display: none;">
+        <h3 style="font-size: 14px; font-weight: 900; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Available Delivery Requests</h3>
+        <div id="jobs-queue-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- ACTIVE DELIVERY TRACKER SECTION -->
+      <div id="active-job-section" style="display: none;">
+        <h3 style="font-size: 14px; font-weight: 900; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--secondary-color);">🚨 Active Delivery Job</h3>
+        
+        <div class="route-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-weight: 900; font-size: 15px;" id="active-order-id">STM-000000</span>
+            <span style="background: rgba(16,185,129,0.15); color: var(--success-color); padding: 4px 10px; border-radius: 99px; font-size: 10px; font-weight: 900;" id="active-order-status">Preparing</span>
+          </div>
+
+          <div class="job-address">
+            <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 800; display: block; margin-bottom: 2px;">Deliver to</span>
+            <strong id="active-customer-name">Ahmad</strong><br>
+            <span id="active-customer-address">Unit Details, Singapore</span>
+          </div>
+
+          <div style="font-size: 12px; margin-bottom: 12px; border-top: 1px dashed var(--border-color); padding-top: 10px;">
+            <strong style="color:var(--text-muted)">Items:</strong> <span id="active-items-preview">Teh Tarik x2, Indian Biryani x1</span>
+          </div>
+
+          <!-- Geolocation simulation controls -->
+          <div class="simulated-map">
+            <div class="map-line"></div>
+            <div class="map-marker marker-source">🏠</div>
+            <div class="map-marker marker-dest" style="animation: bounce 2s infinite">📍</div>
+            <div style="position: absolute; bottom: 8px; font-size: 10px; font-weight: 800; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 99px;" id="map-simulation-status">Rider at restaurant</div>
+          </div>
+
+          <!-- State triggers -->
+          <button id="btn-out-delivery" class="btn-primary" style="margin-bottom: 12px; display: none;" onclick="startDeliveryTransition()">🚴 Start Delivery (Out for Delivery)</button>
+          <button id="btn-arrive-location" class="btn-primary" style="margin-bottom: 12px; display: none;" onclick="arriveAtDestination()">📍 Arrived at Customer Location</button>
+
+          <!-- Secure Delivery OTP panel -->
+          <div id="otp-entry-panel" style="display: none; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <h4 style="font-size: 13px; font-weight: 900; text-align: center; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Enter Customer Delivery OTP</h4>
+            <p style="font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 12px;">Get the 4-digit code from the customer's order screen to complete trip.</p>
+            
+            <input type="text" id="otp-input" class="form-input" style="text-align: center; font-size: 24px; font-weight: 900; letter-spacing: 6px; color: var(--secondary-color);" readonly placeholder="xxxx">
+            
+            <div class="otp-pad">
+              <button class="otp-btn" onclick="pressOtpDigit('1')">1</button>
+              <button class="otp-btn" onclick="pressOtpDigit('2')">2</button>
+              <button class="otp-btn" onclick="pressOtpDigit('3')">3</button>
+              <button class="otp-btn" onclick="pressOtpDigit('4')">4</button>
+              <button class="otp-btn" onclick="pressOtpDigit('5')">5</button>
+              <button class="otp-btn" onclick="pressOtpDigit('6')">6</button>
+              <button class="otp-btn" onclick="pressOtpDigit('7')">7</button>
+              <button class="otp-btn" onclick="pressOtpDigit('8')">8</button>
+              <button class="otp-btn" onclick="pressOtpDigit('9')">9</button>
+              <button class="otp-btn" onclick="pressOtpDigit('clear')" style="color:var(--danger-color)">C</button>
+              <button class="otp-btn" onclick="pressOtpDigit('0')">0</button>
+              <button class="otp-btn" onclick="submitDeliveryOtp()" style="background:var(--success-color); font-size:14px; padding:0">OK</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 30px;">
+        <button onclick="handleLogout()" class="btn-primary" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1.5px solid rgba(239,68,68,0.2); box-shadow: none;">🚪 Courier Logout</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="js/driver.js"></script>
+</body>
+</html>

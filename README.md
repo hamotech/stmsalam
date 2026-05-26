@@ -1,53 +1,84 @@
-# STM Salam - Premium Food & Beverage App (2026 Edition)
+# STM Salam — Full stack (web, mobile, API)
 
-Welcome to the **STM Salam** digital storefront. This is a high-performance, mobile-first web application designed for a premium Teh Tarik and Kebab shop, featuring real-time kitchen tracking, administrative inventory management, and a seamless WhatsApp-integrated checkout flow.
+Customer-facing **web storefront** (Vite + React), **native mobile app** (Expo + React Native), and **backend API** live in one repo. They share Firebase and product concepts but are **different applications** — do not treat `frontend/` as the mobile app.
 
-## 🚀 Key Features
+## Monorepo layout
 
-### 🛒 Customer Experience
-- **Dynamic Menu**: Real-time menu filtered by categories with premium visuals.
-- **Scan & Pay Checkout**: Frictionless payment flow support via SGQR and PayNow.
-- **Live Order Tracking**: Interactive map-style progress bar showing real-time kitchen stages.
-- **Profile Dashboard**: Personalized order history, wallet balance, and dietary preferences.
-- **WhatsApp Integration**: Automated order summaries sent directly to the shop.
+| Path | Role | How you run it |
+|------|------|----------------|
+| **`frontend/`** | **Web app** (Vite + React). Browser UI, default **http://localhost:5173** | From repo root: `npm run dev:web` |
+| **`stm-mobile/`** | **Mobile app** (Expo + React Native). Expo Go, emulator, or EAS builds | From repo root: `npm run dev:mobile` |
+| **`backend/`** | API / server | From repo root: `npm run dev:backend` |
 
-### 👨‍🍳 Admin Command Center
-- **Order Management**: Live dashboard to update cooking stages (Preparing, Ready, Delivering).
-- **Inventory Control**: Real-time management of products, prices, and availability.
-- **Category Manager**: Organize your menu with custom icons and sorting.
-- **Gallery Management**: Portfolio of high-resolution food photography.
-- **Payment Verification**: Manual check-off for PayNow transactions.
+### Web vs mobile (do not mix)
 
-## 🛠️ Tech Stack
-- **Frontend**: React.js 18 + Vite
-- **Styling**: Premium Vanilla CSS + Lucide Icons + Framer Motion
-- **Database**: Google Firebase (Firestore)
-- **Hosting**: Firebase Hosting
-- **Authentication**: Firebase Auth
+- **`frontend`** = **website only**. Opening `localhost:5173` is correct for web, **not** for the phone app UI.
+- **`stm-mobile`** = **Expo app only**. Use Expo Go or an Android/iOS emulator against the Metro dev server. Metro is pinned to **port 19006** so it does not collide with other tools on **8081**. The **same** app can also run in a **browser** via Expo Web (`npm run web` from `stm-mobile`); the dev server URL and port are printed by Expo (for example **`http://localhost:8082/home`** for the tabs home route — Expo Router drops the `(tabs)` segment on web, so paths look like `/home`, not `/(tabs)/home`).
+- Running **`npm run dev`** at the root starts **web + backend only** — it does **not** start Expo. Add a second terminal with `npm run dev:mobile` when you need the native app.
 
-## 📦 Getting Started
+### Commands (from repository root)
 
-### Prerequisites
-- Node.js 18+
-- Firebase CLI (`npm install -g firebase-tools`)
-
-### Local Development
-1. Clone the repository.
-2. Navigate to `/frontend`.
-3. Install dependencies: `npm install`
-4. Start dev server: `npm run dev`
-
-### Deployment
-To build and deploy the project to the live site:
 ```bash
+# Web storefront (Vite)
+npm run dev:web
+
+# Mobile app (Expo; Metro on http://localhost:19006)
+npm run dev:mobile
+
+# Web + API together
+npm run dev
+
+# Install deps in root, frontend, backend, and stm-mobile
+npm run install:all
+```
+
+Inside **`stm-mobile/`** you can also use:
+
+```bash
+npm run start:mobile   # Expo dev server (port 19006)
+npm run android        # Same + open Android (expo start --android)
+npm run clear          # Start with cleared Metro cache (port 19006)
+npm run run:android    # Native rebuild / dev client (expo run:android)
+```
+
+---
+
+## Web app features (frontend)
+
+Premium Teh Tarik / kebab storefront: real-time kitchen tracking, admin inventory, WhatsApp-oriented checkout, SGQR / PayNow flows.
+
+### Tech stack (web)
+
+- React 18 + Vite
+- Firebase (Auth, Firestore)
+- Framer Motion, Lucide
+
+### Web-only getting started
+
+1. Node.js 18+
+2. Firebase CLI (`npm install -g firebase-tools`) for deploy
+3. From repo root: `npm run dev:web`, or `cd frontend && npm install && npm run dev`
+
+### Web deployment
+
+```bash
+cd frontend
 npm run build
 firebase deploy --only hosting,firestore
 ```
 
-## 🔒 Security & Rules
-The project uses strictly enforced Firestore security rules located in `firestore.rules`. 
-- **Administrative** collections require authentication.
-- **Public** collections (Products/Menu) allow read-access for customers.
+## Security
+
+Firestore rules live in `firestore.rules`. Admin collections require auth; public menu reads are scoped for customers.
 
 ---
-© 2026 STM Salam. Built with ❤️ for premium dining.
+
+## Monorepo improvements (optional)
+
+- **Shared package**: Extract Firebase init, types, and API clients into `packages/` (e.g. `packages/shared-firebase`) consumed by `frontend` and `stm-mobile` to avoid drift.
+- **Turborepo / Nx**: If build and test graphs grow, a task runner gives caching and ordered `dev` / `build` pipelines.
+- **Single `compose` or `dev:stack`**: Only if you routinely need web + API + mobile; keep scripts explicit so newcomers are not confused about which UI is which.
+
+---
+
+© 2026 STM Salam.

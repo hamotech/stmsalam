@@ -29,6 +29,8 @@ const Products = () => {
   const [dryRunCompleted, setDryRunCompleted] = useState(false);
   const [migrationReport, setMigrationReport] = useState(null);
 
+  const isAvailableProduct = (p) => p?.available !== false;
+
   const tryBootstrapAdminAndRetry = async (retryAction) => {
     const uid = auth.currentUser?.uid || '';
     if (!uid) throw new Error('Authentication required.');
@@ -56,6 +58,7 @@ const Products = () => {
     description: '',
     image: '',
     featured: false,
+    available: true,
     active: true,
     order: products.length + 1,
   }), [categories, products.length]);
@@ -320,9 +323,14 @@ const Products = () => {
               <input type="checkbox" checked={currentProduct.featured} onChange={e => setCurrentProduct({ ...currentProduct, featured: e.target.checked })} style={{ width: '20px', height: '20px' }} />
               <Star size={20} fill={currentProduct.featured ? 'currentColor' : 'none'} /> Featured Item
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontWeight: '800', color: currentProduct.active ? '#10b981' : '#ef4444' }}>
-              <input type="checkbox" checked={currentProduct.active} onChange={e => setCurrentProduct({ ...currentProduct, active: e.target.checked })} style={{ width: '20px', height: '20px' }} />
-              {currentProduct.active ? <CheckCircle size={20} /> : <XCircle size={20} />} {currentProduct.active ? 'Active (Visible)' : 'Inactive (Hidden)'}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontWeight: '800', color: isAvailableProduct(currentProduct) ? '#10b981' : '#ef4444' }}>
+              <input
+                type="checkbox"
+                checked={isAvailableProduct(currentProduct)}
+                onChange={e => setCurrentProduct({ ...currentProduct, available: e.target.checked })}
+                style={{ width: '20px', height: '20px' }}
+              />
+              {isAvailableProduct(currentProduct) ? <CheckCircle size={20} /> : <XCircle size={20} />} {isAvailableProduct(currentProduct) ? 'Available (Visible)' : 'Unavailable (Hidden)'}
             </label>
           </div>
 
@@ -486,8 +494,8 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '20px', fontWeight: '900', color: 'var(--green-dark)', fontSize: '16px' }}>${product.price ? parseFloat(product.price).toFixed(2) : '0.00'}</td>
                   <td style={{ padding: '20px' }}>
-                    <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', background: product.active ? '#ecfdf5' : '#fef2f2', color: product.active ? '#10b981' : '#ef4444' }}>
-                      {product.active ? 'Active' : 'Inactive'}
+                    <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', background: isAvailableProduct(product) ? '#ecfdf5' : '#fef2f2', color: isAvailableProduct(product) ? '#10b981' : '#ef4444' }}>
+                      {isAvailableProduct(product) ? 'Available' : 'Unavailable'}
                     </span>
                   </td>
                   <td style={{ padding: '20px' }}>

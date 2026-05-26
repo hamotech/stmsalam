@@ -1,6 +1,8 @@
 node_modules/
 backend/node_modules/
 frontend/node_modules/
+frontend/node_modules_old/
+stmapp/node_modules/
 .env
 frontend/.env
 backend/.env
@@ -13,3 +15,19 @@ frontend/.firebase/
 dist/
 node_modules/
 .DS_Store
+
+# Logs and emulator debug output
+*.log
+firebase-debug.log
+firestore-debug.log
+
+# Expo export/build test output
+stm-mobile/.expo-export-test-*/
+
+# Android/IDE local metadata and build output
+stmapp/android/.idea/
+stmapp/android/local.properties
+stmapp/android/.gradle/
+stmapp/android/build/
+stmapp/android/app/build/
+stmapp/dist/

@@ -5,7 +5,6 @@ export type PlaceOrderPayload = Record<string, unknown> & {
   items?: { name: string; qty: number; price: number }[];
   total?: string | number;
   mode?: string;
-  status?: string;
 };
 
 export type PlacedOrder = PlaceOrderPayload & {

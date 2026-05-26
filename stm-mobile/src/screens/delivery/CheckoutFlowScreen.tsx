@@ -17,7 +17,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useCart } from '@/src/context/CartContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { placeOrder } from '@/src/services/orderService';
+import { placeGrabOrderAtCheckout } from '@/src/services/grabFlowOrderService';
 
 const GREEN = '#013220';
 const GOLD = '#D4AF37';
@@ -67,21 +67,24 @@ export default function CheckoutFlowScreen() {
         notes: notes.trim(),
       };
 
-      const newOrder = await placeOrder({
-        customer: formData,
+      const newOrderId = await placeGrabOrderAtCheckout({
         items,
-        total: (total || 0).toFixed(2),
-        mode: 'delivery',
-        payment: 'cash',
-        notes: formData.notes || '',
-        payment_status: 'Cash on Delivery',
-        order_status: 'Pending',
-        stage: 'kitchen_preparation',
-        userId: user?.id || 'anonymous',
+        totalAmount: Number(total || 0),
+        paymentMethod: 'COD',
+        metaData: {
+          customer: {
+            name: formData.name,
+            phone: formData.phone,
+            email: formData.email,
+            address: formData.address,
+            notes: formData.notes || '',
+          },
+          mode: 'delivery',
+        },
       });
 
       clearCart();
-      router.replace(`/tracking/${encodeURIComponent(newOrder.id)}`);
+      router.replace(`/tracking/${encodeURIComponent(newOrderId)}`);
     } catch (e) {
       console.error(e);
       Alert.alert('Order failed', 'Could not place order. Check connection and try again.');

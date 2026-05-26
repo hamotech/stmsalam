@@ -1,18 +1,17 @@
 import { db, storage, auth, functions } from '../../lib/firebase';
 import { signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
+import * as firestore from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
+import { subscribeProductsSnapshot } from '../../../../shared/useProductsCore.js';
 import dynamicMenu from '../../data/dynamicMenu';
 import { categories as defaultCategories } from '../../data/menuData';
-import {
-  normalizeGrabOrderStatus,
-  canTransitionTo,
-  paymentAllowsConfirm,
-  toLegacyTrackingStatus,
-} from '../orderPipeline.js';
+import { paymentAllowsConfirm } from '../orderPipeline.js';
+import { readCanonicalOrderStatus, coerceAdminIntentToCanonical } from '../../domain/orderStateMachine.js';
 import { getSupportBotReply } from '../../utils/supportBotReply';
 import { normalizePhone, safeLog } from '../../utils/runtimeSafety';
+import { assertNoDirectOrderLifecycleWrite } from '../../lib/orderLifecycleGuards';
 
 const IMAGE_PATH_RE = /^(\/|https?:\/\/)/i;
 const toSafeCategoryFolder = (folderName) => String(folderName || '').replace(/\s+/g, '_');
@@ -106,43 +105,94 @@ export const deleteCategory = async (id) => {
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
 export const fetchProducts = async () => {
-  try {
-    const snap = await getDocs(collection(db, 'products'));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.error('Failed to fetch products:', err);
-    throw err;
-  }
+  return new Promise((resolve, reject) => {
+    const unsub = subscribeProductsSnapshot({
+      firestore,
+      db,
+      includeUnavailable: true,
+      orderByCreatedDesc: true,
+      onData: (prods) => {
+        unsub();
+        resolve(prods);
+      },
+      onError: (err) => {
+        unsub();
+        console.error('Failed to fetch products:', err);
+        reject(err);
+      },
+      onIndexWarning: (err) => {
+        console.warn(
+          '[fetchProducts] Missing index for categoryId + createdAt; fallback listener applied.',
+          err
+        );
+      },
+    });
+  });
 };
 
 export const subscribeProducts = (callback, activeCategoryId = null) => {
-  const q = query(collection(db, 'products'));
-  const unsub = onSnapshot(q, (snap) => {
-    let prods = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // If we get an empty snapshot from a live listener, it means data was deleted
-    if (activeCategoryId && activeCategoryId !== 'all') {
-      prods = prods.filter(p => p.categoryId === activeCategoryId);
-    }
-    callback(prods);
-  }, (err) => {
-    console.error('Products Subscription Error:', err);
+  return subscribeProductsSnapshot({
+    firestore,
+    db,
+    categoryId: activeCategoryId,
+    includeUnavailable: true,
+    orderByCreatedDesc: true,
+    onData: (prods) => callback(prods),
+    onError: (err) => {
+      console.error('Products Subscription Error:', err);
+    },
+    onIndexWarning: (err) => {
+      console.warn(
+        '[admin dataService] Missing index for categoryId + createdAt; fallback listener applied.',
+        err
+      );
+    },
   });
-  return unsub;
 };
 
 export const addProduct = async (product) => {
   if (!auth.currentUser) throw new Error("Authentication required to add products.");
-  const id = product.id || `prod-${Date.now()}`;
   const syncedImage = sanitizeImagePath(product.image || product.img || '');
-  const newProduct = { ...product, image: syncedImage, img: syncedImage, id, createdAt: new Date().toISOString() };
-  await setDoc(doc(db, 'products', id), newProduct);
-  return newProduct;
+  const available = product.available !== undefined ? Boolean(product.available) : true;
+  const categoryName = String(product.category || '').trim() || String(product.categoryId || '').trim() || 'uncategorized';
+  const name = String(product.name || '').trim();
+  const price = Number(product.price || 0);
+  if (!name) throw new Error('Product name is required.');
+  if (!Number.isFinite(price) || price < 0) throw new Error('Product price must be a valid non-negative number.');
+  if (!syncedImage) throw new Error('Product image is required.');
+  if (!categoryName) throw new Error('Product category is required.');
+  const payload = {
+    name,
+    price,
+    image: syncedImage,
+    category: categoryName,
+    available,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  const ref = await addDoc(collection(db, 'products'), payload);
+  return { id: ref.id, ...payload };
 };
 
 export const updateProduct = (id, updatedProduct) => {
   if (!auth.currentUser) throw new Error("Authentication required to update products.");
   const syncedImage = sanitizeImagePath(updatedProduct.image || updatedProduct.img || '');
-  return updateDoc(doc(db, 'products', id), { ...updatedProduct, image: syncedImage, img: syncedImage, updatedAt: new Date().toISOString() });
+  const available = updatedProduct.available !== undefined ? Boolean(updatedProduct.available) : true;
+  const categoryName = String(updatedProduct.category || '').trim() || String(updatedProduct.categoryId || '').trim() || 'uncategorized';
+  const name = String(updatedProduct.name || '').trim();
+  const price = Number(updatedProduct.price || 0);
+  if (!name) throw new Error('Product name is required.');
+  if (!Number.isFinite(price) || price < 0) throw new Error('Product price must be a valid non-negative number.');
+  if (!syncedImage) throw new Error('Product image is required.');
+  if (!categoryName) throw new Error('Product category is required.');
+  return updateDoc(doc(db, 'products', id), {
+    name,
+    price,
+    image: syncedImage,
+    category: categoryName,
+    available,
+    updatedAt: serverTimestamp(),
+  });
 };
 
 export const deleteProduct = async (id) => {
@@ -233,111 +283,8 @@ export const normalizeOrderLineItems = (order) => {
 };
 
 export const placeOrder = async (orderPayload) => {
-  // Step 6 Debug: Log Firebase Config
-  safeLog('[DEBUG] Active Firebase Config:', {
-    projectId: auth.app.options.projectId,
-    authDomain: auth.app.options.authDomain
-  });
-
-  try {
-    let uid = auth.currentUser?.uid;
-    if (!uid) {
-      const cred = await signInAnonymously(auth);
-      uid = cred.user.uid;
-    }
-
-    const items = Array.isArray(orderPayload.items) ? orderPayload.items : [];
-    if (items.length === 0) {
-      throw new Error('Order requires items');
-    }
-
-    const rawTotal = orderPayload.total;
-    const totalAmount =
-      typeof rawTotal === 'number'
-        ? rawTotal
-        : parseFloat(String(rawTotal ?? '0').replace(/[^0-9.]/g, '')) || 0;
-
-    const statusRaw =
-      orderPayload.status || orderPayload.order_status || orderPayload.orderStatus || 'PENDING';
-    const status = String(statusRaw)
-      .trim()
-      .toLowerCase()
-      .replace(/[\s-]+/g, '_');
-
-    const payRaw = orderPayload.paymentStatus ?? orderPayload.payment_status;
-    const paymentStatus = typeof payRaw === 'string' ? payRaw : String(payRaw ?? '');
-
-    const {
-      userId: _ignoreUserId,
-      total: _total,
-      totalAmount: _dropTam,
-      order_status: _os,
-      orderStatus: _oS,
-      status: _st,
-      payment_status: _ps,
-      paymentStatus: _pS,
-      items: _it,
-      ...restExtras
-    } = orderPayload;
-
-    const orderId = `STM-${Date.now()}`;
-    const trackingToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-    const cleanExtras = { ...restExtras };
-    delete cleanExtras.order_status;
-    delete cleanExtras.orderStatus;
-
-    const newOrder = {
-      ...cleanExtras,
-      userId: uid,
-      items,
-      totalAmount,
-      status,
-      paymentStatus,
-      payment_status: paymentStatus,
-      id: orderId,
-      trackingToken,
-      createdAt: new Date().toISOString(),
-      isNewForAdmin: true,
-      chatEnabled: true,
-      unreadAdmin: 0,
-      unreadCustomer: 0,
-      ...(typeof cleanExtras.riderId === 'string' ? {} : { riderId: null }),
-      ...(cleanExtras.customerSnapshot
-        ? {}
-        : {
-            customerSnapshot: {
-              name: cleanExtras?.customer?.name || '',
-              phone: normalizePhone(cleanExtras?.customer?.phone || ''),
-              address: cleanExtras?.customer?.address || '',
-            },
-          }),
-    };
-
-    // DEBUG: Write #1 - Primary Order
-    safeLog('[DEBUG] Attempting Write #1: /orders/' + orderId, null);
-    safeLog('[DEBUG] Payload #1:', JSON.stringify(newOrder, null, 2));
-    
-    try {
-      await setDoc(doc(db, 'orders', orderId), newOrder);
-      safeLog('[DEBUG] Write #1 SUCCESS', { orderId });
-    } catch (err1) {
-      console.error('[DEBUG] Write #1 FAILED:', {
-        code: err1.code,
-        message: err1.message,
-        path: '/orders/' + orderId
-      });
-      throw err1; // Propagate to outer catch
-    }
-
-    // public_tracking is mirrored from orders via Cloud Functions (deploy: firebase deploy --only functions).
-
-    localStorage.setItem('stm_last_order_id', orderId);
-    return newOrder;
-  } catch (err) {
-    console.error('[DEBUG] placeOrder General Error:', err);
-    throw new Error('Failed to place order: ' + err.message);
-  }
+  void orderPayload;
+  throw new Error('Direct client order writes are disabled. Use backend callable order creation.');
 };
 
 export const fetchOrders = async () => {
@@ -373,91 +320,51 @@ export const fetchOrderById = async (id) => {
   }
 };
 
+/** @deprecated Prefer `advanceOrderPipeline`. Maps legacy kitchen labels → canonical `status`. */
 export const updateOrderStatus = async (orderId, newStatus, extraOrderFields = {}) => {
-  const normalizeFlowStatus = (value) => {
-    const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-    if (raw === 'placed') return 'pending';
-    if (raw === 'out_for_delivery' || raw === 'delivering') return 'assigned';
-    if (raw === 'completed' || raw === 'complete') return 'delivered';
-    return raw || 'pending';
-  };
-  const STATUS_FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered'];
-  const TS_FIELD_MAP = {
-    pending: 'createdAt',
-    confirmed: 'confirmedAt',
-    preparing: 'preparingAt',
-    ready: 'readyAt',
-    assigned: 'assignedAt',
-    picked_up: 'pickedUpAt',
-    delivered: 'deliveredAt',
-  };
-
-  const next = normalizeFlowStatus(newStatus);
-  if (!STATUS_FLOW.includes(next)) {
-    throw new Error(`Invalid status: ${newStatus}`);
-  }
-
   const ref = doc(db, 'orders', orderId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error('Order not found');
-  const data = snap.data() || {};
-  const current = normalizeFlowStatus(data.status || data.orderStatus || data.stage);
-  const currentIdx = STATUS_FLOW.indexOf(current);
-  const nextIdx = STATUS_FLOW.indexOf(next);
-
-  if (currentIdx >= 0 && nextIdx !== currentIdx + 1 && !(current === 'pending' && next === 'pending')) {
-    throw new Error(`Invalid transition: ${current} -> ${next}`);
-  }
-
-  const riderId =
-    typeof extraOrderFields.riderId === 'string'
-      ? extraOrderFields.riderId.trim()
-      : (typeof data.riderId === 'string' ? data.riderId : null);
-  if (next === 'assigned' && !riderId) {
-    throw new Error('Assign Rider requires riderId.');
-  }
-
-  const payload = {
-    status: next,
-    riderId: riderId || null,
-    updatedAt: serverTimestamp(),
-    [`timestamps.${TS_FIELD_MAP[next]}`]: serverTimestamp(),
+  const order = { id: orderId, ...snap.data() };
+  const key = String(newStatus || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const ALIAS = {
+    confirmed: 'preparing',
+    pending: 'preparing',
+    preparing: 'preparing',
+    ready: 'ready_for_pickup',
   };
-  if (!data?.timestamps?.createdAt) {
-    payload['timestamps.createdAt'] = serverTimestamp();
-  }
-
-  if (import.meta.env.DEV) {
-    safeLog(`Updating order status: ${next}`, { orderId });
-  }
-  await updateDoc(ref, payload);
-
-  if (import.meta.env.DEV) {
-    console.debug('[AdminStatusUpdate]', { orderId, from: current, to: next, riderId: payload.riderId });
-  }
+  const target = ALIAS[key] ?? coerceAdminIntentToCanonical(newStatus);
+  await advanceOrderPipeline(orderId, order, target);
+  void extraOrderFields;
 };
 
-/** Strict pipeline + payment gate (Stripe/QR must be PAID before CONFIRMED). */
+async function runTransactionalStatusTransition(orderId, {
+  toStatus,
+  metadata = {},
+}) {
+  const callable = httpsCallable(functions, 'transitionOrderStatus');
+  await callable({
+    orderId,
+    nextStatus: toStatus,
+    metadata,
+  });
+}
+
+/** Strict pipeline + payment gate (Stripe/QR must be PAID before kitchen). */
 export const advanceOrderPipeline = async (orderId, order, nextStatus) => {
   if (!auth.currentUser) throw new Error('Authentication required');
-  const next = String(nextStatus || '')
-    .toUpperCase()
-    .replace(/\s+/g, '_');
-  const current = normalizeGrabOrderStatus(order);
-  if (next === 'CONFIRMED' && current === 'PLACED') {
+  const next = coerceAdminIntentToCanonical(nextStatus);
+  const current = readCanonicalOrderStatus(order);
+  if (next === 'preparing' && current === 'paid') {
     const gate = paymentAllowsConfirm(order);
     if (!gate.ok) throw new Error(gate.reason);
   }
-  if (!canTransitionTo(current, next)) {
-    throw new Error(`Invalid transition: ${current} → ${next}. Advance one stage only.`);
-  }
-  const legacy = toLegacyTrackingStatus(next);
-  await updateDoc(doc(db, 'orders', orderId), {
-    orderStatus: next,
-    status: legacy,
-    order_status: next.toLowerCase(),
-    updatedAt: new Date().toISOString(),
-    chatEnabled: next !== 'PLACED' && next !== 'CANCELLED',
+  await runTransactionalStatusTransition(orderId, {
+    toStatus: next,
+    metadata: { source: 'advanceOrderPipeline' },
   });
 };
 
@@ -467,12 +374,12 @@ export const assignRiderToOrder = async (orderId, riderPayload) => {
   const snap = await getDoc(orderRef);
   if (!snap.exists()) throw new Error('Order not found');
   const data = snap.data();
-  const st = normalizeGrabOrderStatus(data);
-  if (st !== 'READY') throw new Error('Assign rider only when order is READY');
+  const st = readCanonicalOrderStatus(data);
+  if (st !== 'ready_for_pickup') throw new Error('Assign rider only when order is ready_for_pickup');
   const name = (riderPayload?.name || '').trim();
   if (!name) throw new Error('Rider name required');
   const ts = new Date().toISOString();
-  await updateDoc(orderRef, {
+  const patch = {
     rider: {
       id: riderPayload?.id || null,
       name,
@@ -484,7 +391,9 @@ export const assignRiderToOrder = async (orderId, riderPayload) => {
       deliveredAt: null,
     },
     updatedAt: ts,
-  });
+  };
+  assertNoDirectOrderLifecycleWrite(patch, 'dataService.assignRiderToOrder');
+  await updateDoc(orderRef, patch);
 };
 
 /** Proxy for future rider app: accept → OUT_FOR_DELIVERY, pickup, deliver → DELIVERED. */
@@ -494,39 +403,47 @@ export const advanceRiderLeg = async (orderId, leg) => {
   const snap = await getDoc(orderRef);
   if (!snap.exists()) throw new Error('Order not found');
   const data = snap.data();
-  const st = normalizeGrabOrderStatus(data);
+  const cur = readCanonicalOrderStatus(data);
   const rider = data.rider || {};
   const ts = new Date().toISOString();
 
   if (leg === 'accept') {
-    if (st !== 'READY') throw new Error('Rider accept only when order is READY');
+    if (cur !== 'ready_for_pickup') throw new Error('Rider accept only when order is ready_for_pickup');
     if (rider.legStatus !== 'OFFERED') throw new Error('Assign a rider first');
-    await updateDoc(orderRef, {
-      orderStatus: 'OUT_FOR_DELIVERY',
-      status: toLegacyTrackingStatus('OUT_FOR_DELIVERY'),
-      order_status: 'out_for_delivery',
+    await runTransactionalStatusTransition(orderId, {
+      toStatus: 'out_for_delivery',
+      metadata: { source: 'advanceRiderLeg', leg: 'accept' },
+    });
+    const patch = {
       rider: { ...rider, legStatus: 'ACCEPTED', acceptedAt: ts },
       updatedAt: ts,
-    });
+    };
+    assertNoDirectOrderLifecycleWrite(patch, 'dataService.advanceRiderLeg.accept');
+    await updateDoc(orderRef, patch);
     return;
   }
   if (leg === 'pickup') {
-    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Pick up only when OUT_FOR_DELIVERY');
-    await updateDoc(orderRef, {
+    if (cur !== 'out_for_delivery') throw new Error('Pick up only when out_for_delivery');
+    const patch = {
       rider: { ...rider, legStatus: 'PICKED_UP', pickedUpAt: ts },
       updatedAt: ts,
-    });
+    };
+    assertNoDirectOrderLifecycleWrite(patch, 'dataService.advanceRiderLeg.pickup');
+    await updateDoc(orderRef, patch);
     return;
   }
   if (leg === 'deliver') {
-    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Deliver only when OUT_FOR_DELIVERY');
-    await updateDoc(orderRef, {
-      orderStatus: 'DELIVERED',
-      status: toLegacyTrackingStatus('DELIVERED'),
-      order_status: 'delivered',
+    if (cur !== 'out_for_delivery') throw new Error('Deliver only when out_for_delivery');
+    await runTransactionalStatusTransition(orderId, {
+      toStatus: 'delivered',
+      metadata: { source: 'advanceRiderLeg', leg: 'deliver' },
+    });
+    const patch = {
       rider: { ...rider, legStatus: 'COMPLETED', deliveredAt: ts },
       updatedAt: ts,
-    });
+    };
+    assertNoDirectOrderLifecycleWrite(patch, 'dataService.advanceRiderLeg.deliver');
+    await updateDoc(orderRef, patch);
     return;
   }
   throw new Error('Unknown rider action');
@@ -782,8 +699,8 @@ export const seedFromLocalStorage = async (forceRewrite = false) => {
   if (!auth.currentUser) throw new Error("Authentication required to seed data.");
   console.log('Smart Seeding: Syncing items to Cloud...');
   
-  const existingProdsSnap = await getDocs(collection(db, 'products'));
-  const existingProdIds = new Set(existingProdsSnap.docs.map(d => d.id));
+  const existingProducts = await fetchProducts();
+  const existingProdIds = new Set(existingProducts.map((d) => d.id));
 
   const existingCatsSnap = await getDocs(collection(db, 'categories'));
   const existingCatIds = new Set(existingCatsSnap.docs.map(d => d.id));
@@ -823,7 +740,7 @@ export const seedFromLocalStorage = async (forceRewrite = false) => {
           id: pId, name, price, categoryId: catId,
           category: matchedCat ? matchedCat.name : categoryKey,
           badge: i % 5 === 0 ? 'bestseller' : '',
-          active: true,
+          available: true,
           image: imagePath,
           img: imagePath,
         });
@@ -847,7 +764,8 @@ export const seedFromLocalStorage = async (forceRewrite = false) => {
 
   // 2. Seed Products
   for (const prod of prods) {
-    await setDoc(doc(db, 'products', prod.id), { ...prod, createdAt: new Date().toISOString() });
+    const nowIso = new Date().toISOString();
+    await setDoc(doc(db, 'products', prod.id), { ...prod, createdAt: nowIso, updatedAt: nowIso });
   }
 
   // 3. Seed Gallery

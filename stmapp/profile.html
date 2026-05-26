@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Manage your STM Salam profile â€” order history, saved addresses, dietary preferences and account settings." />
+  <title>Profile â€” STM Salam</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- ══ SPLASH FAILSAFE ══ -->
+  <script>
+    (function(){function h(){var s=document.getElementById('splash-screen');if(!s)return;s.classList.add('hidden');s.style.cssText='opacity:0;visibility:hidden;pointer-events:none;';setTimeout(function(){s.style.display='none';if(s.parentNode)s.parentNode.removeChild(s);},600);}setTimeout(h,3000);document.addEventListener('DOMContentLoaded',function(){setTimeout(h,1800);});window.addEventListener('error',function(){setTimeout(h,500);});})();
+  </script>
+</head>
+<body>
+
+<!-- â•â• TOAST â•â• -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- â•â• PROFILE HERO â•â• -->
+<div class="profile-hero">
+  <div style="position:relative;z-index:1">
+    <div class="profile-avatar-wrap">
+      <div class="profile-avatar" id="profile-avatar">U</div>
+      <div>
+        <div class="profile-info-name" id="profile-name">Guest User</div>
+        <div class="profile-info-sub" id="profile-sub">STM Salam Member</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- â•â• STATS STRIP â•â• -->
+<div class="profile-stats" id="profile-stats">
+  <div class="profile-stat">
+    <div class="stat-value" id="stat-orders">0</div>
+    <div class="stat-label">Orders</div>
+  </div>
+  <div class="profile-stat">
+    <div class="stat-value" id="stat-spent">$0</div>
+    <div class="stat-label">Spent</div>
+  </div>
+  <div class="profile-stat">
+    <div class="stat-value">â­</div>
+    <div class="stat-label">Member</div>
+  </div>
+</div>
+
+<!-- â•â• TABS â•â• -->
+<div style="display:flex;gap:0;background:white;border-bottom:2px solid #E5E7EB;margin-top:0;position:sticky;top:0;z-index:300">
+  <button class="profile-tab active" data-tab="overview" onclick="switchTab('overview', this)" style="flex:1;padding:13px 8px;border:none;background:none;font-size:12px;font-weight:800;color:#013220;border-bottom:2px solid #013220;margin-bottom:-2px;cursor:pointer">Overview</button>
+  <button class="profile-tab" data-tab="orders" onclick="switchTab('orders', this)" style="flex:1;padding:13px 8px;border:none;background:none;font-size:12px;font-weight:700;color:#9CA3AF;cursor:pointer">Orders</button>
+  <button class="profile-tab" data-tab="prefs" onclick="switchTab('prefs', this)" style="flex:1;padding:13px 8px;border:none;background:none;font-size:12px;font-weight:700;color:#9CA3AF;cursor:pointer">Preferences</button>
+  <button class="profile-tab" data-tab="account" onclick="switchTab('account', this)" style="flex:1;padding:13px 8px;border:none;background:none;font-size:12px;font-weight:700;color:#9CA3AF;cursor:pointer">Account</button>
+</div>
+
+<!-- â•â• TAB CONTENT â•â• -->
+<div id="tab-content" style="padding-bottom:100px">
+
+  <!-- OVERVIEW TAB -->
+  <div id="tab-overview">
+    <!-- Quick Actions -->
+    <div style="padding:16px">
+      <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Quick Access</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <a href="menu.html" style="background:#013220;border-radius:16px;padding:16px;text-decoration:none;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">ðŸ½ï¸</div>
+          <div style="font-size:12px;font-weight:900;color:white">Order Food</div>
+        </a>
+        <a href="orders.html" style="background:#D4AF37;border-radius:16px;padding:16px;text-decoration:none;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">ðŸ“¦</div>
+          <div style="font-size:12px;font-weight:900;color:#013220">Track Orders</div>
+        </a>
+        <a href="https://wa.me/6591915766" target="_blank" rel="noreferrer" style="background:#25d366;border-radius:16px;padding:16px;text-decoration:none;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">ðŸ’¬</div>
+          <div style="font-size:12px;font-weight:900;color:white">WhatsApp</div>
+        </a>
+        <a href="support.html" style="background:#F3F4F6;border-radius:16px;padding:16px;text-decoration:none;text-align:center;border:1.5px solid #E5E7EB">
+          <div style="font-size:24px;margin-bottom:6px">ðŸ†˜</div>
+          <div style="font-size:12px;font-weight:900;color:#013220">Help & FAQ</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- About STM Salam -->
+    <div style="margin:0 16px 16px;background:linear-gradient(135deg,#013220,#024d32);border-radius:20px;padding:20px">
+      <div style="font-size:16px;font-weight:900;color:white;margin-bottom:6px">ðŸŒŸ About STM Salam</div>
+      <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:14px">Established 1988, STM Salam has been serving authentic Kopitiam flavors at Marine Terrace, Singapore for over 35 years.</div>
+      <div style="display:flex;gap:10px">
+        <a href="tel:+6591915766" style="flex:1;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:white;text-decoration:none">ðŸ“ž Call</a>
+        <a href="mailto:highlitesg786@gmail.com" style="flex:1;background:rgba(212,175,55,0.2);border:1px solid rgba(212,175,55,0.3);border-radius:12px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D4AF37;text-decoration:none">âœ‰ï¸ Email</a>
+      </div>
+    </div>
+
+    <!-- PWA Install Prompt -->
+    <div id="pwa-install-section" style="margin:0 16px 16px;background:white;border:1.5px solid #E5E7EB;border-radius:20px;padding:16px;display:none">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="../stmsalamlogo.png" style="width:48px;height:48px;border-radius:12px;object-fit:contain;background:#F3F4F6;padding:4px" alt="STM Salam" />
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:900;color:#0D1B0F">Install STM Salam App</div>
+          <div style="font-size:12px;font-weight:500;color:#6B7280">Add to home screen for quick access</div>
+        </div>
+        <button id="pwa-install-btn" onclick="installPWA()" style="background:#013220;color:white;border:none;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:900;cursor:pointer">Install</button>
+      </div>
+    </div>
+
+    <!-- Profile Menu List -->
+    <div class="profile-menu-list">
+      <div class="profile-menu-item" onclick="window.location.href='orders.html'">
+        <div class="profile-menu-icon" style="background:rgba(1,50,32,0.08)">ðŸ“¦</div>
+        <div class="profile-menu-text">
+          <div class="profile-menu-label">Order History</div>
+          <div class="profile-menu-sublabel">View all past orders</div>
+        </div>
+        <svg class="profile-menu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="profile-menu-item" onclick="switchTab('prefs', document.querySelector('[data-tab=prefs]'))">
+        <div class="profile-menu-icon" style="background:rgba(212,175,55,0.08)">â¤ï¸</div>
+        <div class="profile-menu-text">
+          <div class="profile-menu-label">Dietary Preferences</div>
+          <div class="profile-menu-sublabel">Halal, nut-free & more</div>
+        </div>
+        <svg class="profile-menu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="profile-menu-item" onclick="window.location.href='support.html'">
+        <div class="profile-menu-icon" style="background:rgba(37,211,102,0.08)">ðŸ†˜</div>
+        <div class="profile-menu-text">
+          <div class="profile-menu-label">Help & Support</div>
+          <div class="profile-menu-sublabel">FAQ, contact, WhatsApp</div>
+        </div>
+        <svg class="profile-menu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="profile-menu-item" onclick="switchTab('account', document.querySelector('[data-tab=account]'))">
+        <div class="profile-menu-icon" style="background:rgba(79,70,229,0.08)">âš™ï¸</div>
+        <div class="profile-menu-text">
+          <div class="profile-menu-label">Account Settings</div>
+          <div class="profile-menu-sublabel">Name, phone, preferences</div>
+        </div>
+        <svg class="profile-menu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDERS TAB -->
+  <div id="tab-orders" style="display:none">
+    <div id="profile-orders-list" style="padding:12px 0 20px"></div>
+    <div class="empty-state" id="profile-orders-empty" style="display:none">
+      <div class="empty-state-icon">ðŸ“¦</div>
+      <div class="empty-state-title">No orders yet</div>
+      <div class="empty-state-subtitle">Your order history will appear here.</div>
+      <a href="menu.html" class="cta-btn">Start Ordering</a>
+    </div>
+  </div>
+
+  <!-- PREFERENCES TAB -->
+  <div id="tab-prefs" style="display:none;padding:16px">
+    <div style="font-size:16px;font-weight:900;color:#0D1B0F;margin-bottom:4px">Dietary Profile</div>
+    <div style="font-size:13px;font-weight:500;color:#6B7280;margin-bottom:20px">Customise your STM Salam experience.</div>
+    <div id="dietary-options" style="display:flex;flex-direction:column;gap:12px">
+      <!-- Populated by JS -->
+    </div>
+
+    <div style="margin-top:24px;font-size:16px;font-weight:900;color:#0D1B0F;margin-bottom:12px">ðŸ”” Notifications</div>
+    <div style="display:flex;flex-direction:column;gap:10px" id="notification-prefs">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+  <!-- ACCOUNT TAB -->
+  <div id="tab-account" style="display:none;padding:16px">
+    <div style="font-size:16px;font-weight:900;color:#0D1B0F;margin-bottom:16px">Account Information</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Display Name</label>
+        <input class="form-input" id="acc-name" type="text" placeholder="Your name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone Number</label>
+        <input class="form-input" id="acc-phone" type="tel" placeholder="e.g. 91234567" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input class="form-input" id="acc-email" type="email" placeholder="your@email.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Delivery Address</label>
+        <textarea class="form-input" id="acc-address" rows="2" style="resize:none" placeholder="Block, street, postal code"></textarea>
+      </div>
+      <button onclick="saveProfile()" style="width:100%;padding:15px;border-radius:14px;background:#013220;color:white;border:none;font-size:15px;font-weight:900;cursor:pointer;margin-top:4px">
+        Save Changes
+      </button>
+    </div>
+
+    <div style="margin-top:32px;padding-top:20px;border-top:1px solid #E5E7EB">
+      <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:12px">App Info</div>
+      <div style="font-size:12px;font-weight:600;color:#9CA3AF;line-height:1.8">
+        STM Salam App v1.0.0<br/>
+        Â© 2024 STM Salam. All rights reserved.<br/>
+        Blk 50A Marine Terrace, #01-303, Singapore 441050
+      </div>
+    </div>
+
+    <button onclick="clearData()" style="width:100%;padding:14px;border-radius:14px;border:1.5px solid #FECACA;background:#FFF5F5;color:#DC2626;font-size:14px;font-weight:800;cursor:pointer;margin-top:16px">
+      ðŸ—‘ï¸ Clear App Data
+    </button>
+  </div>
+
+</div>
+
+<!-- â•â• FLOATING WHATSAPP â•â• -->
+<a href="https://wa.me/6591915766?text=Hi%20STM%20Salam!" target="_blank" rel="noreferrer" class="floating-chat" style="bottom:calc(68px + env(safe-area-inset-bottom) + 16px)">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<!-- â•â• BOTTOM NAVIGATION â•â• -->
+<nav class="bottom-nav">
+  <a href="index.html" class="nav-item" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home<span class="nav-dot"></span></a>
+  <a href="menu.html" class="nav-item" data-page="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Menu<span class="nav-dot"></span></a>
+  <a href="orders.html" class="nav-item" data-page="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>Orders<span class="nav-dot"></span></a>
+  <a href="support.html" class="nav-item" data-page="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Support<span class="nav-dot"></span></a>
+  <a href="profile.html" class="nav-item" data-page="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile<span class="nav-dot"></span></a>
+</nav>
+
+<script src="js/app.js"></script>
+<script>
+  const { Cart, showToast } = window.STMApp;
+
+  // Profile data
+  let profile = JSON.parse(localStorage.getItem('stmapp_profile') || '{}');
+  let dietary = JSON.parse(localStorage.getItem('stmapp_dietary') || '{"halal":true,"nutFree":false,"orderUpdates":true,"promos":true}');
+
+  // Load profile into UI
+  function loadProfile() {
+    const name = profile.name || 'Guest User';
+    const orders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+    const totalSpent = orders.reduce((s, o) => s + (o.total || 0), 0);
+
+    document.getElementById('profile-avatar').textContent = name.charAt(0).toUpperCase();
+    document.getElementById('profile-name').textContent = name;
+    document.getElementById('profile-sub').textContent = profile.phone ? profile.phone : 'STM Salam Member';
+    document.getElementById('stat-orders').textContent = orders.length;
+    document.getElementById('stat-spent').textContent = `$${totalSpent.toFixed(0)}`;
+
+    if (document.getElementById('acc-name')) document.getElementById('acc-name').value = profile.name || '';
+    if (document.getElementById('acc-phone')) document.getElementById('acc-phone').value = profile.phone || '';
+    if (document.getElementById('acc-email')) document.getElementById('acc-email').value = profile.email || '';
+    if (document.getElementById('acc-address')) document.getElementById('acc-address').value = profile.address || '';
+
+    renderOrders(orders);
+    renderDietaryPrefs();
+  }
+
+  function renderOrders(orders) {
+    const list = document.getElementById('profile-orders-list');
+    const empty = document.getElementById('profile-orders-empty');
+    if (!orders || orders.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'flex';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = orders.slice(0, 5).map(o => `
+      <div class="order-card">
+        <div class="order-card-header">
+          <div><div class="order-id">#${o.id}</div><div class="order-date">${new Date(o.createdAt).toLocaleDateString('en-SG',{day:'numeric',month:'short'})}</div></div>
+          <span class="order-status-badge status-${o.status || 'pending'}">${o.status || 'pending'}</span>
+        </div>
+        <div class="order-items-preview">ðŸ½ï¸ ${(o.items||[]).map(i=>i.name).join(', ')}</div>
+        <div class="order-card-footer">
+          <div class="order-total">SGD ${(o.total||0).toFixed(2)}</div>
+          <a href="orders.html" class="track-btn">View All â†’</a>
+        </div>
+      </div>`).join('');
+  }
+
+  const DIETARY_OPTIONS = [
+    { id: 'halal',     label: 'Halal Only',       icon: 'âœ…', desc: 'Show only halal-certified items' },
+    { id: 'nutFree',   label: 'Nut-Free Alert',   icon: 'ðŸ¥œ', desc: 'Warn me about nut-containing items' },
+  ];
+  const NOTIF_OPTIONS = [
+    { id: 'orderUpdates', label: 'Order Updates', icon: 'ðŸ“¦', desc: 'Get notified when your order is ready' },
+    { id: 'promos',        label: 'Promotions',   icon: 'ðŸŽ', desc: 'Receive exclusive deals & offers' },
+  ];
+
+  function renderDietaryPrefs() {
+    const dietContainer = document.getElementById('dietary-options');
+    const notifContainer = document.getElementById('notification-prefs');
+
+    dietContainer.innerHTML = DIETARY_OPTIONS.map(opt => `
+      <div onclick="toggleDietary('${opt.id}')" style="display:flex;align-items:center;gap:14px;padding:16px;background:${dietary[opt.id]?'rgba(1,50,32,0.05)':'white'};border:2px solid ${dietary[opt.id]?'#059669':'#E5E7EB'};border-radius:16px;cursor:pointer;transition:all 0.2s" id="diet-${opt.id}">
+        <span style="font-size:24px">${opt.icon}</span>
+        <div style="flex:1"><div style="font-size:14px;font-weight:900;color:#0D1B0F">${opt.label}</div><div style="font-size:11px;font-weight:500;color:#9CA3AF;margin-top:2px">${opt.desc}</div></div>
+        <div style="width:44px;height:24px;background:${dietary[opt.id]?'#059669':'#E5E7EB'};border-radius:999px;position:relative;transition:background 0.2s;flex-shrink:0">
+          <div style="width:18px;height:18px;background:white;border-radius:50%;position:absolute;top:3px;left:${dietary[opt.id]?'23px':'3px'};transition:left 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2)"></div>
+        </div>
+      </div>`).join('');
+
+    notifContainer.innerHTML = NOTIF_OPTIONS.map(opt => `
+      <div onclick="toggleDietary('${opt.id}')" style="display:flex;align-items:center;gap:14px;padding:14px;background:${dietary[opt.id]?'rgba(1,50,32,0.05)':'white'};border:2px solid ${dietary[opt.id]?'#059669':'#E5E7EB'};border-radius:14px;cursor:pointer;transition:all 0.2s">
+        <span style="font-size:20px">${opt.icon}</span>
+        <div style="flex:1"><div style="font-size:13px;font-weight:900;color:#0D1B0F">${opt.label}</div><div style="font-size:11px;font-weight:500;color:#9CA3AF">${opt.desc}</div></div>
+        <div style="width:44px;height:24px;background:${dietary[opt.id]?'#059669':'#E5E7EB'};border-radius:999px;position:relative;transition:background 0.2s;flex-shrink:0">
+          <div style="width:18px;height:18px;background:white;border-radius:50%;position:absolute;top:3px;left:${dietary[opt.id]?'23px':'3px'};transition:left 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2)"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function toggleDietary(key) {
+    dietary[key] = !dietary[key];
+    localStorage.setItem('stmapp_dietary', JSON.stringify(dietary));
+    renderDietaryPrefs();
+    showToast(dietary[key] ? `${key} enabled` : `${key} disabled`, 'success', 1500);
+  }
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('#tab-content > div').forEach(el => el.style.display = 'none');
+    document.getElementById(`tab-${tab}`).style.display = 'block';
+    document.querySelectorAll('.profile-tab').forEach(b => {
+      b.style.color = '#9CA3AF';
+      b.style.fontWeight = '700';
+      b.style.borderBottom = 'none';
+    });
+    btn.style.color = '#013220';
+    btn.style.fontWeight = '800';
+    btn.style.borderBottom = '2px solid #013220';
+    btn.style.marginBottom = '-2px';
+  }
+
+  function saveProfile() {
+    profile.name = document.getElementById('acc-name').value.trim();
+    profile.phone = document.getElementById('acc-phone').value.trim();
+    profile.email = document.getElementById('acc-email').value.trim();
+    profile.address = document.getElementById('acc-address').value.trim();
+    localStorage.setItem('stmapp_profile', JSON.stringify(profile));
+    loadProfile();
+    showToast('Profile saved! âœ…', 'success');
+  }
+
+  function clearData() {
+    if (!confirm('This will clear all app data including cart and orders. Continue?')) return;
+    localStorage.clear();
+    showToast('App data cleared', 'default');
+    // Navigate to home instead of reloading — avoids reload loop
+    setTimeout(function() { window.location.href = 'index.html'; }, 800);
+  }
+
+  // PWA Install
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('pwa-install-section').style.display = 'block';
+  });
+
+  function installPWA() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => {
+        deferredPrompt = null;
+        document.getElementById('pwa-install-section').style.display = 'none';
+      });
+    } else {
+      showToast('To install: tap Share â†’ Add to Home Screen', 'default', 4000);
+    }
+  }
+
+  loadProfile();
+</script>
+</body>
+</html>

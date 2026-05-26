@@ -8,7 +8,7 @@
  */
 
 const UNAVAILABLE =
-  'Stripe payments are only available on iOS and Android. Use PayPal on web, or open the mobile app.';
+  'Use Stripe Hosted Checkout via `@/src/services/payment/stripeHostedCheckout` — Payment Sheet stubs only.';
 
 export async function initPaymentSheet(
   _orderId: string,
@@ -18,5 +18,12 @@ export async function initPaymentSheet(
 }
 
 export async function presentPaymentSheet(): Promise<{ ok: boolean; error?: string }> {
+  return { ok: false, error: UNAVAILABLE };
+}
+
+export async function verifyStripePaymentOnServer(
+  _orderId: string,
+  _paymentIntentId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   return { ok: false, error: UNAVAILABLE };
 }

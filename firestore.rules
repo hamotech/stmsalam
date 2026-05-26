@@ -34,6 +34,104 @@ service cloud.firestore {
       return hasAdminRole() || isLegacyAdminEmail();
     }
 
+    /** Admin + rider must not mutate payment / Stripe fields (webhook + proof flows only). */
+    function orderPaymentStripeCoreUnchanged() {
+      return request.resource.data.paymentStatus == resource.data.paymentStatus
+        && request.resource.data.payment_status == resource.data.payment_status
+        && request.resource.data.paidAt == resource.data.paidAt
+        && request.resource.data.paymentIntentId == resource.data.paymentIntentId
+        && request.resource.data.stripeCheckoutSessionId == resource.data.stripeCheckoutSessionId;
+    }
+
+    /** Clients must never mutate canonical lifecycle status directly. */
+    function orderStatusUnchanged() {
+      return request.resource.data.status == resource.data.status;
+    }
+
+    function hasRiderRoleFirestore() {
+      return isAuthed()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "rider";
+    }
+
+    function riderOwnsAssignedOrder() {
+      return hasRiderRoleFirestore()
+        && resource.data.riderId == request.auth.uid;
+    }
+
+    /** Hosted Stripe / card: owner may upload proof only — never client-set paid. */
+    function isStripeLikeOrder() {
+      return resource.data.paymentMethod == 'STRIPE'
+        || resource.data.paymentMethod == 'CARD'
+        || resource.data.payment_method == 'stripe'
+        || resource.data.payment_method == 'card'
+        || resource.data.status == 'pending_payment';
+    }
+
+    function orderCustomerStripeProofOnlyUpdate() {
+      return isStripeLikeOrder()
+        && isAuthed()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'updatedAt',
+            'payment_screenshot',
+            'paymentProofSubmitted',
+            'customerMarkedPaidAt',
+            'qrCustomerClaimedAt',
+          ]);
+    }
+
+    /** COD / QR / non-hosted: owner may claim paid + proof fields only (no lifecycle). */
+    function orderCustomerNonStripePaymentOrProofUpdate() {
+      return !isStripeLikeOrder()
+        && isAuthed()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'updatedAt',
+            'paymentStatus',
+            'payment_screenshot',
+            'paymentProofSubmitted',
+            'customerMarkedPaidAt',
+            'qrCustomerClaimedAt',
+          ]);
+    }
+
+    /** Assigned rider: delivery-related fields only; payment immutable. */
+    function riderOrderFulfillmentUpdate() {
+      return riderOwnsAssignedOrder()
+        && orderStatusUnchanged()
+        && orderPaymentStripeCoreUnchanged()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'riderId',
+            'customerSnapshot',
+            'updatedAt',
+            'timestamps',
+            'rider',
+            'chatEnabled',
+          ]);
+    }
+
+    /** Admin: fulfilment anytime without mutating payment; or COD/QR payment flags only (not Stripe-like). */
+    function orderAdminUpdateAllowed() {
+      return isAdmin() && (
+        orderStatusUnchanged()
+        && orderPaymentStripeCoreUnchanged()
+        || (
+          !isStripeLikeOrder()
+          && orderStatusUnchanged()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['paymentStatus', 'updatedAt'])
+        )
+      );
+    }
+
     function orderRef(orderId) {
       return get(/databases/$(database)/documents/orders/$(orderId));
     }
@@ -46,23 +144,6 @@ service cloud.firestore {
           || orderRef(orderId).data.riderId == request.auth.uid
           || isAdmin()
         );
-    }
-
-    /** Owner may patch payment/proof fields only (no status / items / riderId). */
-    function orderOwnerSelfServiceUpdate() {
-      return isAuthed()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly([
-            'paymentStatus',
-            'payment_status',
-            'updatedAt',
-            'payment_screenshot',
-            'paymentProofSubmitted',
-            'customerMarkedPaidAt',
-            'qrCustomerClaimedAt',
-          ]);
     }
 
     // --- Public catalog (read-only for clients) ---
@@ -103,7 +184,13 @@ service cloud.firestore {
           || resource.data.riderId == request.auth.uid
         );
 
-      allow update: if isAdmin() || orderOwnerSelfServiceUpdate();
+      allow update: if orderStatusUnchanged()
+        && (
+          orderAdminUpdateAllowed()
+        || orderCustomerStripeProofOnlyUpdate()
+        || orderCustomerNonStripePaymentOrProofUpdate()
+        || riderOrderFulfillmentUpdate()
+        );
 
       match /messages/{messageId} {
         allow read, create, update: if isOrderParticipant(orderId);

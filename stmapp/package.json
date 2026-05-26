@@ -1,0 +1,22 @@
+{
+  "name": "stmapp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "prepare:web": "node scripts/prepare-web-assets.cjs",
+    "sync:android": "node scripts/prepare-web-assets.cjs --skip-build && npx cap sync android",
+    "open:android": "npx cap open android",
+    "build:android": "node scripts/prepare-web-assets.cjs && npx cap sync android",
+    "build:release": "node scripts/build-release-apk.cjs",
+    "doctor": "node scripts/android-doctor.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4"
+  }
+}

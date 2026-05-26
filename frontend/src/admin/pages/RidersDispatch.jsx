@@ -5,8 +5,11 @@ import {
 } from '../services/dataService';
 import { db } from '../../lib/firebase';
 import { doc, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { functions } from '../../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { Bike, CheckCircle, Package, XCircle } from 'lucide-react';
 import { safeLog } from '../../utils/runtimeSafety';
+import { assertNoDirectOrderLifecycleWrite } from '../../lib/orderLifecycleGuards';
 
 const RidersDispatch = () => {
   const [orders, setOrders] = useState([]);
@@ -81,14 +84,12 @@ const RidersDispatch = () => {
   };
 
   const updateDispatchOrder = async (orderId, patch) => {
+    assertNoDirectOrderLifecycleWrite(patch, 'RidersDispatch.updateDispatchOrder');
     const orderRef = doc(db, 'orders', orderId);
     await updateDoc(orderRef, {
       ...patch,
       updatedAt: serverTimestamp(),
     });
-    if (typeof patch?.status === 'string') {
-      safeLog('Status Updated →', patch.status);
-    }
   };
 
   return (
@@ -200,7 +201,7 @@ const RidersDispatch = () => {
                         safeLog('Assign Rider →', assignedRiderId);
                         await updateDispatchOrder(id, {
                           riderId: assignedRiderId,
-                          status: 'assigned',
+                          'rider.legStatus': 'ASSIGNED',
                           'timestamps.assignedAt': serverTimestamp(),
                         });
                       })}
@@ -219,7 +220,7 @@ const RidersDispatch = () => {
                     disabled={busy}
                     onClick={() => run(id, async () => {
                       await updateDispatchOrder(id, {
-                        status: 'picked_up',
+                        'rider.legStatus': 'PICKED_UP',
                         riderId: currentRiderId || null,
                         'timestamps.pickedUpAt': serverTimestamp(),
                       });
@@ -237,8 +238,14 @@ const RidersDispatch = () => {
                     type="button"
                     disabled={busy}
                     onClick={() => run(id, async () => {
+                      const transitionOrderStatus = httpsCallable(functions, 'transitionOrderStatus');
+                      await transitionOrderStatus({
+                        orderId: id,
+                        nextStatus: 'delivered',
+                        metadata: { source: 'RidersDispatch.deliver' },
+                      });
                       await updateDispatchOrder(id, {
-                        status: 'delivered',
+                        'rider.legStatus': 'COMPLETED',
                         riderId: currentRiderId || null,
                         'timestamps.deliveredAt': serverTimestamp(),
                       });

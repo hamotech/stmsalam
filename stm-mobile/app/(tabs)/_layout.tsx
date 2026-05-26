@@ -26,6 +26,7 @@ type IonName = React.ComponentProps<typeof Ionicons>['name'];
 
 function tabBarIcon(routeName: string) {
   const map: Record<string, { outline: IonName; solid: IonName }> = {
+    home: { outline: 'home-outline', solid: 'home' },
     index: { outline: 'home-outline', solid: 'home' },
     menu: { outline: 'restaurant-outline', solid: 'restaurant' },
     cart: { outline: 'cart-outline', solid: 'cart' },
@@ -98,7 +99,8 @@ export default function TabLayout() {
         },
       })}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="home" options={{ title: 'Home' }} />
       <Tabs.Screen name="menu" options={{ title: 'Menu' }} />
       <Tabs.Screen name="cart" options={{ title: 'Cart' }} />
       <Tabs.Screen name="orders" options={{ title: 'Orders' }} />

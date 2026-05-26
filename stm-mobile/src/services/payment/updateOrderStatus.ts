@@ -1,9 +1,9 @@
 /**
  * Payment-only Firestore sync (does not change kitchen / fulfilment status).
- * Writes paymentStatus + payment_status for compatibility with the web admin app.
+ * Writes `paymentStatus` only; lifecycle stays on `status`.
  */
 
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export type PaymentCompletionStatus = 'PAID';
@@ -21,15 +21,21 @@ export async function updateOrderStatus(
   const id = orderId?.trim();
   if (!id) return { ok: false, error: 'orderId is required.' };
 
-  const patch = {
-    paymentStatus: 'PAID',
-    payment_status: 'paid',
-    updatedAt: new Date().toISOString(),
-  };
-
   try {
-    await updateDoc(doc(db, 'orders', id), patch);
-    return { ok: true };
+    const ref = doc(db, 'orders', id);
+    const snap = await getDoc(ref);
+    const data = snap.exists() ? (snap.data() as Record<string, unknown>) : {};
+    const status = String(data?.status ?? '').trim().toLowerCase();
+    if (status === 'pending_payment') {
+      return {
+        ok: false,
+        error: 'Pending-payment orders must be settled via webhook/verification flow only.',
+      };
+    }
+    return {
+      ok: false,
+      error: 'Direct paymentStatus writes are disabled. Use Stripe webhook/FSM transition only.',
+    };
   } catch (e) {
     console.error('[PAYMENT_ORDER_SYNC]', e);
     return {

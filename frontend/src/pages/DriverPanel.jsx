@@ -2,18 +2,28 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { MapPin, MessageSquare, Package, Navigation, CheckCircle, User, Target, Wallet, Phone } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { db } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
 import { doc, onSnapshot, query, collection, where, updateDoc, serverTimestamp, setDoc, limit, addDoc, orderBy, getDoc } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { safeLog } from '../utils/runtimeSafety'
+import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 
-const STATUS_FILTER = ['assigned', 'picked_up']
-const TASK_STATUS_FILTER = new Set(['assigned', 'picked_up'])
+/** Align with unified `orders.status` + legacy rider UI strings. */
+const STATUS_FILTER = ['assigned', 'picked_up', 'out_for_delivery']
+const TASK_STATUS_FILTER = new Set(STATUS_FILTER)
 
 const toOrderStatus = (raw) =>
   String(raw || '')
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_')
+
+const riderTaskStatusLabel = (raw) => {
+  const st = toOrderStatus(raw)
+  if (st === 'picked_up') return 'Picked Up'
+  if (st === 'out_for_delivery') return 'Out for delivery'
+  return 'Assigned'
+}
 
 export default function DriverPanel() {
   const { user, loading, isAuthenticated } = useAuth() || {}
@@ -35,7 +45,7 @@ export default function DriverPanel() {
   const lastGpsPushRef = useRef(0)
   const hasTrackableDelivery = assignedOrders.some((o) => {
     const st = toOrderStatus(o.status)
-    return st === 'assigned' || st === 'picked_up'
+    return st === 'assigned' || st === 'picked_up' || st === 'out_for_delivery'
   })
 
   useEffect(() => {
@@ -148,6 +158,7 @@ export default function DriverPanel() {
             }
           }
           if (Object.keys(patch).length > 0) {
+            assertNoDirectOrderLifecycleWrite(patch, 'DriverPanel.backfillOrderPatch')
             await setDoc(doc(db, 'orders', row.id), patch, { merge: true })
           }
         })
@@ -186,7 +197,7 @@ export default function DriverPanel() {
   }, [isRiderAllowed, riderId])
 
   const activeDelivery = useMemo(() => {
-    const priority = { picked_up: 0, assigned: 1, ready: 2 }
+    const priority = { picked_up: 0, out_for_delivery: 1, assigned: 2, ready: 3 }
     const sorted = [...assignedOrders]
       .filter((o) => toOrderStatus(o.status) !== 'delivered')
       .sort((a, b) => {
@@ -217,11 +228,15 @@ export default function DriverPanel() {
     if (!orderId) return
     setBusyOrderId(orderId)
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status: 'delivered',
-        updatedAt: serverTimestamp(),
-        'timestamps.deliveredAt': serverTimestamp(),
+      const callable = httpsCallable(functions, 'transitionOrderStatus')
+      await callable({
+        orderId,
+        nextStatus: 'delivered',
+        metadata: { source: 'DriverPanel.markDelivered' },
       })
+      const patch = { 'timestamps.deliveredAt': serverTimestamp() }
+      assertNoDirectOrderLifecycleWrite(patch, 'DriverPanel.markDelivered')
+      await updateDoc(doc(db, 'orders', orderId), patch)
     } finally {
       setBusyOrderId('')
     }
@@ -312,7 +327,7 @@ export default function DriverPanel() {
               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Order #{activeDelivery.id?.slice(-8)?.toUpperCase()}</div>
               <div style={{ marginTop: '8px', display: 'grid', gap: '6px', fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
                 <div>Distance: {activeDelivery.distanceKm ? `${activeDelivery.distanceKm} km` : (activeDelivery.distance || 'N/A')}</div>
-                <div>Status: {toOrderStatus(activeDelivery.status) === 'picked_up' ? 'Picked Up' : 'Assigned'}</div>
+                <div>Status: {riderTaskStatusLabel(activeDelivery.status)}</div>
                 <div>Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || 'N/A'}</div>
                 <div>Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || 'N/A'}</div>
                 <div>Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.address || 'N/A'}</div>
@@ -360,6 +375,7 @@ export default function DriverPanel() {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <span style={{ fontSize: '11px', fontWeight: 800, background: '#e2e8f0', padding: '4px 8px', borderRadius: '8px' }}>assigned</span>
             <span style={{ fontSize: '11px', fontWeight: 800, background: '#dbeafe', padding: '4px 8px', borderRadius: '8px' }}>picked_up</span>
+            <span style={{ fontSize: '11px', fontWeight: 800, background: '#fef3c7', padding: '4px 8px', borderRadius: '8px' }}>out_for_delivery</span>
           </div>
           <div style={{ display: 'grid', gap: '10px' }}>
             {assignedOrders.filter((o) => TASK_STATUS_FILTER.has(toOrderStatus(o.status))).length === 0 ? (

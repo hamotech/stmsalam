@@ -10,6 +10,7 @@ const express = require('express');
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret, defineString } = require('firebase-functions/params');
 const Stripe = require('stripe');
+const { getService } = require('./shared/bootstrap/functionBootstrap.cjs');
 
 const STRIPE_API_VERSION = '2024-06-20';
 
@@ -20,6 +21,27 @@ const stripePublicBaseUrl = defineString('STRIPE_PUBLIC_BASE_URL', {
 });
 
 const REGION = 'us-central1';
+const RATE_LIMIT_UID_WINDOW_MS = 10 * 1000;
+const RATE_LIMIT_UID_MAX = 10;
+const RATE_LIMIT_IP_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_IP_MAX = 30;
+
+const performOrderTransition = (...args) =>
+  getService('orderTransitionService').performOrderTransition(...args);
+const checkRateLimit = (...args) =>
+  getService('rateLimiter').checkRateLimit(...args);
+const increment = (...args) =>
+  getService('rateLimiter').increment(...args);
+const assertProductionSecurityMode = (...args) =>
+  getService('appCheckGuard').assertProductionSecurityMode(...args);
+const verifyHttpAppCheckOrThrow = (...args) =>
+  getService('appCheckGuard').verifyHttpAppCheckOrThrow(...args);
+const getProcessedResult = (...args) =>
+  getService('idempotencyService').getProcessedResult(...args);
+const reserveKey = (...args) =>
+  getService('idempotencyService').reserveKey(...args);
+const completeKey = (...args) =>
+  getService('idempotencyService').completeKey(...args);
 
 /* ---------------- SAFE STRIPE SECRET HANDLING ---------------- */
 
@@ -79,9 +101,18 @@ function hasPaidAtField(d) {
 
 function isOrderFinanciallySettled(d) {
   if (!d || typeof d !== 'object') return false;
-  if (d.status === 'paid' || d.paymentStatus === 'PAID') return true;
+  if (String(d.paymentStatus ?? '').trim().toUpperCase() === 'PAID') return true;
   if (hasPaidAtField(d)) return true;
+  const pm = String(d.paymentMethod || '').trim().toUpperCase();
+  if (pm === 'COD' || pm === 'CASH') return false;
+  if (d.status === 'paid') return true;
   return false;
+}
+
+function isCodFirestoreOrder(d) {
+  if (!d || typeof d !== 'object') return false;
+  const pm = String(d.paymentMethod || '').trim().toUpperCase();
+  return pm === 'COD' || pm === 'CASH';
 }
 
 function checkoutSessionUrlReuseAllowed(session, nowSec) {
@@ -122,59 +153,89 @@ function extractPaymentIntentIdFromSession(session) {
   return '';
 }
 
-async function applyStripeWebhookPaidOrder(db, orderId, patchExtras) {
+async function applyStripeWebhookPaidOrder(db, orderId, patchExtras, requestId) {
   const ref = db.collection('orders').doc(orderId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    console.warn('[stripeWebhook] Order not found:', orderId);
-    return;
-  }
-  const d = snap.data() || {};
-  const ps = String(d.paymentStatus || '').toLowerCase();
-  if (ps === 'paid') {
-    console.log('[stripeWebhook] Skip duplicate paid update:', orderId);
-    return;
-  }
-
-  const merge = {
-    paymentStatus: 'paid',
-    status: 'confirmed',
-    paidAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
-  if (patchExtras.stripeCheckoutSessionId) {
-    merge.stripeCheckoutSessionId = patchExtras.stripeCheckoutSessionId;
-  }
-  if (patchExtras.paymentIntentId) {
-    merge.paymentIntentId = patchExtras.paymentIntentId;
-  }
-  await ref.set(merge, { merge: true });
+  await performOrderTransition({
+    db,
+    orderRef: ref,
+    actor: 'webhook',
+    actorUid: null,
+    event: { type: 'STRIPE_PAYMENT_SUCCESS' },
+    metadata: {
+      requestId,
+      event: 'stripe_paid',
+      stripeCheckoutSessionId: patchExtras.stripeCheckoutSessionId || null,
+      paymentIntentId: patchExtras.paymentIntentId || null,
+      patch: {
+        paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...(patchExtras.stripeCheckoutSessionId
+          ? { stripeCheckoutSessionId: patchExtras.stripeCheckoutSessionId }
+          : {}),
+        ...(patchExtras.paymentIntentId ? { paymentIntentId: patchExtras.paymentIntentId } : {}),
+        // Written atomically with FSM transition — no external update() needed.
+        ...(patchExtras.eventId ? { lastEventId: patchExtras.eventId } : {}),
+      },
+    },
+  });
 }
 
-async function applyStripeWebhookFailedOrder(db, orderId) {
+async function applyStripeWebhookFailedOrder(db, orderId, eventId) {
   const ref = db.collection('orders').doc(orderId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    console.warn('[stripeWebhook] Order not found:', orderId);
-    return;
-  }
-  const d = snap.data() || {};
-  const ps = String(d.paymentStatus || '').toLowerCase();
-  if (ps === 'paid') {
-    console.log('[stripeWebhook] Skip failure update (already paid):', orderId);
-    return;
-  }
-  await ref.set(
-    {
-      paymentStatus: 'failed',
-      status: 'payment_failed',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  await performOrderTransition({
+    db,
+    orderRef: ref,
+    actor: 'webhook',
+    actorUid: null,
+    event: { type: 'STRIPE_PAYMENT_FAILED' },
+    metadata: {
+      event: 'stripe_failed',
+      patch: {
+        // Written atomically with FSM transition — no external update() needed.
+        ...(eventId ? { lastEventId: eventId } : {}),
+      },
     },
-    { merge: true }
-  );
+  });
+}
+
+async function recordProcessedStripeEventId(db, orderId, eventId) {
+  const id = String(eventId || '').trim();
+  if (!id) return;
+  const orderRef = db.collection('orders').doc(orderId);
+  const eventRef = orderRef.collection('processed_stripe_events').doc(id);
+  try {
+    await eventRef.create({
+      eventId: id,
+      orderId,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      processedAtMs: Date.now(),
+    });
+  } catch (e) {
+    if (String(e?.code || '') === '6' || /already exists/i.test(String(e?.message || ''))) {
+      return;
+    }
+    throw e;
+  }
+  // lastStripeEventId and lastStripeEventAt are now written atomically by performOrderTransition
+  // via metadata.patch — no external update() is needed or allowed here.
 }
 
 async function handleStripeWebhookEvent(event, db) {
+  const eventId = String(event?.id || '').trim();
+  const idemKey = eventId ? `stripe:${eventId}` : '';
+  if (idemKey) {
+    const cached = await getProcessedResult({ db, key: idemKey });
+    if (cached) {
+      console.log('[stripeWebhook] idempotent replay skip', idemKey);
+      return;
+    }
+    const reserved = await reserveKey({
+      db,
+      key: idemKey,
+      metadata: { source: 'stripeWebhook', eventType: event?.type || 'unknown' },
+    });
+    if (!reserved.reserved && reserved.result) return;
+  }
+
   const orderId = resolveOrderIdFromStripeEvent(event);
 
   console.log('Webhook event:', event.type);
@@ -182,6 +243,40 @@ async function handleStripeWebhookEvent(event, db) {
 
   if (!orderId) {
     console.warn('[stripeWebhook] No orderId on event:', event.type);
+    return;
+  }
+
+  const orderRef = db.collection('orders').doc(orderId);
+  const beforeSnap = await orderRef.get();
+  const statusBefore = beforeSnap.exists ? String(beforeSnap.data()?.status || '') : '';
+  const beforeData = beforeSnap.exists ? beforeSnap.data() || {} : {};
+  if (eventId) {
+    // Fast-path: check order-document-level lastEventId before the subcollection lookup.
+    if (String(beforeData.lastEventId || '') === eventId) {
+      console.log('[stripeWebhook] duplicate event id fast-path skip (lastEventId match)', { orderId, eventId });
+      if (idemKey) {
+        await completeKey({ db, key: idemKey, result: { ok: true, skipped: 'duplicate_last_event_id' } });
+      }
+      return;
+    }
+    const eventDoc = await orderRef.collection('processed_stripe_events').doc(eventId).get();
+    if (eventDoc.exists) {
+      console.log('[stripeWebhook] duplicate event id ignored from order ledger', { orderId, eventId });
+      if (idemKey) {
+        await completeKey({ db, key: idemKey, result: { ok: true, skipped: 'duplicate_event_id' } });
+      }
+      return;
+    }
+  }
+
+  if (isCodFirestoreOrder(beforeData)) {
+    console.log('[stripeWebhook] skip non-Stripe order (COD/CASH)', {
+      orderId,
+      paymentMethod: beforeData.paymentMethod || null,
+    });
+    if (idemKey) {
+      await completeKey({ db, key: idemKey, result: { ok: true, skipped: 'cod_order' } });
+    }
     return;
   }
 
@@ -199,7 +294,21 @@ async function handleStripeWebhookEvent(event, db) {
     await applyStripeWebhookPaidOrder(db, orderId, {
       stripeCheckoutSessionId: session.id,
       paymentIntentId: extractPaymentIntentIdFromSession(session),
+      eventId,
+    }, eventId);
+    await recordProcessedStripeEventId(db, orderId, eventId);
+    const afterSnap = await orderRef.get();
+    const afterData = afterSnap.exists ? afterSnap.data() : {};
+    await db.collection('order_audit_logs').doc(orderId).collection('events').doc().set({
+      event: 'STRIPE_WEBHOOK_VERIFIED',
+      stripeEventId: eventId || null,
+      orderId,
+      statusBefore: statusBefore || null,
+      statusAfter: String(afterData?.status || '') || null,
+      paymentStatusAfter: String(afterData?.paymentStatus || '') || null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
+    if (idemKey) await completeKey({ db, key: idemKey, result: { ok: true, eventType: event.type } });
     return;
   }
 
@@ -207,12 +316,39 @@ async function handleStripeWebhookEvent(event, db) {
     const pi = event.data.object;
     await applyStripeWebhookPaidOrder(db, orderId, {
       paymentIntentId: pi && pi.id ? pi.id : '',
+      eventId,
+    }, eventId);
+    await recordProcessedStripeEventId(db, orderId, eventId);
+    const afterSnap = await orderRef.get();
+    const afterData = afterSnap.exists ? afterSnap.data() : {};
+    await db.collection('order_audit_logs').doc(orderId).collection('events').doc().set({
+      event: 'STRIPE_WEBHOOK_VERIFIED',
+      stripeEventId: eventId || null,
+      orderId,
+      statusBefore: statusBefore || null,
+      statusAfter: String(afterData?.status || '') || null,
+      paymentStatusAfter: String(afterData?.paymentStatus || '') || null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
+    if (idemKey) await completeKey({ db, key: idemKey, result: { ok: true, eventType: event.type } });
     return;
   }
 
   if (event.type === 'payment_intent.payment_failed') {
-    await applyStripeWebhookFailedOrder(db, orderId);
+    await applyStripeWebhookFailedOrder(db, orderId, eventId);
+    await recordProcessedStripeEventId(db, orderId, eventId);
+    const afterSnap = await orderRef.get();
+    const afterData = afterSnap.exists ? afterSnap.data() : {};
+    await db.collection('order_audit_logs').doc(orderId).collection('events').doc().set({
+      event: 'STRIPE_WEBHOOK_VERIFIED',
+      stripeEventId: eventId || null,
+      orderId,
+      statusBefore: statusBefore || null,
+      statusAfter: String(afterData?.status || '') || null,
+      paymentStatusAfter: String(afterData?.paymentStatus || '') || null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    if (idemKey) await completeKey({ db, key: idemKey, result: { ok: true, eventType: event.type } });
   }
 }
 
@@ -234,6 +370,9 @@ function checkoutCorsAllowOrigin(req) {
   if (CHECKOUT_ALLOWED_ORIGINS.has(origin)) return origin;
   try {
     const { hostname } = new URL(origin);
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return origin;
+    }
     if (hostname.endsWith('.web.app') || hostname.endsWith('.firebaseapp.com')) {
       return origin;
     }
@@ -329,7 +468,38 @@ function getPublicBaseUrl() {
   return base.replace(/\/$/, '');
 }
 
+/**
+ * MUST match stm-mobile `sanitizeStripeOrderId` (algo v2-parity) byte-for-byte.
+ * Cases: "abc123" → "abc123"; "abc%20123" → "abc 123"; "abc%ZZ" → decode throws → s unchanged.
+ */
+function sanitizeStripeOrderIdForCheckoutHttp(raw) {
+  let s = String(raw ?? '')
+    .trim()
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+  if (/%[0-9A-Fa-f]{2}/.test(s)) {
+    try {
+      s = decodeURIComponent(s);
+    } catch (_) {
+      /* invalid % sequences: keep s */
+    }
+    s = String(s)
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .trim();
+  }
+  return s;
+}
+
+/** Same as stm-mobile `hashStripeOrderIdForDebug` — DEV cross-check with client logs. */
+function hashStripeOrderIdForDebug(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16);
+}
+
 async function createStripeCheckoutPostHandler(req, res) {
+  assertProductionSecurityMode();
   console.log('METHOD:', req.method);
   console.log('URL:', req.url);
 
@@ -342,29 +512,79 @@ async function createStripeCheckoutPostHandler(req, res) {
   }
 
   const orderId =
-      typeof body.orderId === 'string' ? body.orderId.trim() : '';
-    const customerName =
+    typeof body.orderId === 'string' ? sanitizeStripeOrderIdForCheckoutHttp(body.orderId) : '';
+  const customerName =
       typeof body.customerName === 'string'
         ? body.customerName.trim().slice(0, 200)
         : '';
-    if (!orderId || !customerName) {
-      res.status(400).json({ error: 'Missing orderId or customerName' });
+  const clientKindRaw =
+    typeof body.clientKind === 'string' ? body.clientKind.trim().toLowerCase() : 'web';
+  const useExpoNativeReturn = clientKindRaw === 'expo-native';
+  if (!orderId || !customerName) {
+    res.status(400).json({ error: 'Missing orderId or customerName' });
+    return;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) {
+    res.status(401).json({ error: 'Missing Authorization Bearer token' });
+    return;
+  }
+
+  let uid;
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    uid = decoded.uid;
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+    return;
+  }
+  const db = admin.firestore();
+    const ip = String(req.ip || '').trim() || 'unknown';
+    const uidRateKey = `createStripeCheckout:uid:${uid}`;
+    const ipRateKey = `createStripeCheckout:ip:${ip}`;
+    const uidPre = await checkRateLimit({
+      db,
+      key: uidRateKey,
+      limit: RATE_LIMIT_UID_MAX,
+      windowMs: RATE_LIMIT_UID_WINDOW_MS,
+    });
+    if (!uidPre.allowed) {
+      res.status(429).json({ error: 'resource-exhausted', message: 'Too many createStripeCheckout requests' });
       return;
     }
-
-    const authHeader = req.headers.authorization || '';
-    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-    if (!bearerMatch) {
-      res.status(401).json({ error: 'Missing Authorization Bearer token' });
+    const uidPost = await increment({
+      db,
+      key: uidRateKey,
+      limit: RATE_LIMIT_UID_MAX,
+      windowMs: RATE_LIMIT_UID_WINDOW_MS,
+      metadata: { functionName: 'createStripeCheckout', scope: 'uid', uid, ip },
+    });
+    if (!uidPost.allowed) {
+      res.status(429).json({ error: 'resource-exhausted', message: 'Too many createStripeCheckout requests' });
       return;
     }
-
-    let uid;
-    try {
-      const decoded = await admin.auth().verifyIdToken(bearerMatch[1]);
-      uid = decoded.uid;
-    } catch (e) {
-      res.status(401).json({ error: 'Invalid or expired token' });
+    const ipPre = await checkRateLimit({
+      db,
+      key: ipRateKey,
+      limit: RATE_LIMIT_IP_MAX,
+      windowMs: RATE_LIMIT_IP_WINDOW_MS,
+    });
+    if (!ipPre.allowed) {
+      res.status(429).json({ error: 'resource-exhausted', message: 'Too many createStripeCheckout requests' });
+      return;
+    }
+    const ipPost = await increment({
+      db,
+      key: ipRateKey,
+      limit: RATE_LIMIT_IP_MAX,
+      windowMs: RATE_LIMIT_IP_WINDOW_MS,
+      metadata: { functionName: 'createStripeCheckout', scope: 'ip', uid, ip },
+    });
+    if (!ipPost.allowed) {
+      res.status(429).json({ error: 'resource-exhausted', message: 'Too many createStripeCheckout requests' });
       return;
     }
 
@@ -395,7 +615,14 @@ async function createStripeCheckoutPostHandler(req, res) {
       return;
     }
 
-    const db = admin.firestore();
+    console.log('BACKEND_PROJECT_ID:', process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'unknown');
+    console.log('ORDER_ID_RECEIVED:', orderId);
+    console.log('ORDER_ID_LENGTH:', orderId.length);
+    console.log('ORDER_ID_HASH:', hashStripeOrderIdForDebug(orderId));
+    console.log('LOOKUP_PATH:', `orders/${orderId}`);
+    console.log('AUTH_HEADER_PRESENT:', !!authHeader);
+    console.log('TOKEN_LENGTH:', token?.length || 0);
+
     const orderRef = db.collection('orders').doc(orderId);
 
     let orderSnap;
@@ -412,9 +639,17 @@ async function createStripeCheckoutPostHandler(req, res) {
     }
 
     if (!orderSnap.exists) {
-      res.status(404).json({ error: 'Order not found' });
+      console.log('DOCUMENT_EXISTS: false');
+      res.status(404).json({
+        error: 'Order not found',
+        debug: {
+          project: process.env.GCLOUD_PROJECT,
+          orderId,
+        },
+      });
       return;
     }
+    console.log('DOCUMENT_EXISTS: true');
 
     const order = orderSnap.data() || {};
 
@@ -423,18 +658,37 @@ async function createStripeCheckoutPostHandler(req, res) {
       return;
     }
 
+    if (isCodFirestoreOrder(order)) {
+      console.log('[createStripeCheckout] rejected COD order', { orderId });
+      res.status(400).json({ error: 'Stripe checkout is not available for cash-on-delivery orders' });
+      return;
+    }
+
     const base = getPublicBaseUrl();
     const encodedOid = encodeURIComponent(orderId);
-    const stripeSuccessRedirectUrl = `${base}/order-tracking/${encodedOid}?payment=success`;
-    const stripeCancelRedirectUrl = `${base}/order-tracking/${encodedOid}?payment=cancel`;
+    let stripeSuccessRedirectUrl;
+    let stripeCancelRedirectUrl;
+    if (useExpoNativeReturn) {
+      stripeSuccessRedirectUrl = `stmmobile://order-tracking/${encodedOid}?payment=success`;
+      stripeCancelRedirectUrl = `stmmobile://order-tracking/${encodedOid}?payment=cancel`;
+    } else {
+      stripeSuccessRedirectUrl = `${base}/order-tracking/${encodedOid}?payment=success`;
+      stripeCancelRedirectUrl = `${base}/order-tracking/${encodedOid}?payment=cancel`;
+    }
 
     if (isOrderFinanciallySettled(order)) {
-      res.status(200).json({ url: stripeSuccessRedirectUrl });
+      res.status(200).json({
+        url: stripeSuccessRedirectUrl,
+        debug: {
+          project: process.env.GCLOUD_PROJECT,
+          orderId,
+        },
+      });
       return;
     }
 
     if (order.status !== 'pending_payment') {
-      res.status(400).json({ error: 'Order is not awaiting payment' });
+      res.status(400).json({ error: 'Invalid order state for Stripe checkout' });
       return;
     }
 
@@ -504,14 +758,13 @@ async function createStripeCheckoutPostHandler(req, res) {
     }
 
     try {
-      await orderRef.set(
-        {
-          stripeCheckoutSessionId: session.id,
-          stripeCheckoutLock: false,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // Use update() (not set+merge) so lifecycle fields (status/paymentStatus/paymentMethod)
+      // are never touched here — they are owned exclusively by performOrderTransition / webhook.
+      await orderRef.update({
+        stripeCheckoutSessionId: session.id,
+        stripeCheckoutLock: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       console.error('[createStripeCheckout]', {
         orderId,
@@ -529,7 +782,13 @@ async function createStripeCheckoutPostHandler(req, res) {
       amount: backendTotal,
     });
 
-  res.status(200).json({ url: session.url });
+  res.status(200).json({
+    url: session.url,
+    debug: {
+      project: process.env.GCLOUD_PROJECT,
+      orderId,
+    },
+  });
 }
 
 const createStripeCheckoutApp = express();
@@ -544,6 +803,12 @@ createStripeCheckoutApp.options(['/', '/createStripeCheckout'], (req, res) => {
 createStripeCheckoutApp.post(
   ['/', '/createStripeCheckout'],
   express.json({ limit: '512kb' }),
+  async (req, res, next) => {
+    assertProductionSecurityMode();
+    const allowed = await verifyHttpAppCheckOrThrow(admin, req, res, 'createStripeCheckout');
+    if (!allowed) return;
+    next();
+  },
   createStripeCheckoutPostHandler
 );
 
@@ -567,6 +832,7 @@ stripeWebhookApp.post(
   '/',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
+    assertProductionSecurityMode();
     let webhookSecret;
     let apiSecret;
 

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="STM Salam" />
+  <meta name="description" content="Order authentic Kopitiam food from STM Salam — Marine Terrace, Singapore. Teh Tarik, Burgers, Biryanis & more delivered fresh." />
+  <title>STM Salam — Order Food Online</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- ══ SPLASH FAILSAFE: runs before any external JS ══
+       Hides splash after 3s even if app.js fails to load   -->
+  <script>
+    (function() {
+      function _forceSplashHide() {
+        var s = document.getElementById('splash-screen');
+        if (!s) return;
+        s.classList.add('hidden');
+        s.style.opacity = '0';
+        s.style.visibility = 'hidden';
+        s.style.pointerEvents = 'none';
+        setTimeout(function() {
+          s.style.display = 'none';
+          if (s.parentNode) s.parentNode.removeChild(s);
+        }, 600);
+      }
+      // Hard deadline: 3 seconds after page starts parsing
+      setTimeout(_forceSplashHide, 3000);
+      // Also hide as soon as DOM is interactive (1.8s after DOMContentLoaded)
+      document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(_forceSplashHide, 1800);
+      });
+      // If any script errors, hide splash after 500ms grace period
+      window.addEventListener('error', function() {
+        setTimeout(_forceSplashHide, 500);
+      });
+    })();
+  </script>
+</head>
+<body>
+
+<!-- ══ SPLASH SCREEN ══ -->
+<div id="splash-screen">
+  <img src="../stmsalamlogo.png" alt="STM Salam" class="splash-logo" />
+  <div class="splash-brand">STM Salam</div>
+  <div class="splash-tagline">Authentic Kopitiam Flavors</div>
+  <div class="splash-loader"><div class="splash-loader-bar"></div></div>
+</div>
+
+<!-- ══ TOAST CONTAINER ══ -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ══ APP HEADER ══ -->
+<header class="app-header">
+  <div class="app-header-logo">
+    <img src="../stmsalamlogo.png" alt="STM Salam Logo" />
+    <div>
+      <div class="brand-name">STM Salam</div>
+      <div class="location-pill">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Marine Terrace
+      </div>
+    </div>
+  </div>
+  <div class="app-header-actions">
+    <a href="menu.html" class="icon-btn" id="header-cart-btn" title="Cart">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+      <span class="badge" id="header-cart-badge" style="display:none">0</span>
+    </a>
+    <a href="profile.html" class="icon-btn" title="Profile">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+  </div>
+</header>
+
+<!-- ══ MAIN PAGE ══ -->
+<main class="page" id="home-page">
+
+  <!-- ── ORDER TRACKER BANNER (shown when active order) ── -->
+  <div class="order-tracker-banner" id="active-order-banner" style="display:none; margin-top:12px;">
+    <a href="orders.html" style="text-decoration:none">
+      <div class="order-tracker-inner">
+        <div class="order-tracker-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
+        <div class="order-tracker-text">
+          <div class="order-tracker-label">Live Order Update</div>
+          <div class="order-tracker-status" id="tracker-status-text">Preparing your order...</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="tracker-progress">
+        <div class="tracker-progress-bar" id="tracker-progress-bar" style="width:45%"></div>
+      </div>
+    </a>
+  </div>
+
+  <!-- ── HERO CAROUSEL ── -->
+  <div class="hero-carousel" id="hero-carousel">
+    <div class="hero-slide active">
+      <img class="hero-slide-img" src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=800" alt="Food" loading="eager" />
+      <div class="hero-slide-overlay"></div>
+      <div class="hero-slide-content">
+        <div class="hero-badge">⭐ Est. 1988 · Singapore</div>
+        <div class="hero-title">Authentic Drinks &amp; Warm Comfort Food</div>
+        <div class="hero-subtitle">Delivered Fresh · Marine Terrace Favourite</div>
+      </div>
+    </div>
+    <div class="hero-slide">
+      <img class="hero-slide-img" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800" alt="Burgers" loading="lazy" />
+      <div class="hero-slide-overlay"></div>
+      <div class="hero-slide-content">
+        <div class="hero-badge">🍔 New</div>
+        <div class="hero-title">Lamb Burgers &amp; Kebabs</div>
+        <div class="hero-subtitle">Juicy, fresh-made daily • from $8</div>
+      </div>
+    </div>
+    <div class="hero-slide">
+      <img class="hero-slide-img" src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&q=80&w=800" alt="Biryani" loading="lazy" />
+      <div class="hero-slide-overlay"></div>
+      <div class="hero-slide-content">
+        <div class="hero-badge">🍛 Bestseller</div>
+        <div class="hero-title">Mutton Biryani &amp; Indian Mains</div>
+        <div class="hero-subtitle">9AM–9PM · Fragrant &amp; Hearty</div>
+      </div>
+    </div>
+    <div class="hero-slide">
+      <img class="hero-slide-img" src="https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&q=80&w=800" alt="Teh Tarik" loading="lazy" />
+      <div class="hero-slide-overlay"></div>
+      <div class="hero-slide-content">
+        <div class="hero-badge">☕ Classic</div>
+        <div class="hero-title">Teh Tarik &amp; Kopi</div>
+        <div class="hero-subtitle">Singapore's favourite pulled milk tea</div>
+      </div>
+    </div>
+    <div class="hero-dots" id="hero-dots"></div>
+  </div>
+
+  <!-- ── SEARCH BAR ── -->
+  <div class="search-bar" id="home-search-bar" onclick="window.location.href='menu.html'" style="cursor:pointer;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span style="font-size:15px;font-weight:500;color:#9CA3AF">Search burgers, drinks, biryanis...</span>
+  </div>
+
+  <!-- ── QUICK ACTIONS ── -->
+  <div class="quick-actions">
+    <button class="quick-action-btn" onclick="window.location.href='menu.html'" id="qa-order">
+      <div class="quick-action-icon" style="background:rgba(1,50,32,0.08)">🛒</div>
+      <span class="quick-action-label">Order Now</span>
+    </button>
+    <button class="quick-action-btn" id="qa-paynow" onclick="openPayNowDrawer()">
+      <div class="quick-action-icon" style="background:rgba(79,70,229,0.08)">📲</div>
+      <span class="quick-action-label">PayNow</span>
+    </button>
+    <button class="quick-action-btn" onclick="window.open('https://wa.me/6591915766','_blank')" id="qa-whatsapp">
+      <div class="quick-action-icon" style="background:rgba(37,211,102,0.10)">💬</div>
+      <span class="quick-action-label">WhatsApp</span>
+    </button>
+    <button class="quick-action-btn" onclick="window.location.href='orders.html'" id="qa-track">
+      <div class="quick-action-icon" style="background:rgba(212,175,55,0.12)">📦</div>
+      <span class="quick-action-label">My Orders</span>
+    </button>
+  </div>
+
+  <!-- ── PROMO BANNER ── -->
+  <div class="promo-banner" data-animate>
+    <div class="promo-tag">🎉 Welcome Offer</div>
+    <div class="promo-title">Today's Highlights</div>
+    <div class="promo-subtitle">Enjoy selected favourites and seasonal specials, perfect for tea time, lunch, or evening cravings.</div>
+    <a href="menu.html" class="promo-btn">
+      Order Now
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+  </div>
+
+  <!-- ── FEATURED ITEMS ── -->
+  <div class="section-header">
+    <div class="section-title">⭐ Customer Favourites</div>
+    <a href="menu.html" class="section-link">
+      See all
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+  </div>
+  <div class="featured-scroll" id="featured-scroll">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- ── WHY STM SALAM ── -->
+  <div class="section-header" style="margin-top:8px">
+    <div class="section-title">Why Choose Us</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px;margin-bottom:24px">
+    <div style="background:white;border-radius:18px;padding:16px;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.05);text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">🔥</div>
+      <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:4px">Freshly Made</div>
+      <div style="font-size:11px;font-weight:500;color:#6B7280;line-height:1.5">Prepared hot upon your order.</div>
+    </div>
+    <div style="background:white;border-radius:18px;padding:16px;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.05);text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">⚡</div>
+      <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:4px">Fast Delivery</div>
+      <div style="font-size:11px;font-weight:500;color:#6B7280;line-height:1.5">25–35 min to your door.</div>
+    </div>
+    <div style="background:white;border-radius:18px;padding:16px;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.05);text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">❤️</div>
+      <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:4px">Local Favourite</div>
+      <div style="font-size:11px;font-weight:500;color:#6B7280;line-height:1.5">Marine Terrace's #1 kopitiam.</div>
+    </div>
+    <div style="background:white;border-radius:18px;padding:16px;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.05);text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">💰</div>
+      <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:4px">Best Prices</div>
+      <div style="font-size:11px;font-weight:500;color:#6B7280;line-height:1.5">From just $1.50 per item.</div>
+    </div>
+  </div>
+
+  <!-- ── SCAN & PAY SECTION ── -->
+  <div style="background:linear-gradient(135deg,#013220,#024d32);margin:0 16px 24px;border-radius:24px;padding:20px;position:relative;overflow:hidden">
+    <div style="font-size:11px;font-weight:800;color:#D4AF37;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">⚡ Instant Payment</div>
+    <div style="font-size:26px;font-weight:900;color:white;letter-spacing:-0.5px;margin-bottom:4px">🍽️ STM Salam Menu</div>
+    <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.75);margin-bottom:16px;line-height:1.5">Scan our official SGQR PayNow code directly from your banking app.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="openPayNowDrawer()" style="background:#D4AF37;color:#013220;border:none;padding:10px 18px;border-radius:999px;font-size:13px;font-weight:900;cursor:pointer;display:flex;align-items:center;gap:6px">
+        📲 Open Scanner
+      </button>
+      <a href="menu.html" style="background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px">
+        🍽️ Browse Menu
+      </a>
+    </div>
+  </div>
+
+  <!-- ── CATEGORY GRID ── -->
+  <div class="section-header">
+    <div class="section-title">Browse by Category</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px;margin-bottom:32px" id="category-grid">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- ── APP INFO ── -->
+  <div style="margin:0 16px 32px;background:white;border-radius:24px;padding:20px;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.04)">
+    <div style="font-size:13px;font-weight:900;color:#0D1B0F;margin-bottom:12px">📍 Visit Us</div>
+    <div style="font-size:13px;font-weight:600;color:#6B7280;line-height:1.6;margin-bottom:12px">Blk 50A Marine Terrace, #01-303<br/>Singapore 441050</div>
+    <div style="font-size:13px;font-weight:600;color:#6B7280;margin-bottom:6px">🕐 Daily 9:00 AM – 11:00 PM</div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <a href="tel:+6591915766" style="flex:1;background:#013220;color:white;border-radius:12px;padding:10px;text-align:center;font-size:13px;font-weight:800;text-decoration:none">📞 Call</a>
+      <a href="https://wa.me/6591915766" target="_blank" rel="noreferrer" style="flex:1;background:#25d366;color:white;border-radius:12px;padding:10px;text-align:center;font-size:13px;font-weight:800;text-decoration:none">💬 WhatsApp</a>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══ FLOATING CART BUTTON ══ -->
+<div class="floating-cart" id="floating-cart">
+  <a href="checkout.html" class="floating-cart-btn" id="floating-cart-btn">
+    <div class="cart-btn-left">
+      <div class="cart-count-badge">0</div>
+      <span class="cart-btn-label">View Order</span>
+    </div>
+    <span class="cart-btn-total">SGD 0.00</span>
+  </a>
+</div>
+
+<!-- ══ FLOATING WHATSAPP ══ -->
+<a href="https://wa.me/6591915766?text=Hi%20STM%20Salam%2C%20I%27d%20like%20to%20order!" target="_blank" rel="noreferrer" class="floating-chat" id="floating-chat" title="Chat on WhatsApp" style="bottom:calc(68px + env(safe-area-inset-bottom) + 80px)">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<!-- ══ PAYNOW DRAWER ══ -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeAllDrawers()"></div>
+<div class="drawer" id="paynow-drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <span class="drawer-title">📲 PayNow — SGQR</span>
+    <button class="drawer-close" onclick="closeAllDrawers()">✕</button>
+  </div>
+  <div style="padding:20px;text-align:center">
+    <div style="background:#f8fafc;border-radius:20px;padding:24px;border:2px solid #e2e8f0;margin-bottom:20px;position:relative">
+      <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#059669;color:white;padding:4px 16px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase">Official SGQR PayNow</div>
+      <div style="width:180px;height:180px;background:white;margin:12px auto 0;border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(0,0,0,0.06);border:1px solid #f1f5f9;overflow:hidden">
+        <div style="padding:20px;text-align:center">
+          <div style="font-size:48px;margin-bottom:10px">📱</div>
+          <div style="font-size:11px;font-weight:700;color:#6B7280;line-height:1.5">Scan QR with<br/>your banking app</div>
+          <a href="../frontend/public/scanner-pay.pdf" target="_blank" rel="noreferrer" style="display:block;margin-top:10px;font-size:11px;font-weight:800;color:#059669">Open QR PDF ↗</a>
+        </div>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:#6B7280;font-weight:700">PayNow: <span style="color:#013220;font-weight:900">+65 9191 5766</span></div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px">
+      <span style="background:#f0fdf4;color:#059669;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:800">✓ Verified</span>
+      <span style="background:#f0fdf4;color:#059669;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:800">🔒 Secure</span>
+      <span style="background:#f0fdf4;color:#059669;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:800">⚡ Instant</span>
+    </div>
+    <button onclick="confirmPayNow()" style="width:100%;padding:16px;border-radius:14px;background:#D4AF37;color:#013220;border:none;font-size:15px;font-weight:900;cursor:pointer;margin-bottom:10px">
+      ✅ I Have Paid — Notify via WhatsApp
+    </button>
+    <button onclick="closeAllDrawers()" style="width:100%;padding:14px;border-radius:14px;border:1.5px solid #E5E7EB;background:transparent;color:#6B7280;font-size:14px;font-weight:800;cursor:pointer">
+      Cancel
+    </button>
+  </div>
+</div>
+
+<!-- ══ BOTTOM NAVIGATION ══ -->
+<nav class="bottom-nav" id="bottom-nav">
+  <a href="index.html" class="nav-item" data-page="home" id="nav-home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Home
+    <span class="nav-dot"></span>
+  </a>
+  <a href="menu.html" class="nav-item" data-page="menu" id="nav-menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+    Menu
+    <span class="nav-dot"></span>
+  </a>
+  <a href="orders.html" class="nav-item" data-page="orders" id="nav-orders">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    Orders
+    <span class="nav-dot"></span>
+  </a>
+  <a href="support.html" class="nav-item" data-page="support" id="nav-support">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    Support
+    <span class="nav-dot"></span>
+  </a>
+  <a href="profile.html" class="nav-item" data-page="profile" id="nav-profile">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Profile
+    <span class="nav-dot"></span>
+  </a>
+</nav>
+
+<script src="js/app.js"></script>
+<script>
+  const { MENU_ITEMS, CATEGORIES, Cart, showToast, openDrawer, closeAllDrawers } = window.STMApp;
+
+  /* Hero Carousel */
+  let heroIdx = 0;
+  const slides = document.querySelectorAll('.hero-slide');
+  const dotsContainer = document.getElementById('hero-dots');
+  slides.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'hero-dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goSlide(i);
+    dotsContainer.appendChild(dot);
+  });
+  function goSlide(n) {
+    slides[heroIdx].classList.remove('active');
+    dotsContainer.children[heroIdx].classList.remove('active');
+    heroIdx = (n + slides.length) % slides.length;
+    slides[heroIdx].classList.add('active');
+    dotsContainer.children[heroIdx].classList.add('active');
+  }
+  setInterval(() => goSlide(heroIdx + 1), 5000);
+
+  /* Featured Items */
+  const featuredItems = MENU_ITEMS.filter(i => i.badge === 'bestseller').slice(0, 8);
+  const featuredScroll = document.getElementById('featured-scroll');
+  featuredItems.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'featured-card';
+    card.onclick = () => window.location.href = 'menu.html';
+    card.innerHTML = `
+      <div class="featured-card-img-wrap">
+        <img class="featured-card-img" src="${item.img}" alt="${item.name}" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=400'" />
+        ${item.badge ? `<span class="item-badge badge-${item.badge}" style="position:absolute;top:6px;left:6px">${item.badge === 'bestseller' ? '⭐ Best' : item.badge === 'new' ? '✨ New' : ''}</span>` : ''}
+      </div>
+      <div class="featured-card-body">
+        <div class="featured-card-name">${item.name}</div>
+        <div class="featured-card-price">SGD ${item.price.toFixed(2)}</div>
+      </div>`;
+    featuredScroll.appendChild(card);
+  });
+
+  /* Category Grid */
+  const grid = document.getElementById('category-grid');
+  CATEGORIES.filter(c => c.id !== 'all').forEach(cat => {
+    const btn = document.createElement('a');
+    btn.href = `menu.html?cat=${cat.id}`;
+    btn.style.cssText = 'background:white;border-radius:16px;padding:14px 8px;text-align:center;border:1.5px solid #E5E7EB;box-shadow:0 2px 8px rgba(0,0,0,0.04);text-decoration:none;display:block;transition:all 0.2s';
+    btn.innerHTML = `<div style="font-size:24px;margin-bottom:6px">${cat.emoji}</div><div style="font-size:11px;font-weight:800;color:#0D1B0F;line-height:1.3">${cat.name}</div>`;
+    grid.appendChild(btn);
+  });
+
+  /* PayNow Drawer */
+  function openPayNowDrawer() { openDrawer('paynow-drawer'); }
+  function confirmPayNow() {
+    const msg = encodeURIComponent('Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n💳 Method: SGQR PayNow\n\nPlease verify my payment. Thank you! 🙏');
+    window.open(`https://wa.me/6591915766?text=${msg}`, '_blank');
+    closeAllDrawers();
+    showToast('WhatsApp opened! Send your payment screenshot.', 'success');
+  }
+
+  /* Active order check */
+  const lastOrderId = localStorage.getItem('stm_last_order_id');
+  if (lastOrderId) {
+    const banner = document.getElementById('active-order-banner');
+    if (banner) banner.style.display = 'block';
+  }
+</script>
+</body>
+</html>

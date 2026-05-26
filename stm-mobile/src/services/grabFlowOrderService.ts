@@ -5,14 +5,26 @@
  * **Multi-device:** idempotency keys dedupe per user; **checkout leases** (`claimCheckoutLease` / server
  * `checkout_lease`) stop two devices from both entering create with divergent keys. Offline-queue idempotency
  * (`offline-queue:*`) skips the lease.
+ *
+ * If `claimCheckoutLease` / `releaseCheckoutLease` are not deployed (same project/region as `createGrabOrder`),
+ * lease calls no-op with a warning — checkout still uses `createGrabOrder` only.
  */
 
-import { doc, onSnapshot, updateDoc, type Unsubscribe, Timestamp, type Firestore } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  type Unsubscribe,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore';
+import { httpsCallable, type Functions as FirebaseFunctionsModule } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { app, auth, db, CALLABLE_REGION, EXPECTED_FIREBASE_PROJECT_ID, functions } from './firebase';
 import { resolveOrderDisplayTotal } from './orderService';
 import { ensureSignedInUid } from './ensureSignedInUid';
+import { coerceAdminIntentToCanonical } from '@/src/domain/orderStateMachine';
 
 /** PENDING = COD (no online payment); PENDING_VERIFICATION = Stripe / QR until verified PAID. */
 export type GrabPaymentStatus = 'PAID' | 'PENDING_VERIFICATION' | 'PENDING';
@@ -70,14 +82,74 @@ export function grabDefaultEtaIsoFromNow(): string {
   return d.toISOString();
 }
 
-function toLegacyTrackingStatus(orderStatus: GrabOrderStatus): string {
-  if (orderStatus === 'PLACED') return 'PENDING';
-  if (orderStatus === 'CANCELLED') return 'CANCELLED';
-  return orderStatus;
-}
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function firestoreErrorCode(e: unknown): string {
+  if (e && typeof e === 'object' && 'code' in e) {
+    const c = (e as { code?: string }).code;
+    return typeof c === 'string' ? c : '';
+  }
+  return '';
+}
+
+/**
+ * Rejects mistaken product doc ids (e.g. `p-…`) before Firestore or payment steps.
+ */
+export function assertCheckoutOrderIdShape(orderId: string | undefined | null): string {
+  const id = typeof orderId === 'string' ? orderId.trim() : '';
+  if (id.startsWith('p-')) {
+    throw new Error('Invalid orderId: product id detected instead of order id');
+  }
+  return id;
+}
+
+/**
+ * Client-side ownership check against `orders/{orderId}` (same rules as Stripe resolver: `userId` only).
+ * Call after `createGrabOrder` returns or before crash-resume navigation.
+ */
+export async function assertOrdersDocOwnedByCurrentUser(orderId: string): Promise<void> {
+  const id = assertCheckoutOrderIdShape(orderId);
+  if (!id) {
+    throw new Error('Order ID missing');
+  }
+
+  await auth.authStateReady();
+  const uid = auth.currentUser?.uid?.trim();
+  if (!uid) {
+    throw new Error('User not authenticated');
+  }
+
+  const loadOnce = async () => {
+    try {
+      return await getDoc(doc(db, 'orders', id));
+    } catch (e: unknown) {
+      if (firestoreErrorCode(e) === 'permission-denied') {
+        throw new Error('Unauthorized order access');
+      }
+      throw e;
+    }
+  };
+
+  let snap = await loadOnce();
+  if (!snap.exists()) {
+    await sleep(400);
+    snap = await loadOnce();
+  }
+
+  if (!snap.exists()) {
+    throw new Error(
+      'Order not found in Firestore yet. Wait a few seconds and try again, or start checkout again.'
+    );
+  }
+
+  const data = snap.data() as { userId?: unknown };
+  const owner = typeof data?.userId === 'string' ? data.userId.trim() : '';
+  if (owner !== uid) {
+    throw new Error('Unauthorized order access');
+  }
 }
 
 async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseMs = 400): Promise<T> {
@@ -109,8 +181,8 @@ export const ALLOWED_CALLABLE_LEGACY_LABELS: readonly string[] = [
 
 const ALLOWED_LEGACY_SET: ReadonlySet<string> = new Set(ALLOWED_CALLABLE_LEGACY_LABELS);
 
-function toCallablePaymentModeCodOnlineFromNormalizedLegacy(paymentModeNorm: string): CallablePaymentMode {
-  if (paymentModeNorm === 'cod') return 'COD';
+function toCallablePaymentMethodCodOnlineFromNormalizedLegacy(paymentMethodNorm: string): CallablePaymentMode {
+  if (paymentMethodNorm === 'cod') return 'COD';
   return 'ONLINE';
 }
 
@@ -129,14 +201,14 @@ export function assertCallablePaymentMode(raw: unknown): CallablePaymentMode {
     if (u === 'COD') return 'COD';
     if (u === 'ONLINE') return 'ONLINE';
   }
-  const paymentModeNorm = normalizePaymentModeForCallable(raw);
-  if (!paymentModeNorm) {
-    throw new Error('Missing paymentMode before checkout');
+  const paymentMethodNorm = normalizePaymentModeForCallable(raw);
+  if (!paymentMethodNorm) {
+    throw new Error('Missing paymentMethod before checkout');
   }
-  if (!ALLOWED_LEGACY_SET.has(paymentModeNorm)) {
-    throw new Error(`Invalid paymentMode: ${paymentModeNorm}`);
+  if (!ALLOWED_LEGACY_SET.has(paymentMethodNorm)) {
+    throw new Error(`Invalid paymentMethod: ${paymentMethodNorm}`);
   }
-  return toCallablePaymentModeCodOnlineFromNormalizedLegacy(paymentModeNorm);
+  return toCallablePaymentMethodCodOnlineFromNormalizedLegacy(paymentMethodNorm);
 }
 
 const CHECKOUT_IDEMPOTENCY_STORAGE_KEY = 'stm_checkout_idempotency_v1';
@@ -160,11 +232,10 @@ export type PendingCheckoutResumeNav =
   | { kind: 'grabPaymentQr'; orderId: string; total: string };
 
 function inferResumeRailFromPayload(payload: {
-  paymentMode?: unknown;
   paymentMethod?: unknown;
   totalAmount?: number;
 }): 'cod' | 'stripe' | 'qr' {
-  const raw = String(payload.paymentMode ?? payload.paymentMethod ?? 'cod').toLowerCase();
+  const raw = String(payload.paymentMethod || 'COD').toLowerCase();
   if (raw === 'stripe' || raw === 'paypal') return 'stripe';
   if (raw === 'qr' || raw === 'scanpay' || raw === 'paynow') return 'qr';
   return 'cod';
@@ -174,7 +245,6 @@ async function persistPendingCheckoutResolution(
   idem: string,
   orderId: string,
   payload: {
-    paymentMode?: unknown;
     paymentMethod?: unknown;
     totalAmount?: number;
   }
@@ -340,6 +410,23 @@ export async function clearCheckoutIdempotencyPersistence(): Promise<void> {
   void releaseServerCheckoutLease();
 }
 
+/**
+ * User changed payment rail at checkout — avoid reusing an idempotency key / lease from another rail
+ * (e.g. Stripe `pending_payment` doc vs COD `paid` doc).
+ */
+export async function invalidateCheckoutForPaymentRailChange(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([
+      CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+      PENDING_CHECKOUT_RESOLUTION_KEY,
+      CHECKOUT_SESSION_FENCE_STORAGE_KEY,
+    ]);
+  } catch {
+    /* ignore */
+  }
+  void releaseServerCheckoutLease();
+}
+
 function createIdempotencyKey(): string {
   return (
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -367,11 +454,10 @@ const releaseCheckoutLease = httpsCallable(functions, 'releaseCheckoutLease', { 
 export type PlaceGrabOrderPayload = {
   items: GrabOrderItem[];
   totalAmount: number;
-  paymentMode?: GrabPaymentMethod | CheckoutPaymentRail | CallablePaymentMode | string;
-  /** Alias for legacy / alternate payloads (mirrors Cloud Function). */
-  paymentMethod?: string;
+  paymentMethod: string;
   /** Reuse the same key for all retries of one checkout attempt. */
   idempotencyKey?: string;
+  /** Checkout draft (customer, delivery, totals) — required for Stripe Hosted orders on server. */
   metaData?: Record<string, unknown>;
 };
 
@@ -440,7 +526,9 @@ function mapCallableFailureToUserMessage(e: unknown): string {
     return 'Order service is busy or temporarily unavailable. Try again in a moment.';
   }
   if (code === 'functions/permission-denied') {
-    return 'Could not reach order service. Check deployment permissions and try again.';
+    const extra = [raw, detail].filter((s) => typeof s === 'string' && s.trim() && !/^permission-denied$/i.test(s.trim())).join(' — ');
+    const prefix = extra ? `${extra}. ` : '';
+    return `${prefix}Order service denied the request (callable permission-denied). Often Firebase App Check failed on this build, or the signed-in user cannot invoke createGrabOrder. Try updating the app, or sign out and sign in again.`.trim();
   }
   if (code === 'functions/internal') {
     if (/corrupted idempotency state/i.test(raw) || /corrupted idempotency state/i.test(detail)) {
@@ -460,6 +548,10 @@ function mapCallableFailureToUserMessage(e: unknown): string {
 
 /** Pre-callable checks only: locked projectId + CALLABLE_REGION (no env). */
 function assertFirebaseCallableBinding(): void {
+  const fns = functions as FirebaseFunctionsModule | null | undefined;
+  if (!fns) {
+    throw new Error('Firebase functions not initialized');
+  }
   const pid = app.options?.projectId;
   if (!pid || pid !== EXPECTED_FIREBASE_PROJECT_ID) {
     throw new Error(
@@ -482,7 +574,7 @@ export async function prepareCallableAuthSession(): Promise<string> {
   await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) {
-    throw new Error('Could not start checkout session. Check your connection and try again.');
+    throw new Error('User not authenticated');
   }
   return user.getIdToken(true);
 }
@@ -526,10 +618,26 @@ async function claimCheckoutLeaseWithAuthRetry(
   try {
     await claimCheckoutLease(payload);
   } catch (first: unknown) {
+    if (callableErrorCode(first) === 'functions/not-found') {
+      console.warn(
+        '[CHECKOUT] claimCheckoutLease not deployed (functions/not-found) — continuing without server lease'
+      );
+      return;
+    }
     if (callableErrorCode(first) === 'functions/unauthenticated') {
       await prepareCallableAuthSession();
       await sleep(400);
-      await claimCheckoutLease(payload);
+      try {
+        await claimCheckoutLease(payload);
+      } catch (second: unknown) {
+        if (callableErrorCode(second) === 'functions/not-found') {
+          console.warn(
+            '[CHECKOUT] claimCheckoutLease not deployed (functions/not-found) — continuing without server lease'
+          );
+          return;
+        }
+        throw second;
+      }
       return;
     }
     throw first;
@@ -543,6 +651,10 @@ export async function releaseServerCheckoutLease(): Promise<void> {
     if (!auth.currentUser) return;
     await releaseCheckoutLease({});
   } catch (e) {
+    if (callableErrorCode(e) === 'functions/not-found') {
+      console.warn('[CHECKOUT] releaseCheckoutLease not deployed — skipping');
+      return;
+    }
     console.warn('[grabFlowOrderService] releaseCheckoutLease', e);
   }
 }
@@ -552,18 +664,27 @@ export async function releaseServerCheckoutLease(): Promise<void> {
  * Payload: `items`, `totalAmount` (number), `paymentMode` (`COD`|`ONLINE`), `idempotencyKey`.
  */
 export async function placeGrabOrderAtCheckout(payload: PlaceGrabOrderPayload): Promise<string> {
+  await auth.authStateReady();
+  if (__DEV__) {
+    console.log('[CHECKOUT DEBUG]', {
+      orderId: null as string | null,
+      uid: auth.currentUser?.uid ?? null,
+      projectId: app.options?.projectId ?? null,
+    });
+  }
+
   await prepareCallableAuthSession();
 
   if (!auth.currentUser?.uid?.trim()) {
-    throw new Error('Could not start checkout session. Check your connection and try again.');
+    throw new Error('User not authenticated');
   }
 
   const totalAmount = Number(payload.totalAmount);
   if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
     throw new Error('Invalid totalAmount');
   }
-  const paymentModeCodOnline = assertCallablePaymentMode(
-    payload.paymentMode ?? payload.paymentMethod ?? 'cod'
+  const paymentMethodCodOnline = assertCallablePaymentMode(
+    payload.paymentMethod || 'COD'
   );
 
   assertFirebaseCallableBinding();
@@ -582,6 +703,7 @@ export async function placeGrabOrderAtCheckout(payload: PlaceGrabOrderPayload): 
     const cachedOid = await readCachedOrderIdForIdempotencyKey(idempotencyKey);
     if (cachedOid) {
       console.log('[CHECKOUT] resolved-order cache hit (pending resolution)');
+      await assertOrdersDocOwnedByCurrentUser(cachedOid);
       return cachedOid;
     }
   }
@@ -596,19 +718,24 @@ export async function placeGrabOrderAtCheckout(payload: PlaceGrabOrderPayload): 
     );
   }
 
+
+
   const callablePayload = jsonSafeForCallable({
     items: payload.items,
     totalAmount,
-    paymentMode: paymentModeCodOnline,
+    paymentMethod: paymentMethodCodOnline,
     idempotencyKey,
     checkoutFence,
+    ...(payload.metaData && typeof payload.metaData === 'object'
+      ? { metaData: payload.metaData as Record<string, unknown> }
+      : {}),
   });
 
   const itemsCount = Array.isArray(payload.items) ? payload.items.length : 0;
   console.log('[CHECKOUT_FIREBASE_CALL]', {
     itemsCount,
     totalAmount,
-    paymentMode: paymentModeCodOnline,
+    paymentMethod: paymentMethodCodOnline,
     hasIdempotencyKey: Boolean(callablePayload.idempotencyKey),
   });
 
@@ -645,6 +772,8 @@ export async function placeGrabOrderAtCheckout(payload: PlaceGrabOrderPayload): 
     throw new Error('createGrabOrder: missing orderId');
   }
 
+  await assertOrdersDocOwnedByCurrentUser(orderId);
+
   await persistPendingCheckoutResolution(idempotencyKey, orderId, payload);
 
   console.log('[ORDER_CREATE_SUCCESS]', { orderId });
@@ -654,15 +783,20 @@ export async function placeGrabOrderAtCheckout(payload: PlaceGrabOrderPayload): 
 export async function updateGrabPipelineStatus(
   firestore: Firestore,
   orderId: string,
-  orderStatus: GrabOrderStatus,
+  orderStatus: GrabOrderStatus | string,
   extra?: Record<string, unknown>
 ): Promise<void> {
-  const legacy = toLegacyTrackingStatus(orderStatus);
+  const status = coerceAdminIntentToCanonical(orderStatus);
+  const cleanExtra = { ...(extra || {}) };
+  delete cleanExtra.orderStatus;
+  delete cleanExtra.order_status;
+  delete cleanExtra.status;
   await withRetry(async () => {
-    await updateDoc(doc(firestore, 'orders', orderId), {
-      orderStatus,
-      status: legacy,
-      ...(extra && Object.keys(extra).length ? extra : {}),
+    const callable = httpsCallable(functions, 'transitionOrderStatus');
+    await callable({
+      orderId,
+      nextStatus: status,
+      metadata: { source: 'updateGrabPipelineStatus', ...cleanExtra },
     });
   });
 }

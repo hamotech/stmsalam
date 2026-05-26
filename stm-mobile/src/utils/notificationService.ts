@@ -19,6 +19,7 @@ import {
   type GrabOrderDoc,
   type GrabOrderStatus,
 } from '@/src/services/grabFlowOrderService';
+import { readCanonicalOrderStatus } from '@/src/domain/orderStateMachine';
 
 setNotificationHandler({
   handleNotification: async () => ({
@@ -34,7 +35,7 @@ let customerChannelReady = false;
 let supportChannelReady = false;
 
 /** // NEW — Survives listener re-subscribe (dedupe real re-fires vs same status). */
-const lastNotifiedStatusByOrder = new Map<string, GrabOrderStatus>();
+const lastNotifiedStatusByOrder = new Map<string, string>();
 
 const DEDUPE_STORAGE_KEY = 'stm_notif_last_order_status_v1';
 let dedupeLoadPromise: Promise<void> | null = null;
@@ -65,7 +66,7 @@ export function initNotificationStatusDedupe(): Promise<void> {
       const o = JSON.parse(raw) as Record<string, string>;
       for (const [k, v] of Object.entries(o)) {
         if (k && v) {
-          lastNotifiedStatusByOrder.set(k, v as GrabOrderStatus);
+          lastNotifiedStatusByOrder.set(k, v);
         }
       }
     } catch (e) {
@@ -106,35 +107,39 @@ export async function ensureCustomerNotificationPermissions(): Promise<boolean> 
   return status === 'granted';
 }
 
-/** // UPDATED — Copy per product spec */
-const STATUS_COPY: Record<GrabOrderStatus, string> = {
-  PLACED: 'Your order has been placed 🧾',
-  CONFIRMED: 'Restaurant accepted your order',
-  PREPARING: 'Your food is being prepared',
-  READY: 'Your order is ready for pickup / dispatch 📦',
-  OUT_FOR_DELIVERY: 'Rider is on the way 🚚',
-  DELIVERED: 'Order delivered 🎉',
-  CANCELLED: 'Your order could not be fulfilled — contact us if you were charged',
+/** Canonical `orders.status` → customer-facing copy (legacy GrabOrderStatus still accepted). */
+const CANONICAL_STATUS_COPY: Record<string, string> = {
+  pending_payment: 'Complete payment to confirm your order',
+  placed: 'Your COD order is placed — pay the rider on delivery 🧾',
+  paid: 'Your order has been placed 🧾',
+  preparing: 'Your food is being prepared',
+  ready_for_pickup: 'Your order is ready for pickup / dispatch 📦',
+  out_for_delivery: 'Rider is on the way 🚚',
+  delivered: 'Order delivered 🎉',
+  cancelled: 'Your order could not be fulfilled — contact us if you were charged',
+  failed: 'Payment did not go through',
 };
 
-/** // NEW — For HTTP dispatch / admin */
-export function getDispatchMessageForOrderStatus(status: GrabOrderStatus): string {
-  return STATUS_COPY[status] ?? `Order update: ${status}`;
+/** For HTTP dispatch / admin (accepts legacy pipeline enum or canonical). */
+export function getDispatchMessageForOrderStatus(status: GrabOrderStatus | string): string {
+  const k = readCanonicalOrderStatus({ orderStatus: status, status });
+  return CANONICAL_STATUS_COPY[k] ?? `Order update: ${k}`;
 }
 
 export async function presentCustomerOrderNotification(
-  status: GrabOrderStatus,
+  status: GrabOrderStatus | string,
   orderShort: string
 ): Promise<void> {
   if (Platform.OS === 'web') return;
   await ensureCustomerChannel();
-  const body = STATUS_COPY[status] ?? `Order update: ${status}`;
+  const k = readCanonicalOrderStatus({ orderStatus: status, status });
+  const body = CANONICAL_STATUS_COPY[k] ?? `Order update: ${k}`;
   await scheduleNotificationAsync({
     content: {
       title: `Order ${orderShort}`,
       body,
       sound: 'default',
-      data: { status },
+      data: { status: k },
       ...(Platform.OS === 'android' ? { channelId: 'order-updates' } : {}),
     },
     trigger: null,
@@ -194,7 +199,7 @@ export async function registerCustomerPushToken(userId: string): Promise<string 
 export async function requestCustomerPushDispatch(payload: {
   userId: string;
   orderId: string;
-  orderStatus: GrabOrderStatus;
+  orderStatus: GrabOrderStatus | string;
   message: string;
 }): Promise<void> {
   const url = process.env.EXPO_PUBLIC_ORDER_PUSH_DISPATCH_URL?.trim();
@@ -236,7 +241,7 @@ export function subscribeGrabOrderWithNotifications(
     (docSnap) => {
       onData(docSnap);
       if (!docSnap) return;
-      const st: GrabOrderStatus = docSnap.orderStatus ?? 'PLACED';
+      const st = readCanonicalOrderStatus(docSnap as unknown as Record<string, unknown>);
       const prevNotified = lastNotifiedStatusByOrder.get(key);
       if (prevNotified === st) {
         return;

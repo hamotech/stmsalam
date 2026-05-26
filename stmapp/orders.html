@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="View your STM Salam order history and track live order status." />
+  <title>My Orders â€” STM Salam</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- ══ SPLASH FAILSAFE ══ -->
+  <script>
+    (function(){function h(){var s=document.getElementById('splash-screen');if(!s)return;s.classList.add('hidden');s.style.cssText='opacity:0;visibility:hidden;pointer-events:none;';setTimeout(function(){s.style.display='none';if(s.parentNode)s.parentNode.removeChild(s);},600);}setTimeout(h,3000);document.addEventListener('DOMContentLoaded',function(){setTimeout(h,1800);});window.addEventListener('error',function(){setTimeout(h,500);});})();
+  </script>
+</head>
+<body>
+
+<!-- â•â• TOAST â•â• -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- â•â• APP HEADER â•â• -->
+<header class="app-header">
+  <div class="app-header-logo">
+    <img src="../stmsalamlogo.png" alt="STM Salam Logo" />
+    <div>
+      <div class="brand-name">My Orders</div>
+      <div class="location-pill">Order History &amp; Tracking</div>
+    </div>
+  </div>
+  <div class="app-header-actions">
+    <button class="icon-btn" onclick="clearAllOrders()" title="Clear history" id="clear-btn" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- â•â• PAGE HERO â•â• -->
+<div class="page-hero">
+  <div style="position:relative;z-index:1">
+    <div style="font-size:26px;font-weight:900;color:white;letter-spacing:-0.5px;margin-bottom:4px">ðŸ“¦ Your Orders</div>
+    <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.75)">Track, reorder, and manage your STM Salam orders.</div>
+  </div>
+</div>
+
+<!-- â•â• LIVE ORDER TRACKER â•â• -->
+<div id="live-tracker-section" style="display:none;padding:0 0 0">
+  <div style="padding:16px 16px 8px;font-size:13px;font-weight:800;color:#013220;text-transform:uppercase;letter-spacing:0.5px">ðŸŸ¢ Active Order</div>
+  <div class="order-tracker-banner" style="margin-top:0">
+    <div class="order-tracker-inner">
+      <div class="order-tracker-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      </div>
+      <div class="order-tracker-text">
+        <div class="order-tracker-label">Order ID: <span id="live-order-id">â€”</span></div>
+        <div class="order-tracker-status" id="live-order-status">Preparing your order...</div>
+      </div>
+      <a href="#" id="live-track-link" style="text-decoration:none;font-size:11px;font-weight:900;color:#D4AF37;white-space:nowrap">Track â†’</a>
+    </div>
+    <div class="tracker-progress">
+      <div class="tracker-progress-bar" id="live-tracker-bar" style="width:30%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- â•â• FILTER TABS â•â• -->
+<div style="display:flex;gap:8px;overflow-x:auto;padding:12px 16px;scrollbar-width:none;border-bottom:1px solid #E5E7EB;background:white" id="filter-tabs">
+  <button class="category-chip active" data-filter="all" onclick="setFilter('all', this)">All Orders</button>
+  <button class="category-chip" data-filter="pending" onclick="setFilter('pending', this)">ðŸ”„ Pending</button>
+  <button class="category-chip" data-filter="preparing" onclick="setFilter('preparing', this)">ðŸ‘¨â€ðŸ³ Preparing</button>
+  <button class="category-chip" data-filter="delivered" onclick="setFilter('delivered', this)">âœ… Delivered</button>
+</div>
+
+<!-- â•â• ORDERS LIST â•â• -->
+<div id="orders-list" style="padding-top:8px;padding-bottom:100px">
+  <!-- Populated by JS -->
+</div>
+
+<!-- â•â• EMPTY STATE â•â• -->
+<div class="empty-state" id="orders-empty" style="display:none">
+  <div class="empty-state-icon">ðŸ“¦</div>
+  <div class="empty-state-title">No orders yet</div>
+  <div class="empty-state-subtitle">Your order history will appear here. Start by ordering your favourite kopitiam food!</div>
+  <a href="menu.html" class="cta-btn">ðŸ½ï¸ Browse Menu</a>
+</div>
+
+<!-- â•â• FLOATING CART â•â• -->
+<div class="floating-cart" id="floating-cart">
+  <a href="checkout.html" class="floating-cart-btn">
+    <div class="cart-btn-left">
+      <div class="cart-count-badge">0</div>
+      <span class="cart-btn-label">View Order</span>
+    </div>
+    <span class="cart-btn-total">SGD 0.00</span>
+  </a>
+</div>
+
+<!-- â•â• BOTTOM NAVIGATION â•â• -->
+<nav class="bottom-nav">
+  <a href="index.html" class="nav-item" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home<span class="nav-dot"></span></a>
+  <a href="menu.html" class="nav-item" data-page="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Menu<span class="nav-dot"></span></a>
+  <a href="orders.html" class="nav-item" data-page="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>Orders<span class="nav-dot"></span></a>
+  <a href="support.html" class="nav-item" data-page="support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Support<span class="nav-dot"></span></a>
+  <a href="profile.html" class="nav-item" data-page="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile<span class="nav-dot"></span></a>
+</nav>
+
+<script src="js/app.js"></script>
+<script>
+  const { MENU_ITEMS, SHOP_INFO, Cart, showToast } = window.STMApp;
+
+  let currentFilter = 'all';
+  let allOrders = [];
+
+  const STATUS_CONFIG = {
+    pending:   { label: 'ðŸ”„ Pending',   cls: 'status-pending',   progress: 15 },
+    confirmed: { label: 'âœ… Confirmed',  cls: 'status-ready',     progress: 35 },
+    preparing: { label: 'ðŸ‘¨â€ðŸ³ Preparing', cls: 'status-preparing', progress: 55 },
+    ready:     { label: 'ðŸŽ‰ Ready',      cls: 'status-ready',     progress: 80 },
+    delivered: {   let trackingInterval = null;
+
+  async function loadOrders() {
+    allOrders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+    const lastId = localStorage.getItem('stm_last_order_id');
+
+    // Sync active orders in background from live Node backend
+    const activeLocalOrders = allOrders.filter(o => ['pending', 'placed', 'confirmed', 'preparing', 'ready', 'out_for_delivery'].includes(o.status));
+    
+    for (let order of activeLocalOrders) {
+      try {
+        const liveDetails = await STMApp.API.getOrderDetails(order.id);
+        if (liveDetails && liveDetails.status) {
+          order.status = liveDetails.status;
+          
+          // Display OTP alert on the customer PWA for driver verification
+          if (liveDetails.status === 'out_for_delivery' && liveDetails.otp) {
+            order.otp = liveDetails.otp;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not sync order with backend: ', err.message);
+      }
+    }
+    
+    // Save synced order states back to LocalStorage
+    localStorage.setItem('stmapp_orders', JSON.stringify(allOrders));
+
+    // Show live tracker for most recent pending order
+    const liveOrder = allOrders.find(o => ['pending','placed','confirmed','preparing','ready','out_for_delivery'].includes(o.status));
+    const liveSection = document.getElementById('live-tracker-section');
+    
+    if (liveOrder) {
+      liveSection.style.display = 'block';
+      document.getElementById('live-order-id').textContent = liveOrder.id;
+      
+      const cfg = STATUS_CONFIG[liveOrder.status] || STATUS_CONFIG.pending;
+      let labelText = cfg.label;
+
+      // Special alert for courier Delivery OTP
+      if (liveOrder.status === 'out_for_delivery' && liveOrder.otp) {
+        labelText += ` (Give OTP: ${liveOrder.otp} to courier 🚴)`;
+      }
+
+      document.getElementById('live-order-status').textContent = labelText;
+      document.getElementById('live-tracker-bar').style.width = cfg.progress + '%';
+
+      // Start periodic status poller for active order updates
+      startActiveTrackingPoller(liveOrder.id);
+    } else {
+      liveSection.style.display = 'none';
+      stopActiveTrackingPoller();
+    }
+
+    // Show clear button if orders exist
+    document.getElementById('clear-btn').style.display = allOrders.length > 0 ? 'flex' : 'none';
+    renderOrders();
+  }
+
+  function startActiveTrackingPoller(orderId) {
+    if (trackingInterval) clearInterval(trackingInterval);
+    trackingInterval = setInterval(async () => {
+      try {
+        const liveDetails = await STMApp.API.getOrderDetails(orderId);
+        if (liveDetails && liveDetails.status) {
+          // If status transitioned, reload the whole orders panel
+          const savedOrders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+          const matchIdx = savedOrders.findIndex(o => o.id === orderId);
+          
+          if (matchIdx !== -1 && savedOrders[matchIdx].status !== liveDetails.status) {
+            savedOrders[matchIdx].status = liveDetails.status;
+            localStorage.setItem('stmapp_orders', JSON.stringify(savedOrders));
+            loadOrders();
+          }
+
+          // Render live driver coordinates logs if out for delivery
+          if (liveDetails.status === 'out_for_delivery' && liveDetails.driverLocation) {
+            const gpsLabel = `Rider en route 🚴 Coords: ${liveDetails.driverLocation.lat.toFixed(4)}, ${liveDetails.driverLocation.lng.toFixed(4)}. Handover OTP: ${liveDetails.otp}`;
+            document.getElementById('live-order-status').textContent = gpsLabel;
+          }
+        }
+      } catch (err) {
+        console.warn('Poller update error: ', err.message);
+      }
+    }, 4500);
+  }
+
+  function stopActiveTrackingPoller() {
+    if (trackingInterval) clearInterval(trackingInterval);
+  }
+
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('#filter-tabs .category-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    renderOrders();
+  }
+
+  function renderOrders() {
+    const filtered = currentFilter === 'all'
+      ? allOrders
+      : allOrders.filter(o => o.status === currentFilter || (currentFilter === 'pending' && o.status === 'confirmed'));
+
+    const list = document.getElementById('orders-list');
+    const empty = document.getElementById('orders-empty');
+
+    if (filtered.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'flex';
+      return;
+    }
+    empty.style.display = 'none';
+
+    list.innerHTML = filtered.map(order => {
+      const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
+      const itemNames = (order.items || []).map(i => `${i.name} ×${i.qty}`).join(', ');
+      const date = new Date(order.createdAt);
+      const dateStr = date.toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' });
+      const timeStr = date.toLocaleTimeString('en-SG', { hour:'2-digit', minute:'2-digit' });
+      return `
+        <div class="order-card">
+          <div class="order-card-header">
+            <div>
+              <div class="order-id">#${order.id}</div>
+              <div class="order-date">${dateStr} · ${timeStr}</div>
+            </div>
+            <span class="order-status-badge ${cfg.cls}">${cfg.label}</span>
+          </div>
+          <div class="order-items-preview">🍴 ${itemNames || 'No items'}</div>
+          <div class="order-card-footer">
+            <div class="order-total">SGD ${(order.total || 0).toFixed(2)}</div>
+            <div style="display:flex;gap:8px">
+              <button class="reorder-btn" onclick="reorder('${order.id}')">🔄 Reorder</button>
+              <button class="track-btn" onclick="trackOrder('${order.id}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+                Track
+              </button>
+            </div>
+          </div>
+          ${cfg.progress > 0 && cfg.progress < 100 ? `
+            <div style="margin-top:10px">
+              <div class="tracker-progress" style="margin:0">
+                <div class="tracker-progress-bar" style="width:${cfg.progress}%"></div>
+              </div>
+            </div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  function reorder(orderId) {
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order || !order.items) return;
+    order.items.forEach(item => {
+      for (let i = 0; i < item.qty; i++) Cart.add(item);
+    });
+    showToast('Items added to cart! 🛒', 'success');
+    setTimeout(() => window.location.href = 'checkout.html', 1200);
+  }
+
+  function trackOrder(orderId) {
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
+    showToast(`Order ${orderId}: ${status.label}`, 'gold', 3000);
+  }
+
+  function clearAllOrders() {
+    if (!confirm('Clear all order history?')) return;
+    localStorage.removeItem('stmapp_orders');
+    localStorage.removeItem('stm_last_order_id');
+    allOrders = [];
+    renderOrders();
+    document.getElementById('live-tracker-section').style.display = 'none';
+    document.getElementById('clear-btn').style.display = 'none';
+    stopActiveTrackingPoller();
+    showToast('Order history cleared', 'default');
+  }
+
+  loadOrders();stm_last_order_id');
+    allOrders = [];
+    renderOrders();
+    document.getElementById('live-tracker-section').style.display = 'none';
+    document.getElementById('clear-btn').style.display = 'none';
+    showToast('Order history cleared', 'default');
+  }
+
+  loadOrders();
+</script>
+</body>
+</html>

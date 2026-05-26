@@ -1,0 +1,25 @@
+{
+  "name": "STM Salam — Order Food",
+  "short_name": "STM Salam",
+  "description": "Authentic Kopitiam Flavors, Delivered. Order online from STM Salam — Marine Terrace, Singapore.",
+  "start_url": "/stmapp/index.html",
+  "display": "standalone",
+  "background_color": "#013220",
+  "theme_color": "#013220",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "../stmsalamlogo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "../stmsalamlogo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["food", "shopping"],
+  "lang": "en-SG",
+  "dir": "ltr"
+}

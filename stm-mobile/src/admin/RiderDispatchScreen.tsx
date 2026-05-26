@@ -12,13 +12,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/src/services/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/src/services/firebase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useAppRole } from '@/src/auth/useAppRole';
 import { subscribeAdminOrdersList } from '@/src/admin/services/adminOrdersService';
 import type { OrderDoc } from '@/src/admin/services/orderNotificationService';
-import { normalizeGrabOrderStatus, canTransition } from '@/src/domain/orderPipeline';
+import { readCanonicalOrderStatus } from '@/src/domain/orderStateMachine';
+import { normalizeGrabOrderStatus } from '@/src/domain/orderPipeline';
 import { advanceGrabOrderPipeline } from '@/src/admin/services/advanceGrabPipeline';
+import { assertNoDirectOrderLifecycleWrite } from '@/src/services/orderLifecycleGuards';
 
 const DARK_GREEN = '#013220';
 const THEME_GREEN = '#0A8754';
@@ -27,7 +30,7 @@ async function assignRider(orderId: string, name: string, phone: string) {
   const n = name.trim();
   if (!n) throw new Error('Rider name required');
   const ts = new Date().toISOString();
-  await updateDoc(doc(db, 'orders', orderId), {
+  const patch = {
     rider: {
       id: null,
       name: n,
@@ -39,49 +42,55 @@ async function assignRider(orderId: string, name: string, phone: string) {
       deliveredAt: null,
     },
     updatedAt: ts,
-  });
+  };
+  assertNoDirectOrderLifecycleWrite(patch, 'RiderDispatchScreen.assignRider');
+  await updateDoc(doc(db, 'orders', orderId), patch);
 }
 
 async function advanceRiderLeg(orderId: string, leg: 'accept' | 'pickup' | 'deliver') {
   const ref = doc(db, 'orders', orderId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error('Order not found');
-  const data = snap.data();
-  const st = normalizeGrabOrderStatus(data);
+  const data = snap.data() as Record<string, unknown>;
+  const cur = readCanonicalOrderStatus(data);
   const rider = (data.rider || {}) as Record<string, unknown>;
   const ts = new Date().toISOString();
 
   if (leg === 'accept') {
-    if (st !== 'READY') throw new Error('Rider accept only when READY');
-    if (!canTransition(st, 'OUT_FOR_DELIVERY')) throw new Error('Invalid pipeline transition to out for delivery');
+    if (cur !== 'ready_for_pickup') throw new Error('Rider accept only when ready_for_pickup');
     if (rider.legStatus !== 'OFFERED') throw new Error('Assign rider first');
-    await updateDoc(ref, {
-      orderStatus: 'OUT_FOR_DELIVERY',
-      status: 'OUT_FOR_DELIVERY',
-      order_status: 'out_for_delivery',
-      rider: { ...rider, legStatus: 'ACCEPTED', acceptedAt: ts },
-      updatedAt: ts,
+    const callable = httpsCallable(functions, 'transitionOrderStatus');
+    await callable({
+      orderId,
+      nextStatus: 'out_for_delivery',
+      metadata: { source: 'RiderDispatchScreen.advanceRiderLeg', leg: 'accept' },
     });
+    const patch = { rider: { ...rider, legStatus: 'ACCEPTED', acceptedAt: ts }, updatedAt: ts };
+    assertNoDirectOrderLifecycleWrite(patch, 'RiderDispatchScreen.advanceRiderLeg.accept');
+    await updateDoc(ref, patch);
     return;
   }
   if (leg === 'pickup') {
-    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Invalid state');
-    await updateDoc(ref, {
+    if (cur !== 'out_for_delivery') throw new Error('Invalid state');
+    const patch = {
       rider: { ...rider, legStatus: 'PICKED_UP', pickedUpAt: ts },
       updatedAt: ts,
-    });
+    };
+    assertNoDirectOrderLifecycleWrite(patch, 'RiderDispatchScreen.advanceRiderLeg.pickup');
+    await updateDoc(ref, patch);
     return;
   }
   if (leg === 'deliver') {
-    if (st !== 'OUT_FOR_DELIVERY') throw new Error('Invalid state');
-    if (!canTransition(st, 'DELIVERED')) throw new Error('Invalid pipeline transition to delivered');
-    await updateDoc(ref, {
-      orderStatus: 'DELIVERED',
-      status: 'DELIVERED',
-      order_status: 'delivered',
-      rider: { ...rider, legStatus: 'COMPLETED', deliveredAt: ts },
-      updatedAt: ts,
+    if (cur !== 'out_for_delivery') throw new Error('Invalid state');
+    const callable = httpsCallable(functions, 'transitionOrderStatus');
+    await callable({
+      orderId,
+      nextStatus: 'delivered',
+      metadata: { source: 'RiderDispatchScreen.advanceRiderLeg', leg: 'deliver' },
     });
+    const patch = { rider: { ...rider, legStatus: 'COMPLETED', deliveredAt: ts }, updatedAt: ts };
+    assertNoDirectOrderLifecycleWrite(patch, 'RiderDispatchScreen.advanceRiderLeg.deliver');
+    await updateDoc(ref, patch);
   }
 }
 
@@ -112,7 +121,7 @@ export default function RiderDispatchScreen() {
               (o as { orderType?: string }).orderType === 'pickup' || o.mode === 'pickup';
             if (isPickup) return false;
             const st = normalizeGrabOrderStatus(o as OrderDoc);
-            return st === 'READY' || st === 'OUT_FOR_DELIVERY';
+            return st === 'ready_for_pickup' || st === 'out_for_delivery';
           })
         );
         setLoading(false);

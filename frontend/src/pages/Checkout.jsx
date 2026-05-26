@@ -31,6 +31,7 @@ import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import { storage, db, auth as firebaseAuth } from '../lib/firebase'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updateDoc, doc } from 'firebase/firestore'
+import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import { haversineKm, geocodeAddressSingapore, computeDeliveryQuote, isGoogleMapsGeocodingConfigured } from '../utils/delivery'
 
 /** UI payment id → labels normalized by `grabCheckout` + Cloud Function `PAYMENT_ALIASES`. */
@@ -96,6 +97,17 @@ export default function Checkout() {
   const stripeCheckoutCooldownUntilRef = useRef(0)
   const checkoutProcessingSyncRef = useRef(false)
   const stripeHostedRedirectIssuedRef = useRef(false)
+  const prevPaymentForIdemRef = useRef(null)
+
+  useEffect(() => {
+    if (prevPaymentForIdemRef.current !== null && prevPaymentForIdemRef.current !== payment) {
+      clearPersistedCheckoutIdempotencyKey()
+      const nextKey = createCheckoutIdempotencyKey()
+      checkoutIdempotencyRef.current = nextKey
+      persistCheckoutIdempotencyKey(nextKey)
+    }
+    prevPaymentForIdemRef.current = payment
+  }, [payment])
 
   const commitCheckoutIdempotencySession = () => {
     if (!validateCheckoutSessionController()) return false
@@ -239,6 +251,7 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
+    console.log('CHECKOUT_TRIGGER_PAYMENT_METHOD', payment)
     if (processing) {
       return
     }
@@ -317,14 +330,8 @@ export default function Checkout() {
         return
       }
 
-      const paymentModeForCf = CHECKOUT_PAYMENT_MAP[payment]
-
-      if (!paymentModeForCf) {
-        console.error('[CHECKOUT] Invalid payment mode:', payment)
-        alert('Invalid payment method.')
-        setProcessing(false)
-        return
-      }
+      const paymentMethodOut = CHECKOUT_PAYMENT_MAP[payment] || 'ONLINE'
+      console.log('CONFIRM_ORDER_PAYMENT_METHOD', paymentMethodOut)
 
       let idempotencyKey =
         checkoutIdempotencyRef.current?.trim() ||
@@ -344,7 +351,7 @@ export default function Checkout() {
       console.log('[CHECKOUT DEBUG PAYLOAD]', {
         items: safeItems,
         total: orderTotalRaw,
-        paymentModeForCf,
+        paymentMethod: paymentMethodOut,
         idempotencyKey,
         uid: firebaseAuth?.currentUser?.uid || user?.id,
       })
@@ -418,7 +425,7 @@ export default function Checkout() {
       const orderId = await placeGrabOrderAtCheckout({
         items: safeItems,
         totalAmount: Number(orderTotalRaw.toFixed(2)),
-        paymentMode: paymentModeForCf,
+        paymentMethod: paymentMethodOut,
         idempotencyKey,
       })
 
@@ -523,7 +530,9 @@ export default function Checkout() {
       const url = await getDownloadURL(fileRef);
       
       // Source of truth: orders only (public_tracking mirrors via Cloud Functions).
-      await updateDoc(doc(db, 'orders', orderDetails.id), { payment_screenshot: url });
+      const patch = { payment_screenshot: url };
+      assertNoDirectOrderLifecycleWrite(patch, 'Checkout.paymentScreenshot');
+      await updateDoc(doc(db, 'orders', orderDetails.id), patch);
 
       setScreenshotUrl(url);
       alert('Payment screenshot uploaded successfully!');

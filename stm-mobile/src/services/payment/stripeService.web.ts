@@ -1,5 +1,6 @@
 /**
- * Web: `@stripe/stripe-react-native` is native-only. Use PayPal on web or the mobile app for cards.
+ * Web: `@stripe/stripe-react-native` is native-only. Card pay uses Stripe Hosted Checkout
+ * (`stripeHostedCheckout.ts`) — this stub remains for any legacy PaymentSheet imports.
  */
 
 export async function initPaymentSheet(
@@ -9,7 +10,7 @@ export async function initPaymentSheet(
   return {
     ok: false,
     error:
-      'Card checkout uses the in-app payment sheet on iOS/Android. On the web, use PayPal, or open this app on a phone to pay with a card.',
+      'Use Stripe Hosted Checkout (Pay online) — Payment Sheet is only for optional native-only integrations.',
   };
 }
 
@@ -21,5 +22,9 @@ export async function verifyStripePaymentOnServer(
   _orderId: string,
   _paymentIntentId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  return { ok: false, error: 'Payment verification runs in the iOS/Android app only.' };
+  return {
+    ok: false,
+    error:
+      'Stripe Hosted Checkout confirms payment via webhook. Use “Check payment status” on the failed screen, or open Pay online again.',
+  };
 }

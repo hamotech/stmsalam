@@ -22,7 +22,11 @@ import {
   ensureNotificationPermissions,
   type OrderDoc,
 } from '@/src/admin/services/orderNotificationService';
-import { normalizeGrabOrderStatus, nextPipelineStep } from '@/src/domain/orderPipeline';
+import {
+  normalizeGrabOrderStatus,
+  nextPipelineStep,
+  isNewOrderQueueEligible,
+} from '@/src/domain/orderPipeline';
 import { advanceGrabOrderPipeline } from '@/src/admin/services/advanceGrabPipeline';
 import type { GrabOrderStatus } from '@/src/services/grabFlowOrderService';
 import { isAdminAuthBypassEnabled } from '@/src/bootstrap/appMode';
@@ -92,8 +96,20 @@ function parseTotal(order: OrderDoc): number {
 }
 
 function statusBadgeMeta(status: string): { label: string; emoji: string; bg: string } {
+  const canon: Record<string, { label: string; emoji: string; bg: string }> = {
+    pending_payment: { label: 'Pending payment', emoji: '🟡', bg: '#FEF3C7' },
+    placed: { label: 'COD placed', emoji: '🟡', bg: '#FEF3C7' },
+    paid: { label: 'New order', emoji: '🟡', bg: '#FEF3C7' },
+    preparing: { label: 'Preparing', emoji: '🔵', bg: '#DBEAFE' },
+    ready_for_pickup: { label: 'Ready', emoji: '🔵', bg: '#DBEAFE' },
+    out_for_delivery: { label: 'Out for delivery', emoji: '🟠', bg: '#FFEDD5' },
+    delivered: { label: 'Delivered', emoji: '🟢', bg: '#DCFCE7' },
+    cancelled: { label: 'Cancelled', emoji: '❌', bg: '#FEE2E2' },
+    failed: { label: 'Payment failed', emoji: '❌', bg: '#FEE2E2' },
+  };
+  if (canon[status]) return canon[status];
   const s = normalizeStatus(status);
-  const map: Record<string, { label: string; emoji: string; bg: string }> = {
+  const legacy: Record<string, { label: string; emoji: string; bg: string }> = {
     PENDING: { label: 'Pending', emoji: '🟡', bg: '#FEF3C7' },
     CONFIRMED: { label: 'Pending', emoji: '🟡', bg: '#FEF3C7' },
     PREPARING: { label: 'Preparing', emoji: '🔵', bg: '#DBEAFE' },
@@ -103,17 +119,17 @@ function statusBadgeMeta(status: string): { label: string; emoji: string; bg: st
     DELIVERED: { label: 'Delivered', emoji: '🟢', bg: '#DCFCE7' },
     CANCELLED: { label: 'Cancelled', emoji: '❌', bg: '#FEE2E2' },
   };
-  return map[s] ?? { label: s || 'Unknown', emoji: '⚪', bg: '#F1F5F9' };
+  return legacy[s] ?? { label: status || 'Unknown', emoji: '⚪', bg: '#F1F5F9' };
 }
 
 function filterMatches(tab: FilterTab, order: OrderDoc): boolean {
   const s = normalizeGrabOrderStatus(order);
   if (tab === 'ALL') return true;
-  if (tab === 'PENDING') return s === 'PLACED' || s === 'CONFIRMED';
+  if (tab === 'PENDING') return isNewOrderQueueEligible(s) || s === 'pending_payment';
   if (tab === 'PREPARING') {
-    return s === 'PREPARING' || s === 'READY' || s === 'OUT_FOR_DELIVERY';
+    return s === 'preparing' || s === 'ready_for_pickup' || s === 'out_for_delivery';
   }
-  if (tab === 'DELIVERED') return s === 'DELIVERED';
+  if (tab === 'DELIVERED') return s === 'delivered';
   return true;
 }
 
@@ -175,10 +191,10 @@ export default function AdminEntryScreen() {
       const d = orderCreatedDate(o);
       const t = parseTotal(o);
 
-      if (s !== 'DELIVERED' && s !== 'CANCELLED') active += 1;
-      if (s === 'DELIVERED' && isSameCalendarDay(d, today)) deliveredToday += 1;
+      if (s !== 'delivered' && s !== 'cancelled') active += 1;
+      if (s === 'delivered' && isSameCalendarDay(d, today)) deliveredToday += 1;
       if (isSameCalendarDay(d, today)) revenueToday += t;
-      if (s === 'CANCELLED') cancelled += 1;
+      if (s === 'cancelled') cancelled += 1;
     }
 
     return { active, deliveredToday, revenueToday, cancelled };
@@ -195,7 +211,7 @@ export default function AdminEntryScreen() {
   }, []);
 
   const runStatusUpdate = useCallback(
-    async (order: OrderDoc, next: GrabOrderStatus, actionLabel: string) => {
+    async (order: OrderDoc, next: GrabOrderStatus | string, actionLabel: string) => {
       const oid = order.id;
       if (!oid) return;
       setUpdatingIds((prev) => new Set(prev).add(oid));
@@ -231,12 +247,11 @@ export default function AdminEntryScreen() {
       const oid = item.id || '';
       const short = oid.length >= 8 ? oid.slice(-8).toUpperCase() : oid || '—';
       const st = normalizeGrabOrderStatus(item);
-      const legacyForBadge = st === 'PLACED' ? 'PENDING' : st;
-      const badge = statusBadgeMeta(legacyForBadge);
+      const badge = statusBadgeMeta(st);
       const busyRow = updatingIds.has(oid);
       const next = nextPipelineStep(st);
-      const isPlaced = st === 'PLACED';
-      const terminal = st === 'DELIVERED' || st === 'CANCELLED';
+      const isPlaced = isNewOrderQueueEligible(st);
+      const terminal = st === 'delivered' || st === 'cancelled';
       const fulfil =
         (item as { orderType?: string }).orderType === 'pickup' || item.mode === 'pickup'
           ? 'Pickup'
@@ -313,13 +328,15 @@ export default function AdminEntryScreen() {
                 onPress={() => setFilter(tab)}
               >
                 <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {tab === 'ALL'
+                  {String(
+                    tab === 'ALL'
                     ? 'All'
                     : tab === 'PENDING'
                       ? 'Pending'
                       : tab === 'PREPARING'
                         ? 'Preparing'
-                        : 'Delivered'}
+                        : 'Delivered'
+                  )}
                 </Text>
               </TouchableOpacity>
             );
@@ -350,7 +367,7 @@ export default function AdminEntryScreen() {
         <Text style={styles.activityTitle}>Recent activity</Text>
         {activity.map((a) => (
           <Text key={a.id} style={styles.activityLine}>
-            • {a.text}
+            • {String(a.text)}
           </Text>
         ))}
         <TouchableOpacity
@@ -422,7 +439,7 @@ export default function AdminEntryScreen() {
               style={styles.opsChip}
               onPress={() => navPush(router, intent, roleForNav)}
             >
-              <Text style={styles.opsChipText}>{label}</Text>
+              <Text style={styles.opsChipText}>{String(label)}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity

@@ -17,6 +17,7 @@ import { getIdTokenResult } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth, type UserProfile } from '@/src/context/AuthContext';
 import { resolveAppRole, navReplaceUnsafe } from '@/src/navigation/appNavigation';
+import { applyPendingPostAuthNavigation } from '@/src/navigation/applyPendingPostAuthNavigation';
 import { auth, db } from '@/src/services/firebase';
 import { Brand, cardShadow } from '@/src/theme/brand';
 import { friendlyFirebaseAuthMessage } from '@/src/utils/firebaseAuthErrors';
@@ -71,6 +72,9 @@ export default function LoginScreen() {
         ]);
         const profile = snap.exists() ? (snap.data() as UserProfile) : { email: u.email ?? undefined };
         const role = resolveAppRole(u, profile, tokenResult.claims as Record<string, unknown>);
+        if (applyPendingPostAuthNavigation(router, role)) {
+          return;
+        }
         if (role === 'admin' || role === 'kitchen') {
           navReplaceUnsafe(router, { kind: 'admin' });
         } else {

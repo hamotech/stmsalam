@@ -7,12 +7,20 @@ const admin = require('firebase-admin');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const Stripe = require('stripe');
+const { getService } = require('./shared/bootstrap/functionBootstrap.cjs');
 
 const REGION = 'us-central1';
 const STRIPE_API_VERSION = '2024-06-20';
 
 const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
+
+const performOrderTransition = (...args) =>
+  getService('orderTransitionService').performOrderTransition(...args);
+const assertProductionSecurityMode = (...args) =>
+  getService('appCheckGuard').assertProductionSecurityMode(...args);
+const enforceCallableAppCheck = (...args) =>
+  getService('appCheckGuard').enforceCallableAppCheck(...args);
 
 function normalizeStripeApiSecret(raw) {
   const str = String(raw || '').trim();
@@ -60,6 +68,8 @@ const refundOrderByAdmin = onCall(
     secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET],
   },
   async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'refundOrderByAdmin');
     const callerUid = request.auth?.uid;
     if (!callerUid) {
       throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -191,12 +201,24 @@ const refundOrderByAdmin = onCall(
     };
 
     if (stripeRefundStatus === 'succeeded') {
-      patch.status = 'refunded';
       patch.refundedAt = admin.firestore.FieldValue.serverTimestamp();
-    } else if (stripeRefundStatus === 'pending') {
-      patch.status = 'refunded';
     }
 
+    if (stripeRefundStatus === 'succeeded' || stripeRefundStatus === 'pending') {
+      await performOrderTransition({
+        db,
+        orderRef,
+        actor: 'admin',
+        actorUid: callerUid,
+        event: { type: 'ADMIN_REFUND_APPROVED' },
+        metadata: {
+          source: 'refundOrderByAdmin',
+          refundId,
+          stripeRefundStatus,
+          paymentIntentId,
+        },
+      });
+    }
     await orderRef.set(patch, { merge: true });
 
     console.log('[refundOrderByAdmin]', {

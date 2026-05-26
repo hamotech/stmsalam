@@ -7,13 +7,13 @@ import {
   normalizeOrderLineItems,
 } from '../services/dataService';
 import {
-  normalizeGrabOrderStatus,
+  getOrderContext,
   nextPipelineStep,
   orderMatchesPaymentFilter,
   paymentAllowsConfirm,
+  isNewOrderQueueEligible,
 } from '../orderPipeline.js';
-import { db } from '../../lib/firebase';
-import { updateDoc, doc } from 'firebase/firestore';
+import { isStripeHostedOrder } from '../../domain/orderLifecycleStandard.js';
 import { 
   Trash2, CheckCircle, XCircle, Clock, Truck, 
   Package, MessageSquare, ExternalLink, CreditCard,
@@ -58,18 +58,11 @@ const Orders = () => {
   };
 
   const handlePaymentToggle = async (order) => {
-    try {
-      const newPaymentStatus = order.payment_status === 'paid' ? 'pending' : 'paid';
-      const orderRef = doc(db, 'orders', order.id);
-      await updateDoc(orderRef, {
-        payment_status: newPaymentStatus,
-        paymentStatus: newPaymentStatus === 'paid' ? 'PAID' : 'PENDING',
-      });
-      if (order.isNewForAdmin) markOrderAsSeen(order.id);
-      showToast(`Payment marked as ${newPaymentStatus}`);
-    } catch (err) {
-      showToast('Failed to update payment status.', 'error');
+    if (isStripeHostedOrder(order)) {
+      showToast('Stripe/card payment is webhook-controlled and cannot be toggled manually.', 'error');
+      return;
     }
+    showToast('Manual paymentStatus write disabled to enforce FSM single-writer rule.', 'error');
   }
 
   const confirmDelete = async () => {
@@ -87,22 +80,24 @@ const Orders = () => {
   const filteredOrders = orders.filter((o) => {
     if (!orderMatchesPaymentFilter(o, payFilter)) return false;
     if (lifecycleFilter === 'all') return true;
-    const st = normalizeGrabOrderStatus(o);
-    const done = st === 'DELIVERED' || st === 'CANCELLED';
-    if (lifecycleFilter === 'delivered') return st === 'DELIVERED';
+    const st = getOrderContext(o).canonicalStatus;
+    const done = st === 'delivered' || st === 'cancelled';
+    if (lifecycleFilter === 'delivered') return st === 'delivered';
     if (lifecycleFilter === 'active') return !done;
     return true;
   });
 
   const getStatusStyle = (order) => {
-    const st = normalizeGrabOrderStatus(order);
+    const st = getOrderContext(order).canonicalStatus;
     switch (st) {
-      case 'CONFIRMED': return { bg: '#f0fdf4', text: '#166534', icon: <CheckCircle2 size={14} /> };
-      case 'PREPARING': return { bg: '#f0fdf4', text: '#166534', icon: <ChefHat size={14} /> };
-      case 'READY': return { bg: '#f0f9ff', text: '#075985', icon: <Package size={14} /> };
-      case 'OUT_FOR_DELIVERY': return { bg: '#fef2f2', text: '#991b1b', icon: <Truck size={14} /> };
-      case 'DELIVERED': return { bg: '#f0fdf4', text: '#15803d', icon: <CheckCircle2 size={14} /> };
-      case 'CANCELLED': return { bg: '#fee2e2', text: '#991b1b', icon: <XCircle size={14} /> };
+      case 'preparing': return { bg: '#f0fdf4', text: '#166534', icon: <ChefHat size={14} /> };
+      case 'ready_for_pickup': return { bg: '#f0f9ff', text: '#075985', icon: <Package size={14} /> };
+      case 'out_for_delivery': return { bg: '#fef2f2', text: '#991b1b', icon: <Truck size={14} /> };
+      case 'delivered': return { bg: '#f0fdf4', text: '#15803d', icon: <CheckCircle2 size={14} /> };
+      case 'cancelled': return { bg: '#fee2e2', text: '#991b1b', icon: <XCircle size={14} /> };
+      case 'pending_payment': return { bg: '#fff7ed', text: '#9a3412', icon: <Clock size={14} /> };
+      case 'placed': return { bg: '#ecfdf5', text: '#047857', icon: <Clock size={14} /> };
+      case 'failed': return { bg: '#fee2e2', text: '#991b1b', icon: <XCircle size={14} /> };
       default: return { bg: '#fff7ed', text: '#9a3412', icon: <Clock size={14} /> };
     }
   };
@@ -196,9 +191,13 @@ const Orders = () => {
           </thead>
           <tbody>
             {filteredOrders.map((order, idx) => {
-              const pipelineSt = normalizeGrabOrderStatus(order);
+              const orderCtx = getOrderContext(order);
+              const pipelineSt = orderCtx.canonicalStatus;
+              const payNorm = orderCtx.paymentStatusNorm;
               const nextSt = nextPipelineStep(pipelineSt);
-              const confirmGate = pipelineSt === 'PLACED' ? paymentAllowsConfirm(order) : { ok: true };
+              const confirmGate = isNewOrderQueueEligible(pipelineSt)
+                ? paymentAllowsConfirm(order)
+                : { ok: true };
               const statusStyle = getStatusStyle(order);
               const items = normalizeOrderLineItems(order);
               const isNew = order.isNewForAdmin;
@@ -238,8 +237,8 @@ const Orders = () => {
                   <td style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                         <div style={{ background: order.payment_status === 'paid' ? '#f0fdf4' : '#fff7ed', color: order.payment_status === 'paid' ? '#16a34a' : '#d97706', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <CreditCard size={12} /> {order.payment_status === 'paid' ? 'PAID' : 'PENDING'}
+                         <div style={{ background: payNorm === 'PAID' ? '#f0fdf4' : '#fff7ed', color: payNorm === 'PAID' ? '#16a34a' : '#d97706', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CreditCard size={12} /> {payNorm === 'PAID' ? 'PAID' : 'PENDING'}
                          </div>
                          <button onClick={(e) => { e.stopPropagation(); handlePaymentToggle(order); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}>
                             <RefreshCcw size={14} />
@@ -268,12 +267,12 @@ const Orders = () => {
                         {statusStyle.icon}
                         {pipelineSt.replace(/_/g, ' ')}
                       </div>
-                      {pipelineSt === 'PLACED' ? (
+                      {isNewOrderQueueEligible(pipelineSt) ? (
                         <>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'CONFIRMED'); }}
+                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'preparing'); }}
                               disabled={!confirmGate.ok}
                               style={{
                                 padding: '8px 14px', borderRadius: '10px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: confirmGate.ok ? 'pointer' : 'not-allowed',
@@ -284,7 +283,7 @@ const Orders = () => {
                             </button>
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'CANCELLED'); }}
+                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'cancelled'); }}
                               style={{
                                 padding: '8px 14px', borderRadius: '10px', border: '1.5px solid #fecaca', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
                                 background: '#fef2f2', color: '#b91c1c',
@@ -298,7 +297,7 @@ const Orders = () => {
                           ) : null}
                         </>
                       ) : null}
-                      {pipelineSt !== 'PLACED' && pipelineSt !== 'DELIVERED' && pipelineSt !== 'CANCELLED' && nextSt ? (
+                      {!isNewOrderQueueEligible(pipelineSt) && pipelineSt !== 'delivered' && pipelineSt !== 'cancelled' && nextSt ? (
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleAdvance(order, nextSt); }}
@@ -310,7 +309,7 @@ const Orders = () => {
                           Next: {nextSt.replace(/_/g, ' ')}
                         </button>
                       ) : null}
-                      {(pipelineSt === 'DELIVERED' || pipelineSt === 'CANCELLED') ? (
+                      {(pipelineSt === 'delivered' || pipelineSt === 'cancelled') ? (
                         <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '700' }}>Terminal</span>
                       ) : null}
                     </div>

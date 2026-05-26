@@ -391,8 +391,6 @@ async function ensureOrderForVerifiedPayPalPayment(paypalOrderId, orderPayloadFr
       return;
     }
     const totalNum = parseFloat(amountNorm);
-    const orderStatus = 'PLACED';
-    const paymentStatus = 'PAID';
     const items = [
       {
         name: 'Paid via PayPal (recovered)',
@@ -410,9 +408,6 @@ async function ensureOrderForVerifiedPayPalPayment(paypalOrderId, orderPayloadFr
       subtotal: amountNorm,
       deliveryFee: '0.00',
       paymentMethod: 'paypal',
-      paymentStatus,
-      orderStatus,
-      status: toLegacyTrackingStatus(orderStatus),
       flow: 'grab',
       createdAt: FieldValue.serverTimestamp(),
       estimatedDeliveryAt: deliveryEtaDate(),
