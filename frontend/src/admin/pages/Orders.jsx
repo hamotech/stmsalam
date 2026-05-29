@@ -1,11 +1,49 @@
 import React, { useState, useEffect } from 'react';
+
+// Helper utilities for safe rendering
+function formatOrderDate(order) {
+  const ts = order.createdAt;
+  // Firestore Timestamp
+  if (ts && typeof ts.toDate === 'function') {
+    const d = ts.toDate();
+    if (d instanceof Date && !isNaN(d)) return d.toLocaleString();
+  }
+  // ISO string or number
+  if (typeof ts === 'string' || typeof ts === 'number') {
+    const d = new Date(ts);
+    if (!isNaN(d)) return d.toLocaleString();
+  }
+  // Fallback legacy field
+  if (order.date) {
+    const d = new Date(order.date);
+    if (!isNaN(d)) return d.toLocaleString();
+  }
+  return 'N/A';
+}
+
+function formatOrderTotal(order) {
+  const val = order.totalAmount ?? order.total ?? 0;
+  const num = Number(val);
+  if (isNaN(num)) return '$0.00';
+  return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+
+function formatPhone(order) {
+  return order.customer?.phone || order.customerPhone || order.phone || order.deliveryPhone || 'No phone';
+}
+
+const UI_TO_FSM_EVENT = {
+  preparing: 'PREPARING',
+  cancelled: 'CANCELLED',
+  // add more mappings as needed
+};
 import {
   subscribeOrders,
-  advanceOrderPipeline,
   deleteOrder,
   markOrderAsSeen,
   normalizeOrderLineItems,
 } from '../services/dataService';
+import { adminTransition } from '../services/adminApi';
 import {
   getOrderContext,
   nextPipelineStep,
@@ -42,13 +80,38 @@ const Orders = () => {
     return () => { if (unsub) unsub(); }
   }, []);
 
-  const handleAdvance = async (order, nextStatus) => {
+  const [transitioningOrderIds, setTransitioningOrderIds] = useState(new Set());
+
+  const handleAdminTransition = async (order, uiEvent, paymentStatus = null) => {
+    const orderId = order.id;
+    const fsmEvent = UI_TO_FSM_EVENT[uiEvent] ?? uiEvent.toUpperCase();
+    setTransitioningOrderIds((prev) => new Set(prev).add(orderId));
+
+    // Resolve target/current payment status safely
+    const currentPaymentStatus = order.paymentStatus ?? order.payment_status ?? 'PENDING';
+    let targetPaymentStatus = paymentStatus || currentPaymentStatus;
+
+    const orderPaymentMode = order.paymentMode ?? order.payment_mode ?? order.paymentMethod ?? 'COD';
+    const isCod = orderPaymentMode === 'COD' || orderPaymentMode === 'CASH';
+
+    if (isCod && targetPaymentStatus === 'PENDING') {
+      targetPaymentStatus = 'COD_PENDING';
+    }
+
     try {
-      await advanceOrderPipeline(order.id, order, nextStatus);
-      if (order.isNewForAdmin) markOrderAsSeen(order.id);
-      showToast(`Order → ${String(nextStatus).replace(/_/g, ' ')}`);
+      await adminTransition(orderId, fsmEvent, {
+        paymentStatus: targetPaymentStatus,
+      });
+      if (order.isNewForAdmin) markOrderAsSeen(orderId);
+      showToast(`Order → ${fsmEvent.replace(/_/g, ' ')}`);
     } catch (err) {
       showToast(err.message || 'Update failed', 'error');
+    } finally {
+      setTransitioningOrderIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
     }
   };
 
@@ -62,7 +125,13 @@ const Orders = () => {
       showToast('Stripe/card payment is webhook-controlled and cannot be toggled manually.', 'error');
       return;
     }
-    showToast('Manual paymentStatus write disabled to enforce FSM single-writer rule.', 'error');
+    // For COD or SCANNER, allow admin to mark as PAID via FSM
+    try {
+      await adminTransition(order.id, 'paid', { paymentStatus: 'PAID' });
+      showToast('Payment marked as PAID');
+    } catch (err) {
+      showToast(err.message || 'Failed to update payment', 'error');
+    }
   }
 
   const confirmDelete = async () => {
@@ -218,13 +287,13 @@ const Orders = () => {
                       <div style={{ fontWeight: '900', color: '#0f172a', fontSize: '15px' }}>#{order.id?.slice(-8).toUpperCase() || 'NEW'}</div>
                       {isNew && <div style={{ background: '#ef4444', width: '8px', height: '8px', borderRadius: '50%' }} />}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 600 }}>{new Date(order.createdAt || order.date || Date.now()).toLocaleString()}</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 600 }}>{formatOrderDate(order)}</div>
                     <div style={{ marginTop: '8px', fontSize: '10px', background: order.mode === 'delivery' ? '#fdf2f8' : '#f0f9ff', color: order.mode === 'delivery' ? '#9d174d' : '#075985', display: 'inline-block', padding: '3px 10px', borderRadius: '6px', fontWeight: '900' }}>{order.mode || 'Delivery'}</div>
                   </td>
                   <td style={{ padding: '20px' }}>
-                    <div style={{ fontWeight: '800', color: '#1e293b' }}>{order.customer?.name || 'Walk-in'}</div>
+                    <div style={{ fontWeight: '800', color: '#1e293b' }}>{order.customer?.name || order.customerName || 'Walk-in'}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontSize: '13px', marginTop: '4px', fontWeight: 600 }}>
-                      <Phone size={12} /> {order.customer?.phone || '8888 8888'}
+                      <Phone size={12} /> {formatPhone(order)}
                     </div>
                   </td>
                   <td style={{ padding: '20px' }}>
@@ -232,7 +301,7 @@ const Orders = () => {
                       {items.slice(0, 2).map(i => `${i.qty}x ${i.name}`).join(', ')}
                       {items.length > 2 && ` +${items.length - 2} more`}
                     </div>
-                    <div style={{ fontWeight: '950', color: '#013220', marginTop: '10px', fontSize: '16px' }}>${parseFloat(order.total || 0).toFixed(2)}</div>
+                    <div style={{ fontWeight: '950', color: '#013220', marginTop: '10px', fontSize: '16px' }}>{formatOrderTotal(order)}</div>
                   </td>
                   <td style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -272,8 +341,8 @@ const Orders = () => {
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'preparing'); }}
-                              disabled={!confirmGate.ok}
+                              onClick={(e) => { e.stopPropagation(); handleAdminTransition(order, 'preparing'); }}
+                              disabled={!confirmGate.ok || transitioningOrderIds.has(order.id)}
                               style={{
                                 padding: '8px 14px', borderRadius: '10px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: confirmGate.ok ? 'pointer' : 'not-allowed',
                                 background: confirmGate.ok ? '#0A8754' : '#cbd5e1', color: 'white',
@@ -283,7 +352,7 @@ const Orders = () => {
                             </button>
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); handleAdvance(order, 'cancelled'); }}
+                              onClick={(e) => { e.stopPropagation(); handleAdminTransition(order, 'cancelled'); }}
                               style={{
                                 padding: '8px 14px', borderRadius: '10px', border: '1.5px solid #fecaca', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
                                 background: '#fef2f2', color: '#b91c1c',
@@ -300,7 +369,7 @@ const Orders = () => {
                       {!isNewOrderQueueEligible(pipelineSt) && pipelineSt !== 'delivered' && pipelineSt !== 'cancelled' && nextSt ? (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAdvance(order, nextSt); }}
+                          onClick={(e) => { e.stopPropagation(); handleAdminTransition(order, nextSt); }}
                           style={{
                             padding: '8px 14px', borderRadius: '10px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
                             background: 'var(--green-dark, #013220)', color: 'white',
@@ -331,7 +400,7 @@ const Orders = () => {
                           )}
                        </button>
                        <button 
-                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
+                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || order.customerPhone || order.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
                          style={{ background: '#25D366', border: 'none', padding: '10px', borderRadius: '10px', color: 'white', cursor: 'pointer' }}
                        >
                           <MessageSquare size={18} />

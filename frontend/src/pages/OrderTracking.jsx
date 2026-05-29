@@ -78,10 +78,27 @@ export default function OrderTracking() {
     const ctx = getOrderContext(ord);
     const ps = ctx.paymentStatusNorm;
     const st = ctx.canonicalStatus;
+    const method = ctx.paymentMethodNorm;
+
     if (ps === 'FAILED') return 'Payment failed'
-    if (ps === 'PAID') return 'Payment successful'
     if (paymentParam === 'cancel') return 'Payment cancelled'
     if (paymentParam === 'success') return 'Payment processing...'
+
+    if (method === 'cod') {
+      if (ps === 'PAID') {
+        return 'Payment completed successfully!'
+      }
+      return 'Waiting for admin order confirmation (Cash Payment upon delivery/pickup).'
+    }
+
+    if (method === 'scanner') {
+      if (ps === 'PAID') {
+        return 'Payment verified and confirmed by admin!'
+      }
+      return 'Waiting for admin manual payment verification. Please ensure you have completed the SGQR transfer.'
+    }
+
+    if (ps === 'PAID') return 'Payment successful'
     if (st === 'pending_payment' || ps === 'PENDING')
       return 'Waiting for payment confirmation...'
     return ''

@@ -171,14 +171,6 @@
         </div>
         <div class="payment-check"></div>
       </div>
-      <div class="payment-card" data-method="paypal" onclick="selectPayment('paypal')">
-        <div class="payment-icon" style="background:rgba(0,112,201,0.08)">💬</div>
-        <div class="payment-card-info">
-          <div class="payment-name">PayPal</div>
-          <div class="payment-desc">Pay via PayPal account</div>
-        </div>
-        <div class="payment-check"></div>
-      </div>
       <div class="payment-card" data-method="cash" onclick="selectPayment('cash')">
         <div class="payment-icon" style="background:rgba(22,163,74,0.08)">💵</div>
         <div class="payment-card-info">
@@ -332,7 +324,19 @@
     document.getElementById('address-group').style.display = mode === 'delivery' ? 'block' : 'none';
     document.getElementById('mode-info').textContent = mode === 'delivery'
       ? `Free delivery: min SGD ${SHOP_INFO.minOrderFreeDelivery} & within ${SHOP_INFO.freeDeliveryRadiusKm}km. Otherwise SGD ${SHOP_INFO.deliveryFee.toFixed(2)} fee.`
-      : `Collect from STM Salam â€” Blk 50A Marine Terrace, #01-3  async function applyPromo() {
+      : `Collect from STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050`;
+    updateSummary();
+  }
+
+  function selectPayment(method) {
+    selectedPayment = method;
+    document.querySelectorAll('.payment-card').forEach(card => {
+      card.classList.toggle('selected', card.getAttribute('data-method') === method);
+    });
+    updateSummary();
+  }
+
+  async function applyPromo() {
     const code = document.getElementById('promo-input').value.trim().toUpperCase();
     const resultEl = document.getElementById('promo-result');
     const promoRow = document.getElementById('promo-row');
@@ -486,21 +490,6 @@
     window.open(`https://wa.me/${SHOP_INFO.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
     closeAllDrawers();
     finalize(order);
-  }
-
-  function finalize(order) {
-    Cart.clear();
-    showToast('Order placed! Redirecting...', 'success', 2000);
-    setTimeout(() => window.location.href = 'orders.html', 1200);
-  }
-
-  Cart.subscribe(items => {
-    renderOrderItems(items);
-    updateSummary();
-  });
-
-  init();
-  setMode('delivery');der);
   }
 
   function finalize(order) {

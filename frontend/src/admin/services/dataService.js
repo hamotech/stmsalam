@@ -12,6 +12,7 @@ import { readCanonicalOrderStatus, coerceAdminIntentToCanonical } from '../../do
 import { getSupportBotReply } from '../../utils/supportBotReply';
 import { normalizePhone, safeLog } from '../../utils/runtimeSafety';
 import { assertNoDirectOrderLifecycleWrite } from '../../lib/orderLifecycleGuards';
+import { normalizeLegacyOrder } from '../../lib/orderUtils';
 
 const IMAGE_PATH_RE = /^(\/|https?:\/\/)/i;
 const toSafeCategoryFolder = (folderName) => String(folderName || '').replace(/\s+/g, '_');
@@ -291,8 +292,11 @@ export const fetchOrders = async () => {
   try {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    return snap.docs.map(mapOrderDocSnapshot);
+    const rawOrders = snap.docs.map(mapOrderDocSnapshot);
+    return rawOrders.map(normalizeLegacyOrder);
   } catch (err) {
+    // Enhanced logging with safeLog for better diagnostics
+    safeLog('Failed to fetch orders', { error: err?.message || err, code: err?.code });
     console.error('Failed to fetch orders:', err);
     throw err;
   }
@@ -301,8 +305,12 @@ export const fetchOrders = async () => {
 export const subscribeOrders = (callback) => {
   const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
   const unsub = onSnapshot(q, (snap) => {
-    callback(snap.docs.map(mapOrderDocSnapshot));
+    const rawOrders = snap.docs.map(mapOrderDocSnapshot);
+    const normalized = rawOrders.map(normalizeLegacyOrder);
+    callback(normalized);
   }, (err) => {
+    // Enhanced logging with safeLog for better diagnostics
+    safeLog('Orders Subscription Error', { error: err?.message || err, code: err?.code });
     console.error('Orders Subscription Error:', err);
   });
   return unsub;
@@ -312,7 +320,10 @@ export const fetchOrderById = async (id) => {
   try {
     const docRef = doc(db, 'orders', id);
     const snap = await getDoc(docRef);
-    if (snap.exists()) return snap.data();
+    if (snap.exists()) {
+      const order = { id: snap.id, ...snap.data() };
+      return normalizeLegacyOrder(order);
+    }
     throw new Error('Order not found');
   } catch (err) {
     console.error('Failed to fetch order:', err);

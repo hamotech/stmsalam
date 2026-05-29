@@ -32,7 +32,7 @@ export const VALID_TRANSITIONS = {
   placed: { refunded: 'admin', preparing: 'admin', cancelled: 'admin' },
   paid: { refunded: 'admin', preparing: 'admin', cancelled: 'admin' },
   refunded: {},
-  preparing: { ready_for_pickup: 'admin', cancelled: 'admin' },
+  preparing: { ready_for_pickup: ['admin', 'kitchen'], cancelled: 'admin' },
   ready_for_pickup: { out_for_delivery: 'rider', cancelled: 'admin' },
   out_for_delivery: { delivered: 'rider', cancelled: 'admin' },
   delivered: {},
@@ -59,7 +59,7 @@ export function getNextAllowedStates(state, actor) {
   const from = normalizeStateToken(state);
   const row = VALID_TRANSITIONS[from] || {};
   return Object.entries(row)
-    .filter(([, owner]) => (actor ? owner === actor : true))
+    .filter(([, owner]) => (actor ? (Array.isArray(owner) ? owner.includes(actor) : owner === actor) : true))
     .map(([to]) => to);
 }
 
@@ -76,7 +76,9 @@ export function assertValidOrderTransition(fromRaw, toRaw, actor) {
   if (!row || !row[to]) {
     throw new Error('Invalid order state transition');
   }
-  if (row[to] !== actor) {
+  const allowed = row[to];
+  const authorized = Array.isArray(allowed) ? allowed.includes(actor) : allowed === actor;
+  if (!authorized) {
     throw new Error('Unauthorized state transition');
   }
 }
@@ -133,18 +135,15 @@ export function assertPaymentConsistency(statusRaw, paymentStatusRaw, opts) {
   }
 
   if (isCodPaymentMethod) {
-    if (status === 'placed' || status === 'preparing' || status === 'ready_for_pickup' || status === 'out_for_delivery') {
-      // Accept NOT_APPLICABLE (new canonical) and COD_PENDING (backward compat for existing docs).
-      if (paymentStatus !== 'NOT_APPLICABLE' && paymentStatus !== 'COD_PENDING') {
-        fail('cod_requires_not_applicable_until_delivered');
-      }
-      return;
+    if (paymentStatus !== 'NOT_APPLICABLE' && paymentStatus !== 'COD_PENDING' && paymentStatus !== 'PENDING' && paymentStatus !== 'PAID') {
+      fail('cod_payment_status_invalid');
     }
-    if (status === 'delivered' || status === 'cancelled' || status === 'refunded') {
-      if (paymentStatus !== 'NOT_APPLICABLE' && paymentStatus !== 'COD_PENDING' && paymentStatus !== 'PAID') {
-        fail('cod_terminal_requires_not_applicable_or_paid');
-      }
-      return;
+    return;
+  }
+
+  if (paymentMethod === 'SCANNER') {
+    if (paymentStatus !== 'PENDING' && paymentStatus !== 'PAID') {
+      fail('scanner_payment_status_invalid');
     }
     return;
   }
@@ -156,8 +155,8 @@ export function assertPaymentConsistency(statusRaw, paymentStatusRaw, opts) {
   }
 
   if (status === 'placed') {
-    // Accept NOT_APPLICABLE (new) and COD_PENDING (legacy) for COD placed orders.
-    if (paymentStatus === 'NOT_APPLICABLE' || paymentStatus === 'COD_PENDING') return;
+    // Accept NOT_APPLICABLE (new), COD_PENDING (legacy), and PENDING (backward compatibility) for COD placed orders.
+    if (paymentStatus === 'NOT_APPLICABLE' || paymentStatus === 'COD_PENDING' || (isCodPaymentMethod && paymentStatus === 'PENDING')) return;
     fail('placed_requires_not_applicable_or_cod_pending');
     return;
   }
@@ -196,8 +195,9 @@ const LEGACY_STATUS_MAP = {
  * Expose a unified business view as canonical `placed` without mutating Firestore.
  */
 function normalizeLegacyCodBusinessStatusRead(doc, normalizedCanonical) {
-  const pm = String(doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode ?? '').trim().toUpperCase();
-  if (pm !== 'COD' && pm !== 'CASH') return normalizedCanonical;
+  const rawPm = doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode;
+  const pm = rawPm == null ? '' : String(rawPm).trim().toUpperCase();
+  if (pm !== 'COD' && pm !== 'CASH' && pm !== '') return normalizedCanonical;
   const s = normalizeStateToken(normalizedCanonical);
   if (s !== 'paid') return normalizedCanonical;
   const ps = String(doc?.paymentStatus ?? doc?.payment_status ?? '').trim().toUpperCase();
@@ -211,7 +211,8 @@ export function readCanonicalOrderStatusStrict(doc, opts) {
 
   const fromStatus = normalizeStateToken(doc?.status);
   if (VALID_STATE_SET.has(fromStatus)) {
-    const pm = String(doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode ?? '').trim().toUpperCase();
+    const rawPm = doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode;
+    const pm = rawPm == null ? '' : String(rawPm).trim().toUpperCase();
     if (fromStatus === 'pending_payment' && String(doc?.paymentStatus ?? '').toUpperCase() === 'PAID') {
       const msg = 'state mismatch: pending_payment with PAID paymentStatus';
       logger(msg, { status: fromStatus, paymentStatus: doc?.paymentStatus });
@@ -219,10 +220,23 @@ export function readCanonicalOrderStatusStrict(doc, opts) {
       return pm === 'STRIPE' ? 'paid' : fromStatus;
     }
     if (fromStatus === 'placed') {
-      const ps = String(doc?.paymentStatus ?? doc?.payment_status ?? '').trim().toUpperCase();
-      const codLike = pm === 'COD' || pm === 'CASH';
-      // Accept NOT_APPLICABLE (new canonical) and COD_PENDING (legacy) for placed COD orders.
-      const validPlacedPayment = ps === 'NOT_APPLICABLE' || ps === 'COD_PENDING' || (codLike && ps === 'PENDING');
+      // raw payment status may be undefined or empty
+      const rawPs = doc?.paymentStatus ?? doc?.payment_status;
+      const isStripe = pm === 'STRIPE';
+      const isOnline = pm === 'ONLINE';
+      const codLike = !isStripe && !isOnline;
+      const scannerLike = pm === 'SCANNER';
+      let ps = '';
+      if (rawPs == null || rawPs === '') {
+        // treat missing as NOT_APPLICABLE for COD/CASH (and scanner)
+        if (codLike || scannerLike) {
+          doc.paymentStatus = 'NOT_APPLICABLE';
+          ps = 'NOT_APPLICABLE';
+        }
+      } else {
+        ps = String(rawPs).trim().toUpperCase();
+      }
+      const validPlacedPayment = ps === 'NOT_APPLICABLE' || ps === 'COD_PENDING' || ((codLike || scannerLike) && (ps === 'PENDING' || ps === 'PAID'));
       if (!validPlacedPayment) {
         const msg = 'state mismatch: placed requires paymentStatus NOT_APPLICABLE or COD_PENDING (legacy COD PENDING accepted)';
         logger(msg, { status: fromStatus, paymentStatus: doc?.paymentStatus, paymentMethod: pm || null });
@@ -262,14 +276,11 @@ export function normalizeOrderStateForRead(doc, opts) {
     logger(m, p);
   };
   const status = readCanonicalOrderStatusStrict(doc, { strict: false, logger: warnLogger });
-  const paymentMethod = String(doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode ?? '')
-    .trim()
-    .toUpperCase();
+  const rawPm = doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode;
+  const paymentMethod = rawPm == null ? '' : String(rawPm).trim().toUpperCase();
   const rawStatus = String(doc?.status ?? '').trim().toLowerCase();
   const rawPaymentStatus = String(doc?.paymentStatus ?? doc?.payment_status ?? '').trim().toUpperCase();
-  const rawPaymentMethod = String(doc?.paymentMethod ?? doc?.payment_mode ?? doc?.paymentMode ?? '')
-    .trim()
-    .toUpperCase();
+  const rawPaymentMethod = rawPm == null ? '' : String(rawPm).trim().toUpperCase();
   let paymentStatus = rawPaymentStatus
     .trim()
     .toUpperCase();
@@ -302,6 +313,12 @@ export function normalizeOrderStateForRead(doc, opts) {
   };
 }
 
+export const PAYMENT_MODE = {
+  COD: 'COD',
+  SCANNER: 'SCANNER',
+  STRIPE: 'STRIPE',
+};
+
 export default {
   VALID_STATES,
   VALID_TRANSITIONS,
@@ -311,4 +328,5 @@ export default {
   assertPaymentConsistency,
   readCanonicalOrderStatusStrict,
   normalizeOrderStateForRead,
+  PAYMENT_MODE,
 };

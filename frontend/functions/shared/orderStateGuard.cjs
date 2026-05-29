@@ -37,6 +37,11 @@ module.exports = function createOrderStateGuard({
     if (actor === 'web_customer' || actor === 'mobile_customer' || actor === 'system') {
       throw new Error('Unauthorized state transition');
     }
+    if (actor === 'kitchen') {
+      if (from !== 'preparing' || to !== 'ready_for_pickup') {
+        throw new Error('Unauthorized state transition');
+      }
+    }
     if (actor === 'admin') {
       assertNoPaymentFieldMutationForAdmin(patch);
     }

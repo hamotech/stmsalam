@@ -106,34 +106,7 @@ export default function CheckoutPaymentButtons({
     }
   };
 
-  const goPayPal = async () => {
-    if (!enabled) return;
-    if (!ensureValidPhoneForWeb()) return;
 
-    // Optional config for merchant PayPal checkout endpoint/link.
-    // Example:
-    // EXPO_PUBLIC_PAYPAL_CHECKOUT_URL=https://www.paypal.com/paypalme/yourmerchant
-    const paypalBase = process.env.EXPO_PUBLIC_PAYPAL_CHECKOUT_URL?.trim();
-    if (!paypalBase) {
-      Alert.alert('PayPal not configured');
-      return;
-    }
-
-    const sep = paypalBase.includes('?') ? '&' : '?';
-    const paypalUrl =
-      `${paypalBase}${sep}` +
-      `amount=${encodeURIComponent(amount.toFixed(2))}` +
-      `&currency=SGD` +
-      `&invoice=${encodeURIComponent(orderId.trim())}` +
-      `&note=${encodeURIComponent(`phone:${normalizedPhone}`)}`;
-
-    const canOpen = await Linking.canOpenURL(paypalUrl);
-    if (!canOpen) {
-      Alert.alert('PayPal unavailable', 'Could not open the PayPal checkout link on this device.');
-      return;
-    }
-    await Linking.openURL(paypalUrl);
-  };
 
   const disabled = !enabled || busy === 'stripe' || (isWeb && !isValidSgPhone);
 
@@ -194,16 +167,7 @@ export default function CheckoutPaymentButtons({
         )}
       </TouchableOpacity>
 
-      {isWeb && (
-        <TouchableOpacity
-          style={[styles.btnPaypal, (!enabled || !isValidSgPhone) && styles.btnDisabled]}
-          onPress={goPayPal}
-          disabled={!enabled || !isValidSgPhone}
-          activeOpacity={0.88}
-        >
-          <Text style={styles.btnPaypalText}>PayPal Pay</Text>
-        </TouchableOpacity>
-      )}
+
     </View>
   );
 }

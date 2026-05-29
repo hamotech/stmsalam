@@ -85,10 +85,10 @@ function resolveCustomer(order: OrderBillInput) {
   const direct = order.customer ?? {};
   const c = { ...meta, ...snap, ...direct };
   return {
-    name: (c.name && String(c.name).trim()) || '—',
-    phone: (c.phone && String(c.phone).trim()) || '',
-    address: (c.address && String(c.address).trim()) || '',
-    notes: (c.notes && String(c.notes).trim()) || '',
+    name: (c.name && String(c.name).trim()) || (order as any).customerName || '—',
+    phone: (c.phone && String(c.phone).trim()) || (order as any).customerPhone || (order as any).phone || '',
+    address: (c.address && String(c.address).trim()) || (order as any).address || '',
+    notes: (c.notes && String(c.notes).trim()) || order.notes || '',
   };
 }
 

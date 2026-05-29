@@ -63,10 +63,10 @@ function resolveCustomer(order) {
   const direct = order.customer && typeof order.customer === 'object' ? order.customer : {}
   const c = { ...metaCust, ...snap, ...direct }
   return {
-    name: (c.name && String(c.name).trim()) || '—',
-    phone: (c.phone && String(c.phone).trim()) || '',
-    address: (c.address && String(c.address).trim()) || '',
-    notes: (c.notes && String(c.notes).trim()) || '',
+    name: (c.name && String(c.name).trim()) || order.customerName || '—',
+    phone: (c.phone && String(c.phone).trim()) || order.customerPhone || order.phone || '',
+    address: (c.address && String(c.address).trim()) || order.address || '',
+    notes: (c.notes && String(c.notes).trim()) || order.notes || '',
   }
 }
 

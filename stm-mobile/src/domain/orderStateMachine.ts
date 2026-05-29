@@ -6,6 +6,7 @@ import {
   isTerminalState,
   assertPaymentConsistency,
   readCanonicalOrderStatusStrict,
+  PAYMENT_MODE,
 } from '../../../shared/orderStateMachine.core.esm.js';
 
 export const CANONICAL_ORDER_STATUSES = VALID_STATES.filter((s) => s !== 'failed');
@@ -19,6 +20,7 @@ export {
   getNextAllowedStates,
   isTerminalState,
   assertPaymentConsistency,
+  PAYMENT_MODE,
 };
 
 export function readCanonicalOrderStatus(doc: Record<string, unknown> | null | undefined): string {

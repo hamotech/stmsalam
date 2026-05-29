@@ -74,11 +74,6 @@ export default function PaymentQRScreen() {
     if (!orderId) return;
     setClaimBusy(true);
     try {
-      const r = await submitQrPaymentClaim(orderId);
-      if (!r.ok) {
-        Alert.alert('Payment', r.error);
-        return;
-      }
       clear();
       void clearGrabCheckoutDraft();
       navReplace(router, { kind: 'orderTracking', orderId }, navRole);

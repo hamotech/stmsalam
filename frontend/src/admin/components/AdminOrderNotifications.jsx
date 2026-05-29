@@ -85,7 +85,8 @@ export default function AdminOrderNotifications() {
         const wasPaid = oldStatus === 'PAID'
 
         const total = parseFloat(order.total || 0)
-        const body = `${order.id} · ${order.customer?.name || 'Customer'} · $${Number.isFinite(total) ? total.toFixed(2) : '0.00'} SGD`
+        const name = order.customer?.name || order.customerName || 'Customer'
+        const body = `${order.id} · ${name} · $${Number.isFinite(total) ? total.toFixed(2) : '0.00'} SGD`
         const short = order.id.length >= 8 ? order.id.slice(-8).toUpperCase() : order.id
 
         if (nowPaid && !wasPaid) {

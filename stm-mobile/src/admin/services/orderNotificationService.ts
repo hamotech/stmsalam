@@ -50,7 +50,7 @@ export async function presentNewOrderNotification(order: OrderBillInput): Promis
 
   const id = String(order.id || '');
   const tail = id.length >= 8 ? id.slice(-8).toUpperCase() : id.toUpperCase() || 'NEW';
-  const name = order.customer?.name?.trim() || 'Customer';
+  const name = order.customer?.name?.trim() || (order as any).customerName?.trim() || 'Customer';
 
   await scheduleNotificationAsync({
     content: {

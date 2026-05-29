@@ -28,6 +28,9 @@ function shouldSkip(rel) {
     scoped.includes('/dist/') ||
     scoped.includes('/build/') ||
     scoped.includes('/.vite/') ||
+    scoped.includes('/.expo-export-test-web/') ||
+    scoped.includes('/stmapp/stmapp/assets/') ||
+    scoped.includes('/stmapp/android/app/src/main/assets/') ||
     rel === '.eslintrc.cjs'
   );
 }

@@ -10,6 +10,7 @@ export type OrderActor =
   | 'webhook'
   | 'admin'
   | 'rider'
+  | 'kitchen'
   | 'web_customer'
   | 'mobile_customer';
 
@@ -46,6 +47,12 @@ export function assertTransitionAuthorized(input: GuardInput): void {
 
   if (actor === 'web_customer' || actor === 'mobile_customer' || actor === 'system') {
     throw new Error('Unauthorized state transition');
+  }
+
+  if (actor === 'kitchen') {
+    if (from !== 'preparing' || to !== 'ready_for_pickup') {
+      throw new Error('Unauthorized state transition');
+    }
   }
 
   if (actor === 'admin') {

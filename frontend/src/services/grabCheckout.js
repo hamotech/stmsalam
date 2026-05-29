@@ -36,8 +36,14 @@ export function buildPaymentPayload(method) {
       paymentStatus: 'NOT_APPLICABLE',
     };
   }
+  if (m === 'SCANNER' || m === 'PAYNOW') {
+    return {
+      paymentMethod: 'SCANNER',
+      paymentStatus: 'PENDING',
+    };
+  }
   return {
-    paymentMethod: 'ONLINE',
+    paymentMethod: 'STRIPE',
     paymentStatus: 'PENDING',
   };
 }
@@ -265,6 +271,11 @@ export async function placeGrabOrderAtCheckout({
   totalAmount,
   paymentMethod,
   idempotencyKey,
+  customerName,
+  customerPhone,
+  mode,
+  notes,
+  address,
 }) {
   const finalPaymentMethod = String(paymentMethod || '').trim().toUpperCase() || 'ONLINE';
   console.log('CHECKOUT_TRIGGER_PAYMENT_METHOD', finalPaymentMethod);
@@ -308,8 +319,14 @@ export async function placeGrabOrderAtCheckout({
     items,
     totalAmount: total,
     paymentMethod: finalPaymentMethod,
+    paymentMode: finalPaymentMethod,
     paymentStatus: safeStatus,
     idempotencyKey: idem,
+    customerName,
+    customerPhone,
+    mode,
+    notes,
+    address,
   });
 
   console.log("PAYMENT_METHOD_OUTGOING", safeMethod);

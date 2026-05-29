@@ -156,7 +156,6 @@ export default function Profile() {
     { id: 'orders', icon: <ShoppingBag size={20} />, label: 'Order History' },
     { id: 'addresses', icon: <MapPin size={20} />, label: 'Saved Addresses' },
     { id: 'dietary', icon: <Heart size={20} />, label: 'Dietary Prefs' },
-    { id: 'wallet', icon: <Wallet size={20} />, label: 'STM Wallet' },
     { id: 'settings', icon: <Settings size={20} />, label: 'Account' },
   ]
 
@@ -179,12 +178,6 @@ export default function Profile() {
                        {isPro && <span style={{ background: 'var(--gold)', color: 'var(--green-dark)', fontSize: '10px', fontWeight: 900, padding: '4px 10px', borderRadius: '100px' }}>PRO</span>}
                     </div>
                     <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '16px', fontWeight: 700 }}>Active Member · {pastOrders.length} Orders</p>
-                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px 32px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--gold)', fontSize: '24px', fontWeight: 950 }}>$0.00</div>
-                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 800, marginTop: '4px', textTransform: 'uppercase' }}>Credits</div>
                  </div>
               </div>
            </div>
@@ -276,18 +269,6 @@ export default function Profile() {
                             </div>
                          </div>
                        ))}
-                    </div>
-                 </motion.div>
-               )}
-
-               {activeTab === 'wallet' && (
-                 <motion.div key="wallet" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
-                    <h2 style={{ fontSize: '28px', fontWeight: 950, color: 'var(--green-dark)', marginBottom: '32px' }}>STM Wallet Credits</h2>
-                    <div style={{ background: 'var(--green-dark)', borderRadius: '32px', padding: '32px', color: 'white', position: 'relative' }}>
-                       <Zap size={40} color="var(--gold)" style={{ position: 'absolute', right: '30px', top: '30px', opacity: 0.2 }} />
-                       <div style={{ fontSize: '13px', fontWeight: 800, opacity: 0.6, marginBottom: '16px' }}>CURRENT BALANCE</div>
-                       <div style={{ fontSize: '48px', fontWeight: 950, marginBottom: '32px' }}>$0.00</div>
-                       <button style={{ width: '100%', padding: '16px', background: 'var(--gold)', color: 'var(--green-dark)', border: 'none', borderRadius: '16px', fontWeight: 950, cursor: 'pointer' }}>Top Up Balance</button>
                     </div>
                  </motion.div>
                )}

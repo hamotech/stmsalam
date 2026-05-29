@@ -7,6 +7,7 @@ import {
   isTerminalState,
   assertPaymentConsistency,
   readCanonicalOrderStatusStrict,
+  PAYMENT_MODE,
 } from '../../../shared/orderStateMachine.core.esm.js';
 
 export const CANONICAL_ORDER_STATUSES = VALID_STATES.filter((s) => s !== 'failed');
@@ -19,10 +20,14 @@ export {
   getNextAllowedStates,
   isTerminalState,
   assertPaymentConsistency,
+  PAYMENT_MODE,
 };
 
+import { normalizeLegacyOrder } from '../lib/orderUtils.js';
+
 export function readCanonicalOrderStatus(doc) {
-  return readCanonicalOrderStatusStrict(doc || {}, {
+  const normalized = normalizeLegacyOrder(doc || {});
+  return readCanonicalOrderStatusStrict(normalized, {
     strict: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : false,
     logger: (msg, payload) => console.warn('[orderStateMachine]', msg, payload || {}),
   });

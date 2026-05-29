@@ -30,6 +30,7 @@ import {
   compareOrderContextSubset as compareOrderContextSubsetFromShared,
   createOrderPipelineModeAuditPayload as createOrderPipelineModeAuditPayloadFromShared,
 } from '../../../shared/orderPipelineControlPlane.js';
+import { normalizeLegacyOrder } from '../lib/orderUtils.js';
 
 /**
  * Current read-model ruleset. When this increments:
@@ -126,7 +127,12 @@ export function normalizeCanonicalPaymentStatus(order) {
     else result = 'PENDING';
   }
   const method = normalizePaymentMethod(order);
-  if (method === 'cod') return 'NOT_APPLICABLE';
+  if (method === 'cod') {
+    if (result === 'PENDING' || result === 'PAID') {
+      return result;
+    }
+    return 'NOT_APPLICABLE';
+  }
   return result;
 }
 
@@ -197,7 +203,7 @@ export function resolveOrderPipelineMode(options) {
  * @returns {OrderContext}
  */
 function getOrderContextV1(order, readModelVersion, modeUsed) {
-  const o = order && typeof order === 'object' ? order : {};
+  const o = normalizeLegacyOrder(order && typeof order === 'object' ? order : {});
   const method = normalizePaymentMethod(o);
   const isCOD = method === 'cod';
   const canonicalStatus = readCanonicalOrderStatus(o);

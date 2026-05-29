@@ -23,6 +23,7 @@ const OrderTracking = lazy(() => import('./pages/OrderTracking'))
 const Admin = lazy(() => import('./pages/Admin'))
 const DriverPanel = lazy(() => import('./pages/DriverPanel'))
 const DataSeedPage = lazy(() => import('./pages/DataSeedPage'))
+const ShopScan = lazy(() => import('./pages/ShopScan'))
 
 function PageWrapper({ children }) {
   return (
@@ -42,7 +43,7 @@ function Shell() {
   const path = location.pathname
   // Navbar + footer: hidden on admin/rider and on “focused” flows (login, pay, etc.)
   const hideNavFooter =
-    ['/admin', '/driver', '/rider', '/login', '/order-success', '/success', '/cancel', '/sandbox', '/pay'].some((p) => path.startsWith(p)) ||
+    ['/admin', '/driver', '/rider', '/login', '/order-success', '/success', '/cancel', '/sandbox', '/pay', '/scan-pay'].some((p) => path.startsWith(p)) ||
     path.startsWith('/seed')
   // STM Help + WhatsApp: show on every customer-facing page (including login, checkout, pay)
   const hideFloatingHelp = path.startsWith('/admin') || path.startsWith('/driver') || path.startsWith('/rider')
@@ -70,6 +71,7 @@ function Shell() {
             <Route path="/driver"   element={<PageWrapper><DriverPanel /></PageWrapper>} />
             <Route path="/rider" element={<Navigate to="/driver" replace />} />
             <Route path="/seed"     element={<PageWrapper><DataSeedPage /></PageWrapper>} />
+            <Route path="/scan-pay/:orderId" element={<PageWrapper><ShopScan /></PageWrapper>} />
           </Routes>
         </Suspense>
       </AnimatePresence>

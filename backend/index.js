@@ -13,6 +13,7 @@ const require = createRequire(import.meta.url);
 const orderStateMachine = require('../frontend/functions/shared/orderStateMachine.core.cjs');
 const createOrderStateGuard = require('../frontend/functions/shared/orderStateGuard.cjs');
 const createOrderTransitionService = require('../frontend/functions/shared/orderTransitionService.cjs');
+const { PAYMENT_MODE, normalizePaymentMode } = require('../frontend/functions/shared/paymentConstants.cjs');
 
 const orderStateGuard = createOrderStateGuard({
   assertValidOrderTransition: orderStateMachine.assertValidOrderTransition,
@@ -264,13 +265,16 @@ app.post('/api/orders', async (req, res) => {
   const orderId = `STM-${Date.now()}`;
   
   try {
-    const isCod = String(payment?.method ?? payment?.mode ?? payment ?? '').toUpperCase() === 'COD';
+    const rawMethod = String(payment?.method ?? payment?.mode ?? payment ?? '').trim();
+    const canonicalMethod = normalizePaymentMode(rawMethod);
+
     const orderData = { 
       id: orderId, customer, items, total, mode, payment, notes,
       // Canonical FSM initial state — single source of truth.
-      status: isCod ? 'placed' : 'pending_payment',
-      paymentStatus: isCod ? 'NOT_APPLICABLE' : 'PENDING',
-      paymentMethod: isCod ? 'COD' : 'ONLINE',
+      status: (canonicalMethod === PAYMENT_MODE.COD || canonicalMethod === PAYMENT_MODE.SCANNER) ? 'placed' : 'pending_payment',
+      paymentStatus: (canonicalMethod === PAYMENT_MODE.COD) ? 'NOT_APPLICABLE' : 'PENDING',
+      paymentMethod: canonicalMethod,
+      paymentMode: canonicalMethod,
       createdAt: new Date().toISOString() 
     };
     await db.collection('orders').doc(orderId).set(orderData);
@@ -279,7 +283,7 @@ app.post('/api/orders', async (req, res) => {
       await supabase.from('orders').insert([orderData]);
     }
 
-    console.log(`📦 New Order Received: ${orderId}`);
+    console.log(`📦 New Order Received: ${orderId} (${canonicalMethod})`);
     res.status(201).json({ success: true, orderId });
   } catch (err) {
     res.status(400).json({ error: err.message });

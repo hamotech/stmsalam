@@ -220,16 +220,10 @@ export function normalizeCanonicalPaymentStatus(order: Record<string, unknown>):
     else result = 'PENDING';
   }
   const method = normalizePaymentMethod(order);
-  const st = String(order.status ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/-/g, '_')
-    .replace(/\s+/g, '_');
-  if (
-    (method === 'cod' || method === 'cash') &&
-    (st === 'paid' || st === 'placed') &&
-    result === 'PENDING'
-  ) {
+  if (method === 'cod' || method === 'cash') {
+    if (result === 'PENDING' || result === 'PAID') {
+      return result;
+    }
     return 'NOT_APPLICABLE';
   }
   return result;

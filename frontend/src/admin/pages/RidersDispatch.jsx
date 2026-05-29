@@ -154,7 +154,7 @@ const RidersDispatch = () => {
                 </div>
               ) : null}
               <div style={{ marginTop: '10px', fontSize: '13px', color: '#334155', fontWeight: '600' }}>
-                {(order.customer?.address || '—')}
+                {(order.customer?.address || order.address || '—')}
               </div>
               {lineItems.length > 0 ? (
                 <ul style={{ marginTop: '14px', marginBottom: 0, paddingLeft: '20px', color: '#334155', fontWeight: '600', fontSize: '14px', lineHeight: 1.6 }}>

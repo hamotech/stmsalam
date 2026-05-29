@@ -4,6 +4,9 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { buildPublicTrackingFromOrder } = require('./mirrorPayload');
 const { getService } = require('./shared/bootstrap/functionBootstrap.cjs');
+const { PAYMENT_MODE, normalizePaymentMode } = require('./shared/paymentConstants.cjs');
+const { log, error } = require('./lib/logger.cjs');
+const { withValidation, validateCreateGrabOrder, validateStripePendingOrder } = require('./lib/validators.cjs');
 
 admin.initializeApp();
 const IS_DEPLOY_MODE = String(process.env.FUNCTIONS_DEPLOY_MODE || '').toLowerCase() === 'true';
@@ -201,10 +204,16 @@ function sanitizeCreateGrabOrderInput(raw) {
     items: data.items,
     totalAmount: data.totalAmount,
     paymentMethod: data.paymentMethod,
+    paymentMode: data.paymentMode,
     paymentStatus: data.paymentStatus,
     idempotencyKey: data.idempotencyKey,
     checkoutFence: data.checkoutFence,
     metaData: data.metaData,
+    customerName: data.customerName,
+    customerPhone: data.customerPhone,
+    mode: data.mode,
+    notes: data.notes,
+    address: data.address,
   };
 }
 
@@ -214,19 +223,37 @@ function buildOrderDocumentForSet({
   totalAmount,
   normalizedMode,
   idempotencyKeyHash,
+  customerName,
+  customerPhone,
+  mode,
+  notes,
+  address,
 }) {
-  const isCod = normalizedMode === 'COD';
+  const phoneNorm = String(customerPhone || '')
+    .replace(/\s|-/g, '')
+    .trim()
+    .slice(0, 40);
+  const nameNorm = String(customerName || '').trim().slice(0, 200);
+  const modeNorm = mode === 'pickup' ? 'pickup' : 'delivery';
+
   const doc = createInitialOrderSnapshot({
     userId: uid,
     items,
     totalAmount,
     paymentMethod: normalizedMode,
+    paymentMode: normalizedMode,
     flow: 'grab',
     metaData: {},
-    paymentStatus: isCod ? 'NOT_APPLICABLE' : 'PENDING',
+    paymentStatus: 'PENDING',
     status: 'placed',
+    customerName: nameNorm,
+    customerPhone: phoneNorm,
+    mode: modeNorm,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  if (notes) doc.notes = String(notes).slice(0, 2000);
+  if (address) doc.address = String(address).slice(0, 2000);
 
   if (idempotencyKeyHash) {
     doc.idempotencyKey = idempotencyKeyHash;
@@ -270,6 +297,7 @@ function buildPendingPaymentStripeOrderDocument({
     items,
     totalAmount,
     paymentMethod: 'STRIPE',
+    paymentMode: 'STRIPE',
     flow: 'grab',
     metaData: meta,
     paymentStatus: 'PENDING',
@@ -303,6 +331,7 @@ function buildStripePendingOrderDocument({
   mode,
   notes,
   address,
+}) {
   const pmo = 'stripe';
   return buildPendingPaymentStripeOrderDocument({
     uid,
@@ -369,11 +398,11 @@ function buildStripeHostedGrabOrderDocument({
 
 exports.createGrabOrder = onCall(
   { region: REGION, invoker: 'public' },
-  async (request) => {
+  withValidation(async (request) => {
     assertProductionSecurityMode();
     enforceCallableAppCheck(request, 'createGrabOrder');
     console.log('[CF] START createGrabOrder');
-
+    // Structured log for start
     const data = sanitizeCreateGrabOrderInput(request.data);
     let traceId = '';
 
@@ -408,8 +437,8 @@ exports.createGrabOrder = onCall(
         metadata: { functionName: 'createGrabOrder', scope: 'ip', uid, ip },
       });
 
-      const pmRaw = String(data.paymentMethod || "ONLINE").trim().toUpperCase() || "ONLINE";
-      const normalizedMode = pmRaw;
+      const pmRaw = String(data.paymentMethod || data.paymentMode || "ONLINE").trim();
+      const normalizedMode = normalizePaymentMode(pmRaw);
 
       const items = coerceItemsOrThrow(data.items);
 
@@ -460,6 +489,11 @@ exports.createGrabOrder = onCall(
             totalAmount,
             normalizedMode,
             idempotencyKeyHash: idemHash,
+            customerName: data.customerName,
+            customerPhone: data.customerPhone,
+            mode: data.mode,
+            notes: data.notes,
+            address: data.address,
           })
         );
       const logOrderStateForSave = (orderDoc) => {
@@ -531,27 +565,32 @@ exports.createGrabOrder = onCall(
       });
       console.log('[CF][SUCCESS]', orderId);
 
+      // Log success
+      log({ level: 'info', service: 'createGrabOrder', event: 'success', payload: { orderId, paymentMode: normalizedMode }, requestId: traceId });
+
       return { success: true, orderId };
-    } catch (error) {
-      const unwrapped = unwrapHttpsError(error);
+    } catch (err) {
+      const unwrapped = unwrapHttpsError(err);
       if (unwrapped) throw unwrapped;
 
-      console.error('[CF][CREATE ORDER ERROR]', error);
+      // Structured error logging (forward critical errors to Cloud Logging)
+      error({ service: 'createGrabOrder', event: 'error', error: err, payload: { uid }, requestId: traceId });
+      console.error('[CF][CREATE ORDER ERROR]', err);
 
-      throw new HttpsError('internal', error.message || 'Unknown error', {
+      throw new HttpsError('internal', err.message || 'Unknown error', {
         traceId,
       });
     }
-  }
+  }, validateCreateGrabOrder)
 );
 
 exports.createStripePendingOrder = onCall(
   { region: REGION, invoker: 'public' },
-  async (request) => {
+  withValidation(async (request) => {
     assertProductionSecurityMode();
     enforceCallableAppCheck(request, 'createStripePendingOrder');
     console.log('[CF] START createStripePendingOrder');
-
+    // Structured log for start
     const data = request.data || {};
     let traceId = '';
 
@@ -661,18 +700,23 @@ exports.createStripePendingOrder = onCall(
 
       console.log('[createStripePendingOrder SUCCESS]', { orderId, traceId });
 
+      // Log success
+      log({ level: 'info', service: 'createStripePendingOrder', event: 'success', payload: { orderId, traceId }, requestId: traceId });
+
       return { success: true, orderId };
-    } catch (error) {
-      const unwrapped = unwrapHttpsError(error);
+    } catch (err) {
+      const unwrapped = unwrapHttpsError(err);
       if (unwrapped) throw unwrapped;
 
-      console.error('[CF][createStripePendingOrder ERROR]', error);
+      // Structured error logging (critical errors to Cloud Logging)
+      error({ service: 'createStripePendingOrder', event: 'error', error: err, payload: {}, requestId: traceId });
+      console.error('[CF][createStripePendingOrder ERROR]', err);
 
-      throw new HttpsError('internal', error.message || 'Unknown error', {
+      throw new HttpsError('internal', err.message || 'Unknown error', {
         traceId,
       });
     }
-  }
+  }, validateStripePendingOrder)
 );
 
 /* -------------------- MIRROR -------------------- */
@@ -854,6 +898,7 @@ exports.makeUserAdmin = onCall(
     }
 
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
+
     console.log('[makeUserAdmin] Admin claim granted', {
       callerUid,
       targetUid,
@@ -867,6 +912,71 @@ exports.makeUserAdmin = onCall(
     };
   }
 );
+
+// ----- Admin RBAC Middleware -----
+const verifyFirebaseToken = require('./auth/verifyToken.cjs');
+const requireAdmin = require('./auth/requireAdmin.cjs');
+const requireSuperAdmin = require('./auth/requireSuperAdmin.cjs');
+
+// ----- Admin Transition Callable -----
+exports.adminTransition = onCall({ region: REGION, invoker: 'public' }, async (request) => {
+  assertProductionSecurityMode();
+  enforceCallableAppCheck(request, 'adminTransition');
+  const adminUid = await requireAdmin(request);
+  const { orderId, eventName, paymentStatus } = request.data || {};
+  console.log('[adminTransition] payload:', { orderId, eventName, paymentStatus });
+  if (!orderId) {
+    throw new HttpsError('invalid-argument', 'Missing orderId');
+  }
+  const db = admin.firestore();
+  const orderRef = db.collection('orders').doc(orderId);
+  // FSM manages all lifecycle fields (status, paymentStatus, paymentMethod) internally.
+  // Do NOT pass lifecycle fields through metadata.patch — that triggers assertNoDirectStatusMutation.
+  const metadata = {};
+  // Use orderTransitionService to perform transition via FSM
+  const { performOrderTransition } = getService('orderTransitionService');
+  // Determine event type based on desired status change
+  // Map canonical event names (case‑insensitive) to internal FSM event descriptors
+  const eventMap = {
+    paid: { type: 'ADMIN_MARK_PAID' },
+    cancelled: { type: 'ORDER_CANCELLED' },
+    refunded: { type: 'ADMIN_REFUND_APPROVED' },
+    preparing: { type: 'ORDER_PREPARING' },
+    ready_for_pickup: { type: 'ORDER_READY_FOR_PICKUP' },
+    out_for_delivery: { type: 'ORDER_OUT_FOR_DELIVERY' },
+    delivered: { type: 'ORDER_DELIVERED' },
+  };
+  // Normalize incoming payload (uppercase enum) to lower‑case key for lookup
+  const normalizedKey = String(eventName || '').trim().toLowerCase();
+  const event = eventMap[normalizedKey] || { type: 'ADMIN_CUSTOM' };
+  try {
+    const result = await performOrderTransition({
+      db,
+      orderRef,
+      actor: 'admin',
+      actorUid: adminUid,
+      event,
+      metadata,
+    });
+    console.log('[adminTransition] result:', result);
+    // Audit log for admin actions
+    log({
+      level: 'info',
+      service: 'adminTransition',
+      event: 'admin_action',
+      payload: { adminUid, orderId, eventName, paymentStatus },
+    });
+    return { success: true, result };
+  } catch (e) {
+    const unwrapped = unwrapHttpsError(e);
+    if (unwrapped) throw unwrapped;
+    console.error('[adminTransition] error:', e);
+    throw new HttpsError('internal', e.message || 'Transition failed', {
+      orderId,
+      eventName,
+    });
+  }
+});
 
 exports.deleteCustomerAccount = onCall(
   { region: REGION, invoker: 'public' },
@@ -1044,7 +1154,16 @@ exports.transitionOrderStatus = onCall(
 
     const userSnap = await admin.firestore().doc(`users/${uid}`).get();
     const role = String(userSnap.data()?.role || '').toLowerCase();
-    const actor = role === 'admin' ? 'admin' : role === 'rider' ? 'rider' : 'system';
+    const isAdminClaim = request?.auth?.token?.admin === true;
+    
+    const actor =
+      isAdminClaim || role === 'admin'
+        ? 'admin'
+        : role === 'rider'
+          ? 'rider'
+          : role === 'kitchen'
+            ? 'kitchen'
+            : 'system';
     const db = admin.firestore();
     const ip = String(request?.rawRequest?.ip || '').trim() || 'unknown';
 

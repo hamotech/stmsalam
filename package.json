@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:web\" \"npm run dev:backend\"",
+    "test": "jest",
+    "test:ci": "npm test -- --runInBand --detectOpenHandles",
     "dev:new": "concurrently \"npm run dev:web:5174\" \"npm run dev:backend\"",
     "dev:web": "cd frontend && npm run dev",
     "dev:web:5174": "cd frontend && npx vite --port 5174",
@@ -14,7 +16,11 @@
     "guard:product-domain": "node scripts/validate-product-domain.js"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@babel/preset-env": "^7.29.7",
+    "concurrently": "^8.2.2",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.11",
+    "@types/jest": "^29.5.0"
   },
   "dependencies": {
     "@capacitor/cli": "^8.3.4",

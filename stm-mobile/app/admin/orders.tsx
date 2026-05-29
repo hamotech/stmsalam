@@ -106,7 +106,7 @@ export default function AdminOrdersScreen() {
               <View style={styles.rowTop}>
                 <View>
                   <Text style={styles.orderId}>#{short}</Text>
-                  <Text style={styles.name}>{item.customer?.name || 'Customer'}</Text>
+                  <Text style={styles.name}>{item.customer?.name || item.customerName || 'Customer'}</Text>
                   <Text style={styles.meta}>
                     {item.mode || '—'} · ${Number.isFinite(total) ? total.toFixed(2) : '0.00'}
                   </Text>

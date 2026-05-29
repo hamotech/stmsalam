@@ -963,7 +963,7 @@ export default function Home() {
               { icon: '🏠', title: 'Smart Home Feed', desc: 'Curated favourites, seasonal highlights & live promotions front and centre.', color: '#e0f2fe', accent: '#0ea5e9' },
               { icon: '🍽️', title: 'Full Menu Browsing', desc: 'Filter by category, search, and add to cart with one tap — just like the web.', color: '#d1fae5', accent: 'var(--green-mid)' },
               { icon: '📍', title: 'Live Order Tracking', desc: 'Watch your rider on the map in real-time from kitchen to your door.', color: '#fef3c7', accent: '#f59e0b' },
-              { icon: '💳', title: 'In-App Payments', desc: 'PayNow QR, Stripe card payments, and wallet — all secured in the app.', color: '#ede9fe', accent: '#7c3aed' },
+              { icon: '💳', title: 'In-App Payments', desc: 'PayNow QR and Stripe card payments — all secured in the app.', color: '#ede9fe', accent: '#7c3aed' },
               { icon: '💬', title: 'Order Chat & Support', desc: 'Message the STM team directly via in-app chat or WhatsApp any time.', color: '#fce7f3', accent: '#db2777' },
               { icon: '👤', title: 'Profile & History', desc: 'View past orders, re-order favourites, and manage your account settings.', color: '#ecfdf5', accent: 'var(--green-dark)' },
             ].map((f, i) => (

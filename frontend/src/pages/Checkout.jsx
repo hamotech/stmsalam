@@ -33,14 +33,35 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { updateDoc, doc } from 'firebase/firestore'
 import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import { haversineKm, geocodeAddressSingapore, computeDeliveryQuote, isGoogleMapsGeocodingConfigured } from '../utils/delivery'
+import { PAYMENT_MODE } from '../domain/orderStateMachine';
 
 /** UI payment id → labels normalized by `grabCheckout` + Cloud Function `PAYMENT_ALIASES`. */
 const CHECKOUT_PAYMENT_MAP = {
-  paynow: 'PAYNOW',
-  stripe: 'CARD',
-  paypal: 'CARD',
-  cash: 'COD',
+  COD: 'COD',
+  SCANNER: 'SCANNER',
+  STRIPE: 'STRIPE',
 }
+
+const paymentMethods = [
+  {
+    id: PAYMENT_MODE.COD,
+    title: 'Cash on Delivery',
+    description: 'Pay when your order arrives',
+    icon: 'cash'
+  },
+  {
+    id: PAYMENT_MODE.SCANNER,
+    title: 'Scan & Pay',
+    description: 'Pay instantly using SGQR / PayNow',
+    icon: 'qr'
+  },
+  {
+    id: PAYMENT_MODE.STRIPE,
+    title: 'Stripe Pay',
+    description: 'Secure payment with Stripe',
+    icon: 'card'
+  }
+];
 
 const buildSafeOrderLineItems = (items = []) => {
   return (items || [])
@@ -72,7 +93,7 @@ export default function Checkout() {
   const { user, isGuest } = auth
   
   const [mode, setMode] = useState('delivery')
-  const [payment, setPayment] = useState('paynow')
+  const [payment, setPayment] = useState(PAYMENT_MODE.SCANNER)
   const [formData, setFormData] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
@@ -289,7 +310,7 @@ export default function Checkout() {
     const normalizedPhone = String(phoneTrim).replace(/\s|-/g, '')
     const isValidSgPhone = /^(?:\+65)?[689]\d{7}$/.test(normalizedPhone)
 
-    if ((payment === 'stripe' || payment === 'paypal') && !isValidSgPhone) {
+    if (payment === PAYMENT_MODE.STRIPE && !isValidSgPhone) {
       alert('Please enter a valid Singapore phone number before online payment.')
       return
     }
@@ -330,7 +351,7 @@ export default function Checkout() {
         return
       }
 
-      const paymentMethodOut = CHECKOUT_PAYMENT_MAP[payment] || 'ONLINE'
+      const paymentMethodOut = CHECKOUT_PAYMENT_MAP[payment] ?? payment
       console.log('CONFIRM_ORDER_PAYMENT_METHOD', paymentMethodOut)
 
       let idempotencyKey =
@@ -357,7 +378,7 @@ export default function Checkout() {
       })
 
       // Stripe (card): only ../services/stripeCheckout.js → fixed Cloud Run createStripeCheckout (no other HTTP checkout path).
-      if (payment === 'stripe') {
+      if (payment === PAYMENT_MODE.STRIPE) {
         const cd = stripeCheckoutCooldownUntilRef.current
         if (Date.now() < cd) {
           const sec = Math.max(1, Math.ceil((cd - Date.now()) / 1000))
@@ -427,6 +448,11 @@ export default function Checkout() {
         totalAmount: Number(orderTotalRaw.toFixed(2)),
         paymentMethod: paymentMethodOut,
         idempotencyKey,
+        customerName: nameTrim,
+        customerPhone: normalizedPhone,
+        mode,
+        notes: formData.notes,
+        address: mode === 'delivery' ? formData.address : '',
       })
 
       const newOrder = { id: orderId, trackingToken: '' }
@@ -436,41 +462,11 @@ export default function Checkout() {
       const trackingUrl = `${origin}/tracking/${encodeURIComponent(orderId)}`
       const cancelUrl = `${origin}/checkout`
 
-      if (payment === 'paynow') {
-        setShowPaymentModal(true)
-      } else if (payment === 'paypal') {
-        const envBase = import.meta.env.VITE_PAYPAL_CHECKOUT_URL
-        const isPlaceholderPay = (val) => {
-          if (!val) return true
-          const v = String(val).toLowerCase()
-          return v.includes('replace_me') || v.includes('replace-me')
-            || v.includes('your_') || v.includes('example.com')
-        }
-        const useDemo = isPlaceholderPay(envBase)
-        const base = useDemo ? `${origin}/pay` : envBase
-        const sep = base.includes('?') ? '&' : '?'
-
-        const url =
-          `${base}${sep}` +
-          `method=${encodeURIComponent(payment)}` +
-          `&amount=${encodeURIComponent((total || 0).toFixed(2))}` +
-          `&currency=SGD` +
-          `&invoice=${encodeURIComponent(orderId)}` +
-          `&note=${encodeURIComponent(`phone:${normalizedPhone}`)}` +
-          `&success_url=${encodeURIComponent(trackingUrl)}` +
-          `&cancel_url=${encodeURIComponent(cancelUrl)}` +
-          `&return_url=${encodeURIComponent(trackingUrl)}` +
-          `&redirect_url=${encodeURIComponent(trackingUrl)}`
-
-        if (useDemo) {
-          if (!commitCheckoutIdempotencySession()) return
-          if (clearCart) clearCart()
-          localStorage.setItem('stm_last_order_id', orderId)
-          window.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-          finalizeSuccess(newOrder)
-        }
+      if (payment === PAYMENT_MODE.SCANNER) {
+        if (!commitCheckoutIdempotencySession()) return
+        if (clearCart) clearCart()
+        localStorage.setItem('stm_last_order_id', orderId)
+        navigate(`/scan-pay/${orderId}`, { replace: true })
       } else {
         finalizeSuccess(newOrder)
       }
@@ -768,17 +764,85 @@ export default function Checkout() {
                 <div style={{ width: '30px', height: '30px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>4</div>
                 Payment Method
               </h2>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                {[{ id: 'paynow', icon: <QrCode size={18} />, title: 'PayNow SGQR' }, { id: 'stripe', icon: <CreditCard size={18} />, title: 'Pay with Stripe' }, { id: 'paypal', icon: <Wallet size={18} />, title: 'Pay with PayPal' }, { id: 'cash', icon: <Banknote size={18} />, title: 'Cash' }].map(p => (
-                  <button key={p.id} onClick={() => setPayment(p.id)} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: `2.5px solid ${payment === p.id ? 'var(--green-mid)' : '#f1f5f9'}`, background: payment === p.id ? 'var(--green-tint)' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left' }}>
-                    <div style={{ color: payment === p.id ? 'var(--green-mid)' : '#64748b' }}>{p.icon}</div>
-                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{p.title}</span>
-                  </button>
-                ))}
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {paymentMethods.map(p => {
+                  let IconComponent = Banknote;
+                  if (p.icon === 'qr') IconComponent = QrCode;
+                  if (p.icon === 'card') IconComponent = CreditCard;
+
+                  const isSelected = payment === p.id;
+                  const titleText = p.title || 'Payment Option';
+                  const descText = p.description || '';
+
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setPayment(p.id)}
+                      type="button"
+                      style={{
+                        width: '100%',
+                        padding: '16px 20px',
+                        borderRadius: '20px',
+                        border: `2.5px solid ${isSelected ? 'var(--green-mid)' : '#f1f5f9'}`,
+                        background: isSelected ? 'var(--green-tint)' : 'white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        textAlign: 'left',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '12px',
+                            background: isSelected ? 'var(--green-mid)' : '#f8fafc',
+                            color: isSelected ? 'white' : '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <IconComponent size={20} />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '15px', marginBottom: '2px' }}>
+                            {titleText}
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600 }}>
+                            {descText}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Selection indicator */}
+                      <div
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          border: `2px solid ${isSelected ? 'var(--green-mid)' : '#cbd5e1'}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: isSelected ? 'var(--green-mid)' : 'transparent',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        {isSelected && <Check size={12} color="white" strokeWidth={3} />}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              {((payment === 'stripe' && missingStripeEnv && !stripePaymentConfigured) || (payment === 'paypal' && missingPaypalEnv)) && (
+              {(payment === PAYMENT_MODE.STRIPE && missingStripeEnv && !stripePaymentConfigured) && (
                 <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontSize: '12px', fontWeight: 700 }}>
-                  Running in <strong>demo mode</strong> — no real payment will be captured. For Stripe, set <code>VITE_FIREBASE_PROJECT_ID</code> and deploy <code>createStripePendingOrder</code> + Cloud Run <code>createStripeCheckout</code> (URL is fixed in code). For PayPal, set <code>VITE_PAYPAL_CHECKOUT_URL</code>.
+                  Running in <strong>demo mode</strong> — no real payment will be captured. For Stripe, set <code>VITE_FIREBASE_PROJECT_ID</code> and deploy <code>createStripePendingOrder</code> + Cloud Run <code>createStripeCheckout</code> (URL is fixed in code).
                 </div>
               )}
             </section>
@@ -842,62 +906,7 @@ export default function Checkout() {
         </div>
       </div>
 
-      {/* ── PayNow Scanner Modal ── */}
-      <AnimatePresence>
-        {showPaymentModal && orderDetails && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <div style={{ background: 'white', borderTop: '6px solid var(--gold)', borderRadius: '32px', padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>Scan & Pay</h2>
-              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Open the scan-to-pay sheet (PDF) or use your bank app to complete PayNow.</p>
-              <div style={{ width: '100%', maxWidth: 320, height: 420, margin: '0 auto 16px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                <object
-                  data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
-                  type="application/pdf"
-                  title="Scan to pay"
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                >
-                  <div style={{ padding: '16px', fontSize: '14px', fontWeight: 600 }}>
-                    <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ color: 'var(--green-dark)' }}>
-                      Open scan-to-pay PDF
-                    </a>
-                  </div>
-                </object>
-              </div>
-              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
-                <a href="/scanner-pay.pdf" download style={{ color: 'var(--green-mid)', fontWeight: 800 }}>Download PDF</a>
-              </p>
-              
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', 
-                  padding: '12px', background: screenshotUrl ? '#f0fdf4' : '#f8fafc', 
-                  border: screenshotUrl ? '2px solid #16a34a' : '2px dashed #cbd5e1',
-                  borderRadius: '12px', cursor: 'pointer', transition: '0.2s'
-                }}>
-                  {uploadingScreenshot ? <RefreshCw className="animate-spin" size={18} /> : (screenshotUrl ? <CircleCheck size={18} color="#16a34a" /> : <Paperclip size={18} color="#64748b" />)}
-                  <span style={{ fontWeight: 800, fontSize: '13px', color: screenshotUrl ? '#166534' : '#64748b' }}>
-                    {uploadingScreenshot ? 'Uploading...' : (screenshotUrl ? 'Screenshot Attached' : 'Tap to Upload Receipt')}
-                  </span>
-                  <input type="file" accept="image/*" onChange={handleScreenshotUpload} style={{ display: 'none' }} disabled={uploadingScreenshot} />
-                </label>
-              </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-                <button onClick={() => {
-                  if (!orderDetails?.id) return;
-                  const itemsList = (cartItems || []).map(item => `* ${item.name} x${item.qty}`).join('\n');
-                  const addressLine = mode === 'delivery' ? `\nAddress: ${formData.address}` : '\nOption: Store Pickup';
-                  const message = `*New STM Order*\nOrder ID: ${orderDetails.id}\nCustomer: ${formData.name}\nPhone: ${formData.phone}\n\n*Items:*\n${itemsList}\n\n*Total: SGD ${(total || 0).toFixed(2)}*${addressLine}`;
-                  const waUrl = `https://wa.me/${(shopInfo?.whatsapp || '6591915766').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-                  window.open(waUrl, '_blank');
-                }} style={{ flex: 1, padding: '12px', background: 'var(--green-mid)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer' }}>Share on WhatsApp</button>
-                <button onClick={() => { finalizeSuccess(orderDetails); }} style={{ flex: 1, padding: '12px', background: 'var(--green-dark)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer' }}>I Have Completed Payment</button>
-              </div>
-              <button onClick={() => setShowPaymentModal(false)} style={{ marginTop: '8px', padding: '8px', background: 'transparent', color: '#64748b', border: 'none', cursor: 'pointer' }}>Back</button>
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }
