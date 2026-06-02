@@ -30,5 +30,9 @@ export default defineConfig(({ mode }) => ({
     },
   },
   /** Preserve console in dev so E2E can assert [AUTH_*] logs (production build still strips). */
-  esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
+  // In production: drop verbose console.log & debugger, but KEEP console.error
+  // and console.warn so auth/runtime errors remain visible in production DevTools.
+  esbuild: mode === 'production'
+    ? { pure: ['console.log', 'console.info', 'console.debug'], drop: ['debugger'] }
+    : {},
 }))

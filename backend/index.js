@@ -305,29 +305,53 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/api/admin/drivers', async (req, res) => {
   const { name, phone, password, role, vehicleDetails, activeStatus } = req.body;
   let { email } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
+  if (!email || !name || !password) return res.status(400).json({ error: 'Missing required fields: name, email, password' });
   email = email.trim().toLowerCase();
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
   try {
-    const userRef = db.collection('users').doc(email);
-    const existing = await userRef.get();
-    if (existing.exists) return res.status(409).json({ error: 'User exists' });
+    // ── 1. Create Firebase Auth user ──────────────────────────────────
+    let userRecord;
+    try {
+      userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName: name,
+        emailVerified: false,
+      });
+    } catch (authErr) {
+      if (authErr.code === 'auth/email-already-exists') {
+        return res.status(409).json({ error: 'A user with this email already exists in Firebase Authentication.' });
+      }
+      throw authErr;
+    }
+    const uid = userRecord.uid;
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userData = {
-      name, email, phone, password: hashedPassword,
+    // ── 2. Build shared profile data ─────────────────────────────────
+    const driverProfile = {
+      uid,
+      name,
+      email,
+      phone: phone || '',
       role: role || 'driver',
       vehicleDetails: vehicleDetails || '',
       activeStatus: activeStatus !== false,
-      isActive: true, // as requested
+      isActive: true,
       status: activeStatus !== false ? 'active' : 'inactive',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
-    await userRef.set(userData);
 
-    const { password: _, ...user } = userData;
-    res.status(201).json({ success: true, user });
+    // ── 3. Save to `drivers` collection (uid as doc ID) ───────────────
+    await db.collection('drivers').doc(uid).set(driverProfile);
+
+    // ── 4. Save to `users` collection with bcrypt hash (legacy JWT login) ─
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.collection('users').doc(uid).set({ ...driverProfile, password: hashedPassword });
+
+    console.log(`✅ Driver created: ${email} (uid: ${uid})`);
+    res.status(201).json({ success: true, uid, driver: driverProfile });
   } catch (err) {
+    console.error('❌ Create driver error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -336,27 +360,76 @@ app.put('/api/admin/drivers/:email', async (req, res) => {
   const { name, phone, password, role, vehicleDetails, activeStatus } = req.body;
   const email = req.params.email.trim().toLowerCase();
   try {
-    const userRef = db.collection('users').doc(email);
-    const existing = await userRef.get();
-    if (!existing.exists) return res.status(404).json({ error: 'User not found' });
+    // Find the driver's Firestore doc by email field
+    const snap = await db.collection('drivers').where('email', '==', email).limit(1).get();
+    if (snap.empty) return res.status(404).json({ error: 'Driver not found' });
 
-    const updates = { name, phone, role, vehicleDetails, activeStatus, status: activeStatus ? 'active' : 'inactive' };
+    const driverDoc = snap.docs[0];
+    const uid = driverDoc.id;
+
+    const profileUpdates = {
+      name, phone, role, vehicleDetails,
+      activeStatus: activeStatus !== false,
+      isActive: activeStatus !== false,
+      status: activeStatus !== false ? 'active' : 'inactive',
+    };
+
+    // Update Firebase Auth password if provided
     if (password) {
-      updates.password = await bcrypt.hash(password, 10);
+      if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      await admin.auth().updateUser(uid, { password, displayName: name });
+      // Also update bcrypt hash in users collection
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await db.collection('users').doc(uid).update({ ...profileUpdates, password: hashedPassword });
+    } else {
+      await admin.auth().updateUser(uid, { displayName: name });
+      await db.collection('users').doc(uid).update(profileUpdates);
     }
-    
-    await userRef.update(updates);
-    res.json({ success: true });
+
+    // Update drivers collection
+    await db.collection('drivers').doc(uid).update(profileUpdates);
+
+    console.log(`✅ Driver updated: ${email} (uid: ${uid})`);
+    res.json({ success: true, uid });
   } catch (err) {
+    console.error('❌ Update driver error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.delete('/api/admin/drivers/:email', async (req, res) => {
+  const email = req.params.email.trim().toLowerCase();
   try {
-    await db.collection('users').doc(req.params.email).delete();
+    // Find the driver by email to get UID
+    const snap = await db.collection('drivers').where('email', '==', email).limit(1).get();
+
+    if (!snap.empty) {
+      const uid = snap.docs[0].id;
+
+      // Delete from Firebase Authentication
+      try {
+        await admin.auth().deleteUser(uid);
+        console.log(`🗑️  Firebase Auth user deleted: ${uid}`);
+      } catch (authErr) {
+        // Don't fail the whole request if Auth user is already gone
+        console.warn(`⚠️  Auth delete warning for uid ${uid}:`, authErr.message);
+      }
+
+      // Delete from drivers and users collections
+      await Promise.all([
+        db.collection('drivers').doc(uid).delete(),
+        db.collection('users').doc(uid).delete(),
+      ]);
+      console.log(`🗑️  Driver deleted: ${email} (uid: ${uid})`);
+    } else {
+      // Fallback: try to delete from users collection using email as ID (legacy docs)
+      await db.collection('users').doc(email).delete();
+      console.log(`🗑️  Legacy driver doc deleted by email key: ${email}`);
+    }
+
     res.json({ success: true });
   } catch (err) {
+    console.error('❌ Delete driver error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -558,8 +631,27 @@ app.post('/api/driver/login', async (req, res) => {
     console.log('[DEBUG] JWT token generated successfully.');
 
     const { password: _, ...safeUser } = user;
-    const token = jwt.sign({ id: email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, user: safeUser, token });
+
+    // ── Use the REAL Firebase UID stored in the Firestore doc ──────────────
+    // user.uid is saved by the "Add Driver" route (admin.auth().createUser → uid).
+    // Falling back to userDoc.id covers both new (uid-keyed) and legacy (email-keyed) docs.
+    const realUid = user.uid || userDoc.id;
+
+    // JWT: embed real uid so backend middleware uses it for auth checks
+    const token = jwt.sign({ id: realUid, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    
+    let firebaseToken = null;
+    if (firebaseReady) {
+      try {
+        // CRITICAL: must use real Firebase UID so request.auth.uid matches Firestore doc IDs
+        firebaseToken = await admin.auth().createCustomToken(realUid, { role: user.role });
+        console.log('[DEBUG] Firebase custom token generated for uid:', realUid);
+      } catch (err) {
+        console.warn('[DEBUG] Failed to generate Firebase custom token:', err.message);
+      }
+    }
+
+    res.json({ success: true, user: { ...safeUser, uid: realUid }, token, firebaseToken });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -613,7 +705,18 @@ app.post('/api/admin/login', async (req, res) => {
 
     const { password: _, ...safeUser } = user;
     const token = jwt.sign({ id: email, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, user: safeUser, token });
+    
+    let firebaseToken = null;
+    if (firebaseReady) {
+      try {
+        firebaseToken = await admin.auth().createCustomToken(email, { role: 'admin', admin: true });
+        console.log('[DEBUG] Firebase custom token generated for admin.');
+      } catch (err) {
+        console.warn('[DEBUG] Failed to generate Firebase admin token:', err.message);
+      }
+    }
+
+    res.json({ success: true, user: safeUser, token, firebaseToken });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

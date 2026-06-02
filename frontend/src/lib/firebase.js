@@ -8,7 +8,7 @@ import {
   enableMultiTabIndexedDbPersistence,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
 import { getMessaging, isSupported } from "firebase/messaging";
 
@@ -22,10 +22,14 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-console.log("Firebase Config Initialization:", {
-  apiKey: !!firebaseConfig.apiKey,
-  authDomain: !!firebaseConfig.authDomain,
-  projectId: !!firebaseConfig.projectId,
+// ── Config audit (production-safe: never logs raw secrets) ──────────────────
+console.log('[firebase] Config check:', {
+  apiKey:            !!firebaseConfig.apiKey,
+  authDomain:        !!firebaseConfig.authDomain,
+  projectId:         !!firebaseConfig.projectId,
+  storageBucket:     !!firebaseConfig.storageBucket,
+  messagingSenderId: !!firebaseConfig.messagingSenderId,
+  appId:             !!firebaseConfig.appId,
 });
 
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
@@ -37,6 +41,11 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// ── Runtime identity – which Firebase project are we talking to? ─────────────
+console.log('PROJECT ID:', app.options.projectId);
+console.log('AUTH DOMAIN:', app.options.authDomain);
+console.log('API KEY (first 8 chars):', String(app.options.apiKey || '').slice(0, 8) + '…');
 
 /**
  * App Check (Vite web)
@@ -80,6 +89,18 @@ export const appCheck = initWebAppCheck(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+
+// ── Emulator – set VITE_USE_FIREBASE_EMULATOR=true in .env.local to enable ──
+export const IS_EMULATOR = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+console.log('EMULATOR:', IS_EMULATOR);
+if (IS_EMULATOR) {
+  try {
+    connectAuthEmulator(auth, 'http://localhost:9099');
+    console.info('[⚡️] Firebase Auth emulator connected → http://localhost:9099');
+  } catch (e) {
+    console.warn('[⚡️] Failed to connect Auth emulator:', e);
+  }
+}
 
 let messagingInstance = null;
 isSupported().then((supported) => {

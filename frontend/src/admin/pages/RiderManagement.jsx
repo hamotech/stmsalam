@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Shield, Loader2, CheckCircle, XCircle, Edit, Trash2 } from 'lucide-react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 const BACKEND_URL = 'http://localhost:5000'; // Fallback for local development, assuming CORS handles it
@@ -30,18 +30,15 @@ export default function RiderManagement() {
   };
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'users'),
-      where('role', 'in', ['driver', 'rider'])
-    );
+    // Listen to the canonical `drivers` collection (uid as doc ID)
     const unsub = onSnapshot(
-      q,
+      collection(db, 'drivers'),
       (snap) => {
         setRiders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
       (error) => {
-        console.error("Error fetching riders:", error);
+        console.error('Error fetching drivers:', error);
         setLoading(false);
       }
     );
@@ -109,13 +106,14 @@ export default function RiderManagement() {
   };
 
   const handleDelete = async (email) => {
-    if (!window.confirm(`Are you sure you want to delete ${email}?`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete ${email}? This will remove them from Firebase Auth AND Firestore.`)) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/admin/drivers/${encodeURIComponent(email)}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error('Failed to delete');
-      showToast('Driver deleted successfully.');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete');
+      showToast('Driver deleted from Firebase Auth & Firestore.');
     } catch (err) {
       showToast(err.message || 'Error deleting driver', 'error');
     }
@@ -246,6 +244,7 @@ export default function RiderManagement() {
                <tr style={{ background: '#f8fafc', color: '#64748b', fontSize: '13px', textTransform: 'uppercase', fontWeight: 800 }}>
                   <th style={{ padding: '16px 20px', borderRadius: '12px 0 0 12px' }}>Name</th>
                   <th style={{ padding: '16px 20px' }}>Email</th>
+                  <th style={{ padding: '16px 20px' }}>Firebase UID</th>
                   <th style={{ padding: '16px 20px' }}>Status</th>
                   <th style={{ padding: '16px 20px' }}>Vehicle</th>
                   <th style={{ padding: '16px 20px', borderRadius: '0 12px 12px 0' }}>Actions</th>
@@ -254,7 +253,7 @@ export default function RiderManagement() {
             <tbody>
                {filteredRiders.length === 0 ? (
                  <tr>
-                  <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                     {loading ? 'Loading...' : 'No riders/drivers found.'}
                   </td>
                  </tr>
@@ -270,6 +269,11 @@ export default function RiderManagement() {
                          </div>
                        </td>
                        <td style={{ padding: '20px', color: '#64748b', fontWeight: 600 }}>{u.email}</td>
+                       <td style={{ padding: '20px' }}>
+                         <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px', color: '#475569', letterSpacing: '-0.3px' }}>
+                           {u.uid ? u.uid.slice(0, 14) + '…' : '—'}
+                         </code>
+                       </td>
                        <td style={{ padding: '20px' }}>
                          <span style={{ 
                            background: u.activeStatus !== false ? '#dcfce7' : '#fee2e2',

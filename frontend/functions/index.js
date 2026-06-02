@@ -1106,35 +1106,18 @@ exports.assignRiderToOrder = onCall(
         || ''
       ).trim();
 
-      // The event payload for FSM
-      const metadata = {
-        source: 'assignRiderToOrder',
-        patch: {
-          assignedRiderId,
-          assignedRiderName,
-          assignedRiderPhone,
-          assignedAt: admin.firestore.FieldValue.serverTimestamp()
-        }
-      };
-
-      console.log(
-        '[assignRiderToOrder:patch]',
-        metadata.patch
-      );
-
       const orderRef = db.collection('orders').doc(orderId);
       
-      // Transition the state through FSM to apply metadata
-      // State remains unchanged because type === 'ADMIN_ASSIGN_RIDER' returns `{ status: from }`
-      const { performOrderTransition } = getService('orderTransitionService');
-      const result = await performOrderTransition({
-        db,
-        orderRef,
-        actor: 'admin',
-        actorUid: callerUid,
-        event: { type: 'ADMIN_ASSIGN_RIDER' },
-        metadata
+      // Bypass FSM to directly set the specific fields requested by the user
+      await orderRef.update({
+        assignedDriverId: assignedRiderId,
+        assignedRiderName,
+        assignedRiderPhone,
+        status: 'assigned',
+        assignedAt: admin.firestore.FieldValue.serverTimestamp()
       });
+
+      const result = { success: true };
 
       log({
         level: 'info',

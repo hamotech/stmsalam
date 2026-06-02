@@ -18,10 +18,12 @@ const BOOTSTRAP_RIDER_EMAILS = new Set(
 );
 
 export function resolveUserRole(email, profileRole) {
-  const r = profileRole === 'admin' ? 'admin' : profileRole === 'rider' ? 'rider' : 'user';
-  if (r === 'admin' || r === 'rider') return r;
+  // Preserve all known roles; only default to 'user' for unknown values
+  const KNOWN_ROLES = new Set(['admin', 'rider', 'driver', 'user']);
+  const r = KNOWN_ROLES.has(profileRole) ? profileRole : 'user';
+  if (r === 'admin' || r === 'rider' || r === 'driver') return r;
   const e = (email || '').trim().toLowerCase();
   if (e && BOOTSTRAP_ADMIN_EMAILS.has(e)) return 'admin';
-  if (e && BOOTSTRAP_RIDER_EMAILS.has(e)) return 'rider';
+  if (e && BOOTSTRAP_RIDER_EMAILS.has(e)) return 'driver';
   return 'user';
 }

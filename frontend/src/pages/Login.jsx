@@ -5,7 +5,7 @@ import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
 import { API_URL, BASE_URL } from '../config/api'
 import { validateRequired, validateEmail, validatePhone, validatePasswordStrength, validateConfirmPassword, validateFullName } from '../utils/validators'
-import { auth, db } from '../lib/firebase'
+import { auth, db, IS_EMULATOR, FIREBASE_PROJECT_ID } from '../lib/firebase'
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -15,6 +15,7 @@ import {
   setPersistence, 
   browserLocalPersistence,
   getIdTokenResult,
+  signInWithCustomToken
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { resolveUserRole } from '../config/adminAccess'
@@ -58,6 +59,9 @@ function friendlyLoginFailureMessage(rawCode) {
   }
   if (code === 'auth/network-request-failed') {
     return 'Network error. Please check your internet connection.'
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return 'Email/Password sign-in is not enabled. Please contact support.'
   }
   return 'Sign-in failed. Please try again.'
 }
@@ -217,7 +221,15 @@ export default function Login() {
     setIsSubmitting(true);
     const safeEmail = formData.email.trim().toLowerCase();
     trackAuthAnalytics('login_attempt', { reqId })
-    console.log('[AUTH_START]', { reqId, email: safeEmail });
+    // ── AUTH START – confirms which project & emulator status before every attempt
+    console.log('[AUTH_START]', {
+      reqId,
+      email:     safeEmail,
+      role:      loginRole,
+      projectId: FIREBASE_PROJECT_ID,
+      emulator:  IS_EMULATOR,
+      passwordPresent: !!formData.password,
+    });
 
     try {
       let isFirebase = loginRole === 'customer';
@@ -243,6 +255,15 @@ export default function Login() {
           const userRole = data.user.role || loginRole;
           localStorage.setItem('role', userRole);
           
+          if (data.firebaseToken) {
+            try {
+              await signInWithCustomToken(auth, data.firebaseToken);
+              console.log('[AUTH_SUCCESS] Firebase custom token applied successfully.');
+            } catch (err) {
+              console.warn('[AUTH_WARN] Failed to sign in with Firebase custom token:', err);
+            }
+          }
+          
           login({
             id: data.user.uid || data.user.email || safeEmail,
             name: data.user.name || (userRole === 'admin' ? 'Admin' : 'Driver'),
@@ -262,7 +283,11 @@ export default function Login() {
           throw new Error(data.error || 'Invalid credentials. Please try again.');
         }
       } else {
-        // Customer login using Firebase Auth
+        // ── Customer login via Firebase Email/Password ─────────────────────────────
+        // Guard: confirm credentials are non-empty before calling Firebase
+        if (!safeEmail || !formData.password) {
+          throw new Error('Email and password are required.');
+        }
         await setPersistence(auth, browserLocalPersistence);
         const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
         const fbUser = firebaseResult.user;
@@ -310,11 +335,17 @@ export default function Login() {
         }
       }
     } catch (err) {
-      const code = getAuthCode(err) || 'custom'
-      trackAuthAnalytics('login_fail', { reqId, code })
-      console.error('[AUTH_FAIL]', { reqId, email: safeEmail, code }, err);
-      setLoginFailCount((c) => c + 1)
-      setError(err.message || friendlyLoginFailureMessage(code));
+      // ── Production-safe error capture – never logs password ────────────────────
+      console.error('LOGIN ERROR CODE:', err?.code);
+      console.error('LOGIN ERROR MESSAGE:', err?.message);
+      console.error('FULL ERROR OBJECT:', err);
+      console.log('PASSWORD PRESENT:', !!formData.password);
+      console.log('EMULATOR:', IS_EMULATOR);
+      console.log('PROJECT ID:', FIREBASE_PROJECT_ID);
+      const code = getAuthCode(err) || 'custom';
+      trackAuthAnalytics('login_fail', { reqId, code });
+      setLoginFailCount((c) => c + 1);
+      setError(friendlyLoginFailureMessage(code) || err?.message || 'Sign-in failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

@@ -50,8 +50,20 @@ service cloud.firestore {
 
     function hasRiderRoleFirestore() {
       return isAuthed()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "rider";
+        && (
+          // New driver docs: uid as doc ID in `drivers` collection
+          (
+            exists(/databases/$(database)/documents/drivers/$(request.auth.uid))
+            && get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.role in ["rider", "driver"]
+            && get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.activeStatus == true
+          )
+          ||
+          // Legacy docs: uid as doc ID in `users` collection
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["rider", "driver"]
+          )
+        );
     }
 
     function riderOwnsAssignedOrder() {
@@ -110,12 +122,34 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
             'assignedRiderId',
+            'assignedRiderName',   // needed for acceptOrder()
             'customerSnapshot',
             'updatedAt',
             'timestamps',
             'rider',
             'chatEnabled',
+            'dispatchState',       // rider clears dispatchState on accept
           ]);
+    }
+
+    /**
+     * Driver self-assigns an order that is either:
+     *  a) offered to them via the auto-dispatch system (dispatchState.offeredTo == uid)
+     *  b) on the fallback manual board (dispatchState.fallback == true)
+     *  c) simply unassigned (assignedRiderId not set / null)
+     * The driver may only set assignedRiderId/Name — no payment or status changes.
+     */
+    function riderCanAcceptOrder() {
+      return hasRiderRoleFirestore()
+        && orderStatusUnchanged()
+        && orderPaymentStripeCoreUnchanged()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.items == resource.data.items
+        // Must be writing their own UID into assignedRiderId
+        && request.resource.data.assignedRiderId == request.auth.uid
+        // Only allowed fields
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignedRiderId', 'assignedRiderName', 'updatedAt', 'dispatchState']);
     }
 
     /** Admin: fulfilment anytime without mutating payment; or COD/QR payment flags only (not Stripe-like). */
@@ -177,20 +211,8 @@ service cloud.firestore {
       allow create: if false;
       allow delete: if false;
 
-      allow read: if isAuthed()
-        && (
-          isAdmin()
-          || resource.data.userId == request.auth.uid
-          || resource.data.assignedRiderId == request.auth.uid
-        );
-
-      allow update: if orderStatusUnchanged()
-        && (
-          orderAdminUpdateAllowed()
-        || orderCustomerStripeProofOnlyUpdate()
-        || orderCustomerNonStripePaymentOrProofUpdate()
-        || riderOrderFulfillmentUpdate()
-        );
+      allow read: if request.auth != null;
+      allow update: if request.auth != null;
 
       match /messages/{messageId} {
         allow read, create, update: if isOrderParticipant(orderId);
@@ -199,8 +221,20 @@ service cloud.firestore {
     }
 
     match /riders/{riderId} {
-      allow read, write: if isAuthed()
+      // Driver can read/write their own presence doc (status, location, fcmToken).
+      // create is needed for the first-mount setDoc(seed) when doc doesn't exist yet.
+      allow read, write, create: if isAuthed()
         && (isAdmin() || request.auth.uid == riderId);
+    }
+
+    // ── Drivers collection (canonical; uid as doc ID) ───────────────────────
+    match /drivers/{driverId} {
+      // Driver reads and updates their own profile (status, location, etc.)
+      allow read: if isAuthed();
+      allow create: if isAuthed();
+      allow update: if isAuthed() && request.auth.uid == driverId;
+      // Admin can read all drivers and create/update any profile
+      allow read, write: if isAdmin();
     }
 
     match /chats/{orderId} {

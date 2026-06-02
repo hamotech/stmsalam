@@ -11,7 +11,7 @@ import { safeLog } from '../utils/runtimeSafety'
 import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 
 /** Align with unified `orders.status` + legacy rider UI strings. */
-const STATUS_FILTER = ['ready_for_pickup', 'out_for_delivery']
+const STATUS_FILTER = ['assigned', 'picked_up', 'ready_for_pickup', 'out_for_delivery']
 const TASK_STATUS_FILTER = new Set(STATUS_FILTER)
 
 const toOrderStatus = (raw) =>
@@ -44,7 +44,7 @@ export default function DriverPanel() {
   const { user, loading, isAuthenticated } = useAuth() || {}
   const navigate = useNavigate()
   const riderId = user?.id || ''
-  const isRiderAllowed = Boolean(isAuthenticated && user && user.role === 'rider')
+  const isRiderAllowed = Boolean(isAuthenticated && user && (user.role === 'rider' || user.role === 'driver'))
   const [riderProfile, setRiderProfile] = useState({
     role: 'rider',
     status: 'offline',
@@ -95,14 +95,15 @@ export default function DriverPanel() {
 
   useEffect(() => {
     if (!isRiderAllowed || !riderId) return undefined
-    const riderRef = doc(db, 'riders', riderId)
+    const driverRef = doc(db, 'drivers', riderId)
     const unsub = onSnapshot(
-      riderRef,
+      driverRef,
       async (snap) => {
         try {
           if (!snap.exists()) {
-            const seed = { role: 'rider', status: 'offline', assignedOrders: [] }
-            await setDoc(riderRef, seed, { merge: true })
+            const seed = { role: user?.role || 'driver', status: 'offline', assignedOrders: [] }
+            console.log("Creating driver:", riderId);
+            await setDoc(driverRef, seed, { merge: true })
             setRiderProfile(seed)
             if (import.meta.env.DEV) safeLog('Rider active status', seed.status)
             return
@@ -174,7 +175,7 @@ export default function DriverPanel() {
           }).catch(err => safeLog('API Loc Update Error', err))
           
           await setDoc(
-            doc(db, 'riders', riderId),
+            doc(db, 'drivers', riderId),
             {
               location: {
                 lat,
@@ -200,7 +201,7 @@ export default function DriverPanel() {
     if (import.meta.env.DEV) safeLog('auth.uid:', riderId)
     const q = query(
       collection(db, 'orders'),
-      where('assignedRiderId', '==', riderId)
+      where('assignedDriverId', '==', riderId)
     )
     const unsub = onSnapshot(
       q,
@@ -209,12 +210,12 @@ export default function DriverPanel() {
         if (import.meta.env.DEV) safeLog('Fetched orders count', rawRows.length)
         const rows = rawRows.filter((row) => {
           console.log('[ORDER_ASSIGNMENT]', {
-            assignedRiderId: row.assignedRiderId,
+            assignedDriverId: row.assignedDriverId,
             assignedRiderName: row.assignedRiderName
           });
-          console.log('[riderQuery]', { currentUid: riderId, assignedRiderId: row.assignedRiderId });
+          console.log('[riderQuery]', { currentUid: riderId, assignedDriverId: row.assignedDriverId });
           const st = toOrderStatus(row.status)
-          if (import.meta.env.DEV) safeLog('order.assignedRiderId:', row.assignedRiderId)
+          if (import.meta.env.DEV) safeLog('order.assignedDriverId:', row.assignedDriverId)
           return STATUS_FILTER.includes(st)
         })
         if (import.meta.env.DEV) safeLog('Matched rider orders', rows.length)
@@ -252,7 +253,7 @@ export default function DriverPanel() {
     start.setHours(0, 0, 0, 0)
     const q = query(
       collection(db, 'orders'),
-      where('assignedRiderId', '==', riderId),
+      where('assignedDriverId', '==', riderId),
       where('status', '==', 'delivered'),
       where('updatedAt', '>=', start),
       limit(200)
@@ -268,9 +269,9 @@ export default function DriverPanel() {
   }, [isRiderAllowed, riderId])
 
   const activeDelivery = useMemo(() => {
-    const priority = { out_for_delivery: 0, ready_for_pickup: 1 }
+    const priority = { out_for_delivery: 0, ready_for_pickup: 1, picked_up: 2 }
     const sorted = [...assignedOrders]
-      .filter((o) => toOrderStatus(o.status) !== 'delivered')
+      .filter((o) => toOrderStatus(o.status) !== 'delivered' && toOrderStatus(o.status) !== 'assigned')
       .sort((a, b) => {
         const pa = priority[toOrderStatus(a.status)] ?? 99
         const pb = priority[toOrderStatus(b.status)] ?? 99
@@ -285,8 +286,8 @@ export default function DriverPanel() {
 
   const setShiftStatus = async (next) => {
     if (!riderId) return
-    const riderRef = doc(db, 'riders', riderId)
-    const snap = await getDoc(riderRef)
+    const driverRef = doc(db, 'drivers', riderId)
+    const snap = await getDoc(driverRef)
     
     let fcmToken = ''
     if (next === 'online') {
@@ -300,11 +301,13 @@ export default function DriverPanel() {
       }
     }
 
-    const payload = { role: 'rider', status: next, fcmToken }
+    const payload = { role: user?.role || 'driver', status: next, fcmToken, shiftActive: next === 'online', lastActive: serverTimestamp() }
     if (!snap.exists()) {
-      await setDoc(riderRef, { ...payload, assignedOrders: [] }, { merge: true })
+      console.log("Updating driver:", riderId);
+      await setDoc(driverRef, { ...payload, assignedOrders: [] }, { merge: true })
     } else {
-      await updateDoc(riderRef, payload)
+      console.log("Updating driver:", riderId);
+      await updateDoc(driverRef, payload)
     }
     if (import.meta.env.DEV) safeLog('Rider active status', next)
   }
@@ -346,7 +349,16 @@ export default function DriverPanel() {
     if (!orderId) return
     setBusyOrderId(orderId)
     try {
-      await updateDoc(doc(db, 'orders', orderId), { assignedRiderId: riderId, assignedRiderName: user?.name || 'Rider' })
+      console.log("Driver UID:", user?.uid || riderId);
+      const order = assignedOrders.find(o => o.id === orderId) || {};
+      console.log("Assigned Driver:", order.assignedDriverId);
+      console.log("Accepting order:", order.id || orderId);
+
+      await updateDoc(doc(db, 'orders', orderId), { 
+        status: 'picked_up',
+        acceptedAt: serverTimestamp(),
+        riderAccepted: true
+      })
       setShiftStatus('busy')
     } catch(err) {
       safeLog('Error accepting order', err);
@@ -468,7 +480,7 @@ export default function DriverPanel() {
                 <button onClick={() => callCustomer(activeDelivery)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><Phone size={18} /> Call</button>
                 <button onClick={() => setChatOrderId(activeDelivery.id)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><MessageSquare size={18} /> Chat</button>
               </div>
-              {toOrderStatus(activeDelivery.status) === 'ready_for_pickup' || toOrderStatus(activeDelivery.status) === 'preparing' || toOrderStatus(activeDelivery.status) === 'placed' ? (
+              {toOrderStatus(activeDelivery.status) === 'ready_for_pickup' || toOrderStatus(activeDelivery.status) === 'preparing' || toOrderStatus(activeDelivery.status) === 'placed' || toOrderStatus(activeDelivery.status) === 'picked_up' ? (
                 <button
                   type="button"
                   disabled={busyOrderId === activeDelivery.id}
@@ -562,6 +574,14 @@ export default function DriverPanel() {
                 <div style={{ marginTop: '6px', fontSize: '13px', color: '#334155', fontWeight: 600 }}>
                   {(order.customerSnapshot?.name || order.customer?.name || 'Customer')} · {(order.customerSnapshot?.address || order.customer?.address || order.address || 'No address')}
                 </div>
+                {toOrderStatus(order.status) === 'assigned' && (
+                  <button 
+                    disabled={busyOrderId === order.id} 
+                    onClick={() => acceptOrder(order.id)} 
+                    style={{ marginTop: '12px', width: '100%', padding: '10px', borderRadius: '10px', border: 'none', background: '#013220', color: 'white', fontWeight: 800, cursor: busyOrderId === order.id ? 'wait' : 'pointer' }}>
+                    {busyOrderId === order.id ? 'Accepting...' : 'Accept Order'}
+                  </button>
+                )}
               </div>
             ))}
           </div>

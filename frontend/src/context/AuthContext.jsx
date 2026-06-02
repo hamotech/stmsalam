@@ -32,27 +32,46 @@ export function AuthProvider({ children }) {
         let profileAddress = '';
 
         try {
-          const profileRef = doc(db, 'users', firebaseUser.uid);
-          const profileSnap = await getDoc(profileRef);
-          if (profileSnap.exists()) {
-            const profileData = profileSnap.data();
-            role = resolveUserRole(firebaseUser.email, profileData.role);
-            name = profileData.name || name;
-            if (typeof profileData.phone === 'string' && profileData.phone.trim()) {
-              profilePhone = profileData.phone.trim();
-            } else if (typeof profileData.mobile === 'string' && profileData.mobile.trim()) {
-              profilePhone = profileData.mobile.trim();
+          // ── Step 1: Check `drivers` collection FIRST (uid as doc ID) ──────────
+          // Drivers are created by admin with their Firebase UID as the doc ID.
+          // We must check this BEFORE users/ so the role is never downgraded to "user".
+          const driverRef = doc(db, 'drivers', firebaseUser.uid);
+          const driverSnap = await getDoc(driverRef);
+
+          if (driverSnap.exists()) {
+            const driverData = driverSnap.data();
+            // Trust the stored role ("driver" or "rider") — never override with "user"
+            role = driverData.role || 'driver';
+            name = driverData.name || name;
+            if (typeof driverData.phone === 'string' && driverData.phone.trim()) {
+              profilePhone = driverData.phone.trim();
             }
-            if (typeof profileData.address === 'string' && profileData.address.trim()) {
-              profileAddress = profileData.address.trim();
-            } else if (typeof profileData.defaultAddress === 'string' && profileData.defaultAddress.trim()) {
-              profileAddress = profileData.defaultAddress.trim();
-            }
+            console.log('[AuthContext] Driver profile found → role:', role, 'uid:', firebaseUser.uid);
           } else {
-            role = resolveUserRole(firebaseUser.email, null);
+            // ── Step 2: Fall back to `users` collection (customers / admins) ────
+            const profileRef = doc(db, 'users', firebaseUser.uid);
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists()) {
+              const profileData = profileSnap.data();
+              role = resolveUserRole(firebaseUser.email, profileData.role);
+              name = profileData.name || name;
+              if (typeof profileData.phone === 'string' && profileData.phone.trim()) {
+                profilePhone = profileData.phone.trim();
+              } else if (typeof profileData.mobile === 'string' && profileData.mobile.trim()) {
+                profilePhone = profileData.mobile.trim();
+              }
+              if (typeof profileData.address === 'string' && profileData.address.trim()) {
+                profileAddress = profileData.address.trim();
+              } else if (typeof profileData.defaultAddress === 'string' && profileData.defaultAddress.trim()) {
+                profileAddress = profileData.defaultAddress.trim();
+              }
+            } else {
+              role = resolveUserRole(firebaseUser.email, null);
+            }
+            console.log('[AuthContext] User profile found → role:', role, 'uid:', firebaseUser.uid);
           }
         } catch (profileErr) {
-          console.warn('Failed to fetch user profile role:', profileErr);
+          console.warn('[AuthContext] Failed to fetch profile:', profileErr);
           role = resolveUserRole(firebaseUser.email, null);
         }
 
@@ -81,9 +100,23 @@ export function AuthProvider({ children }) {
         localStorage.setItem('stm_user', JSON.stringify(userData));
       } else {
         // CRITICAL: If Firebase says signed out, PURGE everything to prevent ghost sessions
-        setIsAuthenticated(false);
-        setUser(null);
-        localStorage.removeItem('stm_user');
+        // ONLY if there is no custom API token (driver/admin)
+        if (!localStorage.getItem('token')) {
+          setIsAuthenticated(false);
+          setUser(null);
+          localStorage.removeItem('stm_user');
+        } else {
+          // If they have a token, restore their authentication state from localStorage
+          try {
+            const savedUser = localStorage.getItem('stm_user');
+            if (savedUser) {
+              setUser(JSON.parse(savedUser));
+              setIsAuthenticated(true);
+            }
+          } catch(e) {
+            // Do nothing
+          }
+        }
       }
       setLoading(false);
     });
