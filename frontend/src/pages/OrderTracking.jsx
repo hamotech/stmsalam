@@ -11,9 +11,10 @@ import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import {
   Plus, CircleCheck, Clock, Package, Truck,
   ReceiptText, ArrowLeft, MessageCircle,
-  FileCheck, Paperclip, RefreshCw
+  FileCheck, Paperclip, RefreshCw, MapPin
 } from 'lucide-react'
 import { getOrderContext } from '../admin/orderPipeline.js'
+import { GoogleMap, useJsApiLoader, Marker, DirectionsService, DirectionsRenderer } from '@react-google-maps/api'
 
 export default function OrderTracking() {
   const params = useParams()
@@ -32,6 +33,14 @@ export default function OrderTracking() {
   const [showChat, setShowChat] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [riderLocation, setRiderLocation] = useState(null)
+  const [directions, setDirections] = useState(null)
+  const [etaText, setEtaText] = useState('')
+  const lastRouteCalc = useRef(0)
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+  })
 
   const FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered']
   const steps = [
@@ -143,23 +152,35 @@ export default function OrderTracking() {
   }, [cleanOrderId])
 
   useEffect(() => {
-    const riderId = String(order?.riderId || '').trim()
+    const riderId = String(order?.assignedRiderId || order?.riderId || '').trim()
     if (!riderId) return undefined
-    const riderRef = doc(db, 'riders', riderId)
-    const unsub = onSnapshot(
-      riderRef,
-      (snap) => {
-        if (!snap.exists()) return
-        const loc = snap.data()?.location || null
-        if (loc?.lat && loc?.lng) {
-          setRiderLocation(loc)
-          safeLog('gps update received', { riderId, lat: loc.lat, lng: loc.lng })
+    
+    // Poll the backend RTDB endpoint for live driver location
+    const fetchLocation = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/driver/location/${riderId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.location) {
+            setRiderLocation(prev => {
+              // Force route recalculation every 60 seconds
+              if (Date.now() - lastRouteCalc.current > 60000) {
+                setDirections(null)
+                lastRouteCalc.current = Date.now()
+              }
+              return { lat: data.location.latitude, lng: data.location.longitude }
+            })
+          }
         }
-      },
-      () => undefined
-    )
-    return () => unsub()
-  }, [order?.riderId])
+      } catch (err) {
+        console.error('Failed to fetch driver location', err)
+      }
+    }
+
+    fetchLocation()
+    const interval = setInterval(fetchLocation, 3000)
+    return () => clearInterval(interval)
+  }, [order?.assignedRiderId, order?.riderId])
 
   useEffect(() => {
     if (!stripeSessionId || !cleanOrderId) return undefined
@@ -369,25 +390,53 @@ export default function OrderTracking() {
               </div>
            </div>
 
-           {/* Map Embed or Placeholder */}
+            {/* Map Embed or Placeholder */}
            <div style={{ background: 'white', borderRadius: '32px', overflow: 'hidden', height: '340px', border: '1px solid #e2e8f0', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200)', backgroundSize: 'cover', opacity: 0.6 }} />
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '100%', textAlign: 'center' }}>
-                 <div style={{ background: 'white', padding: '16px 24px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', display: 'inline-flex', alignItems: 'center', gap: '12px', fontWeight: 900 }}>
-                    <div style={{ width: '12px', height: '12px', background: 'var(--green-mid)', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
-                    GPS Tracking Active
-                 </div>
-                 {!order?.riderId ? (
-                   <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'rgba(255,255,255,0.95)', display: 'inline-block', padding: '6px 10px', borderRadius: '10px' }}>
-                     Waiting for rider assignment
-                   </div>
-                 ) : null}
-                 {riderLocation ? (
-                   <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'rgba(255,255,255,0.95)', display: 'inline-block', padding: '6px 10px', borderRadius: '10px' }}>
-                     Rider location: {Number(riderLocation.lat).toFixed(5)}, {Number(riderLocation.lng).toFixed(5)}
-                   </div>
-                 ) : null}
-              </div>
+              {isLoaded && riderLocation ? (
+                <>
+                  {etaText && (
+                    <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, background: 'var(--green-dark)', color: 'white', padding: '12px 18px', borderRadius: '16px', fontWeight: 900, fontSize: '14px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+                      ETA: {etaText}
+                    </div>
+                  )}
+                  <GoogleMap
+                    mapContainerStyle={{ width: '100%', height: '100%' }}
+                    center={riderLocation}
+                    zoom={15}
+                    options={{ disableDefaultUI: true }}
+                  >
+                    {order && !directions && (
+                      <DirectionsService
+                        options={{
+                          destination: order?.customerSnapshot?.address || order?.customer?.address || order?.address || '',
+                          origin: riderLocation,
+                          travelMode: 'DRIVING'
+                        }}
+                        callback={(res, status) => {
+                          if (status === 'OK') {
+                            setDirections(res)
+                            setEtaText(res.routes[0]?.legs[0]?.duration?.text || '')
+                          }
+                        }}
+                      />
+                    )}
+                    {directions && (
+                      <DirectionsRenderer directions={directions} options={{ suppressMarkers: true }} />
+                    )}
+                    <Marker position={riderLocation} icon={{ url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }} />
+                  </GoogleMap>
+                </>
+              ) : (
+                <>
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200)', backgroundSize: 'cover', opacity: 0.6 }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '100%', textAlign: 'center' }}>
+                     <div style={{ background: 'white', padding: '16px 24px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', display: 'inline-flex', alignItems: 'center', gap: '12px', fontWeight: 900 }}>
+                        <div style={{ width: '12px', height: '12px', background: 'var(--green-mid)', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
+                        {!(order?.assignedRiderId || order?.riderId) ? 'Waiting for driver assignment...' : 'Locating Driver...'}
+                     </div>
+                  </div>
+                </>
+              )}
            </div>
         </div>
 

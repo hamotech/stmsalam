@@ -211,8 +211,8 @@ const Orders = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="header-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ fontSize: '32px', fontWeight: '950', color: '#0f172a', letterSpacing: '-1px' }}>Operations · Orders</h2>
             <p style={{ color: '#64748b', fontWeight: 600 }}>Strict pipeline — one stage at a time (Grab-style).</p>
@@ -246,8 +246,8 @@ const Orders = () => {
         </div>
       </div>
 
-      <div style={{ background: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', overflowX: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+      <div style={{ background: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+        <table className="orders-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead>
             <tr style={{ background: '#f8fafc', color: '#64748b', textAlign: 'left', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
               <th style={{ padding: '20px', borderBottom: '1px solid #e2e8f0' }}>Order Details</th>
@@ -439,6 +439,23 @@ const Orders = () => {
         @keyframes bounce { 
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-3px); }
+        }
+        @media (max-width: 768px) {
+          .header-controls { flex-direction: column; align-items: flex-start !important; }
+          .header-controls > div { align-items: flex-start !important; width: 100%; }
+          .orders-table, .orders-table thead, .orders-table tbody, .orders-table th, .orders-table td, .orders-table tr { display: block; }
+          .orders-table thead tr { position: absolute; top: -9999px; left: -9999px; }
+          .orders-table tr { border: 1px solid #e2e8f0; border-radius: 16px; margin: 12px; margin-bottom: 24px; padding-bottom: 12px; background: #fff !important; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+          .orders-table td { border: none !important; position: relative; padding: 12px 16px 12px 120px !important; text-align: left !important; min-height: 48px; border-bottom: 1px dashed #f1f5f9 !important; }
+          .orders-table td:last-child { border-bottom: none !important; }
+          .orders-table td:before { position: absolute; top: 14px; left: 16px; width: 90px; padding-right: 10px; white-space: nowrap; font-weight: 800; color: #94a3b8; font-size: 11px; text-transform: uppercase; }
+          .orders-table td:nth-of-type(1):before { content: "Order"; }
+          .orders-table td:nth-of-type(2):before { content: "Customer"; }
+          .orders-table td:nth-of-type(3):before { content: "Items"; }
+          .orders-table td:nth-of-type(4):before { content: "Payment"; }
+          .orders-table td:nth-of-type(5):before { content: "Stage"; }
+          .orders-table td:nth-of-type(6):before { content: "Actions"; }
+          .orders-table td:nth-of-type(6) > div { justify-content: flex-start !important; flex-wrap: wrap; }
         }
       `}</style>
     </div>

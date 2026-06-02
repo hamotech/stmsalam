@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users, Image as ImageIcon, Settings, MessageSquare, ChefHat, Bike, CreditCard, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, PackageSearch, Tags, ShoppingBag, Users, Image as ImageIcon, Settings, MessageSquare, ChefHat, Bike, CreditCard, BarChart3, UserCog, Map } from 'lucide-react';
 import { subscribeOrders, subscribeSupportInbox } from '../services/dataService';
 
 const Sidebar = () => {
@@ -29,12 +29,15 @@ const Sidebar = () => {
     { name: 'Categories', path: '/admin/categories', icon: <Tags size={20} /> },
     { name: 'Orders', path: '/admin/orders', icon: <ShoppingBag size={20} />, badge: newOrdersCount },
     { name: 'Kitchen', path: '/admin/kitchen', icon: <ChefHat size={20} /> },
-    { name: 'Riders', path: '/admin/riders', icon: <Bike size={20} /> },
+    { name: 'Riders (Assign)', path: '/admin/riders', icon: <Bike size={20} /> },
+    { name: 'Drivers & Riders', path: '/admin/riders-management', icon: <UserCog size={20} /> },
+    { name: 'Live Fleet', path: '/admin/live-fleet', icon: <Map size={20} /> },
     { name: 'Payments', path: '/admin/payments', icon: <CreditCard size={20} /> },
     { name: 'Analytics', path: '/admin/analytics', icon: <BarChart3 size={20} /> },
     { name: 'Customer chat', path: '/admin/support', icon: <MessageSquare size={20} />, badge: supportThreadCount },
     { name: 'Gallery', path: '/admin/gallery', icon: <ImageIcon size={20} /> },
     { name: 'Customers', path: '/admin/customers', icon: <Users size={20} /> },
+    { name: 'Staff', path: '/admin/staff', icon: <UserCog size={20} /> },
     { name: 'Settings', path: '/admin/settings', icon: <Settings size={20} /> }
   ];
 

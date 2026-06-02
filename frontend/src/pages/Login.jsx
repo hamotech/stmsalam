@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Phone, Lock, User, ArrowRight, ShieldCheck, Mail, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react'
 import { shopInfo } from '../data/menuData'
 import { useAuth } from '../context/AuthContext'
-import { API_URL } from '../config/api'
+import { API_URL, BASE_URL } from '../config/api'
 import { validateRequired, validateEmail, validatePhone, validatePasswordStrength, validateConfirmPassword, validateFullName } from '../utils/validators'
 import { auth, db } from '../lib/firebase'
 import { 
@@ -64,6 +64,7 @@ function friendlyLoginFailureMessage(rawCode) {
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'register'
+  const [loginRole, setLoginRole] = useState('customer') // 'customer' | 'driver' | 'admin'
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -82,6 +83,9 @@ export default function Login() {
   const { login } = useAuth()
   const query = new URLSearchParams(window.location.search)
   const redirectPath = query.get('redirect') || '/'
+  const urlRole = query.get('role')
+  
+  const headerTitle = urlRole === 'admin' ? 'Admin Portal' : urlRole === 'rider' ? 'Rider Portal' : 'STM Login'
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -216,61 +220,101 @@ export default function Login() {
     console.log('[AUTH_START]', { reqId, email: safeEmail });
 
     try {
-      await setPersistence(auth, browserLocalPersistence);
-      const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
-      const fbUser = firebaseResult.user;
-      setLoginFailCount(0)
-      trackAuthAnalytics('login_success', { reqId })
-      console.log('[AUTH_SUCCESS]', { reqId, email: fbUser.email ?? safeEmail, uid: fbUser.uid });
-
-      let role = 'user';
-      let profileName = fbUser.displayName || 'Customer';
-      try {
-        const userRef = doc(db, 'users', fbUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const profile = userSnap.data();
-          role = resolveUserRole(safeEmail, profile.role);
-          profileName = profile.name || profileName;
+      let isFirebase = loginRole === 'customer';
+      
+      if (!isFirebase) {
+        // Driver and Admin login using custom API endpoint
+        let apiUrl = '';
+        if (loginRole === 'driver') {
+          apiUrl = `${BASE_URL || 'http://localhost:5000'}/api/driver/login`;
+        } else if (loginRole === 'admin') {
+          apiUrl = `${BASE_URL || 'http://localhost:5000'}/api/admin/login`;
+        }
+        
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: safeEmail, password: formData.password })
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+          localStorage.setItem('token', data.token);
+          const userRole = data.user.role || loginRole;
+          localStorage.setItem('role', userRole);
+          
+          login({
+            id: data.user.uid || data.user.email || safeEmail,
+            name: data.user.name || (userRole === 'admin' ? 'Admin' : 'Driver'),
+            email: safeEmail,
+            role: userRole
+          });
+          
+          if (userRole === 'admin') {
+            setSuccess('Admin authenticated! Accessing Command Center...');
+            setTimeout(() => navigate('/admin'), 1200);
+          } else {
+            setSuccess(`${userRole === 'rider' ? 'Rider' : 'Driver'} authenticated! Opening Dashboard...`);
+            setTimeout(() => navigate('/driver'), 1200);
+          }
+          return;
         } else {
+          throw new Error(data.error || 'Invalid credentials. Please try again.');
+        }
+      } else {
+        // Customer login using Firebase Auth
+        await setPersistence(auth, browserLocalPersistence);
+        const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
+        const fbUser = firebaseResult.user;
+        setLoginFailCount(0)
+        trackAuthAnalytics('login_success', { reqId })
+        console.log('[AUTH_SUCCESS]', { reqId, email: fbUser.email ?? safeEmail, uid: fbUser.uid });
+
+        let role = 'user';
+        let profileName = fbUser.displayName || 'Customer';
+        try {
+          const userRef = doc(db, 'users', fbUser.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const profile = userSnap.data();
+            role = resolveUserRole(safeEmail, profile.role);
+            profileName = profile.name || profileName;
+          } else {
+            role = resolveUserRole(safeEmail, null);
+          }
+        } catch (profileErr) {
+          const pCode = getAuthCode(profileErr)
+          console.error('[AUTH_PROFILE_READ_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: pCode }, profileErr);
           role = resolveUserRole(safeEmail, null);
         }
-      } catch (profileErr) {
-        const pCode = getAuthCode(profileErr)
-        console.error('[AUTH_PROFILE_READ_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: pCode }, profileErr);
-        role = resolveUserRole(safeEmail, null);
-      }
 
-      await fbUser.getIdToken(true);
-      try {
-        const tr = await getIdTokenResult(fbUser);
-        if (tr.claims?.admin === true) {
-          role = 'admin';
+        await fbUser.getIdToken(true);
+        try {
+          const tr = await getIdTokenResult(fbUser);
+          if (tr.claims?.admin === true) {
+            role = 'admin';
+          }
+        } catch (claimErr) {
+          const cCode = getAuthCode(claimErr)
+          console.error('[AUTH_TOKEN_CLAIMS_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: cCode }, claimErr);
         }
-      } catch (claimErr) {
-        const cCode = getAuthCode(claimErr)
-        console.error('[AUTH_TOKEN_CLAIMS_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: cCode }, claimErr);
-      }
 
-      if (role === 'admin') {
-        login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
-        setSuccess('Admin authenticated! Accessing Command Center...');
-        setTimeout(() => navigate('/admin'), 1200);
-      } else if (role === 'rider') {
-        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'rider' });
-        setSuccess('Rider authenticated! Opening Delivery Dashboard...');
-        setTimeout(() => navigate('/rider'), 1200);
-      } else {
-        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'user' });
-        setSuccess('Welcome back! Redirecting...');
-        setTimeout(() => navigate(redirectPath), 1200);
+        if (role === 'admin') {
+          login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
+          setSuccess('Admin authenticated! Accessing Command Center...');
+          setTimeout(() => navigate('/admin'), 1200);
+        } else {
+          login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'user' });
+          setSuccess('Welcome back! Redirecting...');
+          setTimeout(() => navigate(redirectPath), 1200);
+        }
       }
     } catch (err) {
-      const code = getAuthCode(err)
+      const code = getAuthCode(err) || 'custom'
       trackAuthAnalytics('login_fail', { reqId, code })
       console.error('[AUTH_FAIL]', { reqId, email: safeEmail, code }, err);
       setLoginFailCount((c) => c + 1)
-      setError(friendlyLoginFailureMessage(code));
+      setError(err.message || friendlyLoginFailureMessage(code));
     } finally {
       setIsSubmitting(false);
     }
@@ -400,8 +444,8 @@ export default function Login() {
           }}>
             STM
           </div>
-          <h1 style={{ fontSize: '30px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '8px', letterSpacing: '-1.5px' }}>
-            {mode === 'register' ? 'Create Account' : mode === 'login' ? 'Welcome Back' : 'Quick Access'}
+          <h1 style={{ fontSize: '30px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '8px', letterSpacing: '-1px' }}>
+            {mode === 'register' ? 'Create Account' : headerTitle}
           </h1>
           <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 600 }}>
             {mode === 'register' ? 'Join STM Salam for exclusive deals' :
@@ -412,7 +456,7 @@ export default function Login() {
         {/* Mode Tabs */}
         <div style={{
           display: 'flex', gap: '6px', background: 'var(--cream)', borderRadius: '18px',
-          padding: '6px', marginBottom: '32px'
+          padding: '6px', marginBottom: '24px'
         }}>
           <button type="button" disabled={isSubmitting} onClick={() => { if (isSubmitting) return; setMode('login'); setError(''); setSuccess(''); setFieldErrors({}); setLoginFailCount(0); }} style={{ ...tabStyle(mode === 'login'), opacity: isSubmitting ? 0.6 : 1 }}>
             <LogIn size={16} /> Login
@@ -421,6 +465,35 @@ export default function Login() {
             <UserPlus size={16} /> Register
           </button>
         </div>
+
+        {/* Role Selector (Login Mode Only) */}
+        {mode === 'login' && (
+          <div style={{
+            display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.4)', borderRadius: '12px',
+            padding: '4px', marginBottom: '32px'
+          }}>
+            {['customer', 'driver', 'admin'].map(r => (
+              <button 
+                key={r}
+                type="button" 
+                onClick={() => {
+                  setLoginRole(r);
+                  setError('');
+                }}
+                disabled={isSubmitting}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 800, textTransform: 'capitalize', transition: 'all 0.2s',
+                  background: loginRole === r ? 'var(--green-dark)' : 'transparent',
+                  color: loginRole === r ? 'var(--gold)' : 'var(--green-dark)',
+                  opacity: isSubmitting ? 0.6 : 1
+                }}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Error / Success */}
         {error && (

@@ -1,14 +1,15 @@
 {
-  "_App-Betwg1WZ.js": {
-    "file": "assets/App-Betwg1WZ.js",
+  "_App-B-PI04xS.js": {
+    "file": "assets/App-B-PI04xS.js",
     "name": "App",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_vendor-D9-CikdX.js",
-      "_icons-C9fXCgbF.js"
+      "_vendor-2PFap5f2.js",
+      "_icons-B7HRMgi8.js"
     ],
     "dynamicImports": [
+      "node_modules/@capacitor/splash-screen/dist/esm/web.js",
       "src/pages/Home.jsx",
       "src/pages/Menu.jsx",
       "src/pages/Cart.jsx",
@@ -23,257 +24,273 @@
       "src/pages/OrderTracking.jsx",
       "src/pages/Admin.jsx",
       "src/pages/DriverPanel.jsx",
-      "src/pages/DataSeedPage.jsx"
+      "src/pages/DataSeedPage.jsx",
+      "src/pages/ShopScan.jsx"
     ]
   },
-  "_ChatWindow-CBAaW9eb.js": {
-    "file": "assets/ChatWindow-CBAaW9eb.js",
+  "_ChatWindow-B9yHd9cl.js": {
+    "file": "assets/ChatWindow-B9yHd9cl.js",
     "name": "ChatWindow",
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js"
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js"
     ]
   },
   "_api-C-givZ-6.js": {
     "file": "assets/api-C-givZ-6.js",
     "name": "api"
   },
-  "_client-Dsii-hob.js": {
-    "file": "assets/client-Dsii-hob.js",
+  "_client-BmrtLSgh.js": {
+    "file": "assets/client-BmrtLSgh.js",
     "name": "client",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js"
+      "_vendor-2PFap5f2.js"
     ]
   },
-  "_icons-C9fXCgbF.js": {
-    "file": "assets/icons-C9fXCgbF.js",
+  "_icons-B7HRMgi8.js": {
+    "file": "assets/icons-B7HRMgi8.js",
     "name": "icons",
     "imports": [
-      "_vendor-D9-CikdX.js"
+      "_vendor-2PFap5f2.js"
     ]
   },
   "_orderLifecycleGuards-B28NX-5n.js": {
     "file": "assets/orderLifecycleGuards-B28NX-5n.js",
     "name": "orderLifecycleGuards"
   },
-  "_runtimeSafety-DDGa35ag.js": {
-    "file": "assets/runtimeSafety-DDGa35ag.js",
-    "name": "runtimeSafety"
-  },
   "_validators-KcHLYWIO.js": {
     "file": "assets/validators-KcHLYWIO.js",
     "name": "validators"
   },
-  "_vendor-D9-CikdX.js": {
-    "file": "assets/vendor-D9-CikdX.js",
+  "_vendor-2PFap5f2.js": {
+    "file": "assets/vendor-2PFap5f2.js",
     "name": "vendor",
     "isDynamicEntry": true
   },
   "index.html": {
-    "file": "assets/index-BnBKAzgp.js",
+    "file": "assets/index-DHSMsQSk.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js"
+      "_vendor-2PFap5f2.js"
     ],
     "dynamicImports": [
-      "_App-Betwg1WZ.js",
-      "_vendor-D9-CikdX.js",
-      "_client-Dsii-hob.js"
+      "_App-B-PI04xS.js",
+      "_vendor-2PFap5f2.js",
+      "_client-BmrtLSgh.js"
     ],
     "css": [
       "assets/index-D-SnMtD4.css"
     ]
   },
+  "node_modules/@capacitor/splash-screen/dist/esm/web.js": {
+    "file": "assets/web-l0u_SPd3.js",
+    "name": "web",
+    "src": "node_modules/@capacitor/splash-screen/dist/esm/web.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_App-B-PI04xS.js",
+      "index.html",
+      "_vendor-2PFap5f2.js",
+      "_icons-B7HRMgi8.js"
+    ]
+  },
   "src/pages/AboutUs.jsx": {
-    "file": "assets/AboutUs-DJCHTc59.js",
+    "file": "assets/AboutUs-CX7yy-pj.js",
     "name": "AboutUs",
     "src": "src/pages/AboutUs.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Admin.jsx": {
-    "file": "assets/Admin-Cas8iNeA.js",
+    "file": "assets/Admin-YovbLZrh.js",
     "name": "Admin",
     "src": "src/pages/Admin.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
-      "_ChatWindow-CBAaW9eb.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
+      "_ChatWindow-B9yHd9cl.js",
       "_validators-KcHLYWIO.js",
-      "_runtimeSafety-DDGa35ag.js",
-      "_orderLifecycleGuards-B28NX-5n.js",
       "index.html"
     ]
   },
   "src/pages/Cart.jsx": {
-    "file": "assets/Cart-Chno_P3B.js",
+    "file": "assets/Cart-DvZmE7nK.js",
     "name": "Cart",
     "src": "src/pages/Cart.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Checkout.jsx": {
-    "file": "assets/Checkout-DQ3Q1cPZ.js",
+    "file": "assets/Checkout-DokNhIki.js",
     "name": "Checkout",
     "src": "src/pages/Checkout.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_orderLifecycleGuards-B28NX-5n.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/DataSeedPage.jsx": {
-    "file": "assets/DataSeedPage-BMH-VNrp.js",
+    "file": "assets/DataSeedPage-xrnM-x7G.js",
     "name": "DataSeedPage",
     "src": "src/pages/DataSeedPage.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/DriverPanel.jsx": {
-    "file": "assets/DriverPanel-DE_lCXEQ.js",
+    "file": "assets/DriverPanel-BVV9-vUp.js",
     "name": "DriverPanel",
     "src": "src/pages/DriverPanel.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_runtimeSafety-DDGa35ag.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
       "_orderLifecycleGuards-B28NX-5n.js",
-      "_icons-C9fXCgbF.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Gallery.jsx": {
-    "file": "assets/Gallery-ZCN-y1h1.js",
+    "file": "assets/Gallery-BSWVagCi.js",
     "name": "Gallery",
     "src": "src/pages/Gallery.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Home.jsx": {
-    "file": "assets/Home-BO0rm5lm.js",
+    "file": "assets/Home-BPodW2Eo.js",
     "name": "Home",
     "src": "src/pages/Home.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
       "_api-C-givZ-6.js",
-      "_icons-C9fXCgbF.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Login.jsx": {
-    "file": "assets/Login-CYsDML8b.js",
+    "file": "assets/Login-I3jDSJ4b.js",
     "name": "Login",
     "src": "src/pages/Login.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
       "_api-C-givZ-6.js",
       "_validators-KcHLYWIO.js",
-      "_runtimeSafety-DDGa35ag.js",
-      "_icons-C9fXCgbF.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/Menu.jsx": {
-    "file": "assets/Menu-B39mEeQP.js",
+    "file": "assets/Menu-CpGemzpy.js",
     "name": "Menu",
     "src": "src/pages/Menu.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/OrderSuccess.jsx": {
-    "file": "assets/OrderSuccess-CXhkZ7jl.js",
+    "file": "assets/OrderSuccess-Dw6sG2cf.js",
     "name": "OrderSuccess",
     "src": "src/pages/OrderSuccess.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_icons-C9fXCgbF.js"
+      "_vendor-2PFap5f2.js",
+      "_icons-B7HRMgi8.js"
     ]
   },
   "src/pages/OrderTracking.jsx": {
-    "file": "assets/OrderTracking-Cqhd0eLb.js",
+    "file": "assets/OrderTracking-DfTLYbSp.js",
     "name": "OrderTracking",
     "src": "src/pages/OrderTracking.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_ChatWindow-CBAaW9eb.js",
-      "_runtimeSafety-DDGa35ag.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_ChatWindow-B9yHd9cl.js",
       "_orderLifecycleGuards-B28NX-5n.js",
-      "_icons-C9fXCgbF.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   },
   "src/pages/PaymentCancel.jsx": {
-    "file": "assets/PaymentCancel-C3z7zezB.js",
+    "file": "assets/PaymentCancel-QsGdZHYa.js",
     "name": "PaymentCancel",
     "src": "src/pages/PaymentCancel.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_icons-C9fXCgbF.js"
+      "_vendor-2PFap5f2.js",
+      "_icons-B7HRMgi8.js"
     ]
   },
   "src/pages/PaymentSuccess.jsx": {
-    "file": "assets/PaymentSuccess-7HkTdO3y.js",
+    "file": "assets/PaymentSuccess-Cbgb121Q.js",
     "name": "PaymentSuccess",
     "src": "src/pages/PaymentSuccess.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_icons-C9fXCgbF.js"
+      "_vendor-2PFap5f2.js",
+      "_icons-B7HRMgi8.js"
     ]
   },
   "src/pages/Profile.jsx": {
-    "file": "assets/Profile-Dx6ejVTH.js",
+    "file": "assets/Profile-inuF3nOB.js",
     "name": "Profile",
     "src": "src/pages/Profile.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-D9-CikdX.js",
-      "_App-Betwg1WZ.js",
-      "_icons-C9fXCgbF.js",
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_icons-B7HRMgi8.js",
       "_validators-KcHLYWIO.js",
+      "index.html"
+    ]
+  },
+  "src/pages/ShopScan.jsx": {
+    "file": "assets/ShopScan-D-HA-SY2.js",
+    "name": "ShopScan",
+    "src": "src/pages/ShopScan.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-2PFap5f2.js",
+      "_App-B-PI04xS.js",
+      "_orderLifecycleGuards-B28NX-5n.js",
+      "_icons-B7HRMgi8.js",
       "index.html"
     ]
   }

@@ -7,6 +7,11 @@ import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
 import WhatsAppChatButton from './components/WhatsAppChatButton'
 import SupportHubWidget from './components/SupportHubWidget'
+import { Capacitor } from '@capacitor/core'
+import { SplashScreen } from '@capacitor/splash-screen'
+import MobileLayout from './mobile/MobileLayout'
+import RoleSelect from './mobile/RoleSelect'
+import { useAuth } from './context/AuthContext'
 
 const Home = lazy(() => import('./pages/Home'))
 const Menu = lazy(() => import('./pages/Menu'))
@@ -48,9 +53,25 @@ function Shell() {
   // STM Help + WhatsApp: show on every customer-facing page (including login, checkout, pay)
   const hideFloatingHelp = path.startsWith('/admin') || path.startsWith('/driver') || path.startsWith('/rider')
 
+  const { userProfile, loading: authLoading } = useAuth()
+
+  React.useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      SplashScreen.hide().catch(console.error)
+    }
+  }, [])
+
+  // Intercept root route for native users who are logged out
+  if (Capacitor.isNativePlatform() && !authLoading && !userProfile && path === '/') {
+    return <Navigate to="/mobile-role-select" replace />
+  }
+
+  const isNative = Capacitor.isNativePlatform()
+  const LayoutWrapper = isNative ? MobileLayout : React.Fragment
+
   return (
-    <>
-      {!hideNavFooter && <Navbar />}
+    <LayoutWrapper>
+      {!hideNavFooter && !isNative && <Navbar />}
       <AnimatePresence mode="popLayout">
         <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><div style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTopColor: 'var(--green-dark)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /></div>}>
           <Routes location={location} key={location.pathname}>
@@ -72,6 +93,7 @@ function Shell() {
             <Route path="/rider" element={<Navigate to="/driver" replace />} />
             <Route path="/seed"     element={<PageWrapper><DataSeedPage /></PageWrapper>} />
             <Route path="/scan-pay/:orderId" element={<PageWrapper><ShopScan /></PageWrapper>} />
+            <Route path="/mobile-role-select" element={<PageWrapper><RoleSelect /></PageWrapper>} />
           </Routes>
         </Suspense>
       </AnimatePresence>
@@ -80,7 +102,7 @@ function Shell() {
       {!hideFloatingHelp && (
         <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />
       )}
-    </>
+    </LayoutWrapper>
   )
 }
 

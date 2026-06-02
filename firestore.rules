@@ -56,7 +56,7 @@ service cloud.firestore {
 
     function riderOwnsAssignedOrder() {
       return hasRiderRoleFirestore()
-        && resource.data.riderId == request.auth.uid;
+        && resource.data.assignedRiderId == request.auth.uid;
     }
 
     /** Hosted Stripe / card: owner may upload proof only — never client-set paid. */
@@ -109,7 +109,7 @@ service cloud.firestore {
         && request.resource.data.items == resource.data.items
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
-            'riderId',
+            'assignedRiderId',
             'customerSnapshot',
             'updatedAt',
             'timestamps',
@@ -141,7 +141,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/orders/$(orderId))
         && (
           orderRef(orderId).data.userId == request.auth.uid
-          || orderRef(orderId).data.riderId == request.auth.uid
+          || orderRef(orderId).data.assignedRiderId == request.auth.uid
           || isAdmin()
         );
     }
@@ -181,7 +181,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || resource.data.userId == request.auth.uid
-          || resource.data.riderId == request.auth.uid
+          || resource.data.assignedRiderId == request.auth.uid
         );
 
       allow update: if orderStatusUnchanged()
@@ -214,6 +214,21 @@ service cloud.firestore {
     match /public_tracking/{orderId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    match /order_tracking/{orderId} {
+      allow read: if isAuthed() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/orders/$(orderId)) &&
+         get(/databases/$(database)/documents/orders/$(orderId)).data.userId == request.auth.uid) ||
+        (exists(/databases/$(database)/documents/orders/$(orderId)) &&
+         get(/databases/$(database)/documents/orders/$(orderId)).data.assignedRiderId == request.auth.uid)
+      );
+      allow write: if isAuthed() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/orders/$(orderId)) &&
+         get(/databases/$(database)/documents/orders/$(orderId)).data.assignedRiderId == request.auth.uid)
+      );
     }
 
     match /admin_push_tokens/{tokenDoc} {

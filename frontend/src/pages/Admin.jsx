@@ -8,10 +8,13 @@ import Orders from '../admin/pages/Orders';
 import Categories from '../admin/pages/Categories';
 import GalleryAdmin from '../admin/pages/GalleryAdmin';
 import Customers from '../admin/pages/Customers';
+import Staff from '../admin/pages/Staff';
 import AdminSettings from '../admin/pages/AdminSettings';
 import SupportInbox from '../admin/pages/SupportInbox';
 import KitchenView from '../admin/pages/KitchenView';
 import RidersDispatch from '../admin/pages/RidersDispatch';
+import RiderManagement from '../admin/pages/RiderManagement'
+import LiveFleet from '../admin/pages/LiveFleet';
 import PaymentsOps from '../admin/pages/PaymentsOps';
 import AnalyticsPlaceholder from '../admin/pages/AnalyticsPlaceholder';
 import AdminOrderNotifications from '../admin/components/AdminOrderNotifications';
@@ -77,11 +80,14 @@ export default function Admin() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/kitchen" element={<KitchenView />} />
         <Route path="/riders" element={<RidersDispatch />} />
+        <Route path="/riders-management" element={<RiderManagement />} />
         <Route path="/payments" element={<PaymentsOps />} />
         <Route path="/analytics" element={<AnalyticsPlaceholder />} />
         <Route path="/support" element={<SupportInbox />} />
         <Route path="/gallery" element={<GalleryAdmin />} />
         <Route path="/customers" element={<Customers />} />
+        <Route path="/staff" element={<Staff />} />
+        <Route path="/live-fleet" element={<LiveFleet />} />
         <Route path="/settings" element={<AdminSettings />} />
       </Routes>
     </AdminLayout>

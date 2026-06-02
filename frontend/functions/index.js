@@ -1043,6 +1043,128 @@ exports.deleteOrderByAdmin = onCall(
   }
 );
 
+exports.assignRiderToOrder = onCall(
+  { region: REGION, invoker: 'public' },
+  async (request) => {
+    try {
+      assertProductionSecurityMode();
+      enforceCallableAppCheck(request, 'assignRiderToOrder');
+      const callerUid = request.auth?.uid;
+      
+      console.log(
+        '[assignRiderToOrder:start]',
+        {
+          orderId: request.data?.orderId,
+          assignedRiderId: request.data?.assignedRiderId,
+          authUid: callerUid
+        }
+      );
+
+      if (!callerUid) {
+        throw new HttpsError('unauthenticated', 'Authentication required.');
+      }
+      if (!request.auth?.token?.admin) {
+        throw new HttpsError('permission-denied', 'Admin only');
+      }
+
+      const { orderId, assignedRiderId } = request.data || {};
+      if (!orderId || !assignedRiderId) {
+        throw new HttpsError('invalid-argument', 'Missing orderId or assignedRiderId.');
+      }
+
+      const db = admin.firestore();
+      
+      // Fetch rider details
+      const riderSnap = await db.collection('users').doc(assignedRiderId).get();
+      
+      console.log(
+        '[assignRiderToOrder:riderDoc]',
+        {
+          exists: riderSnap.exists,
+          data: riderSnap.data()
+        }
+      );
+
+      if (!riderSnap.exists) {
+        throw new HttpsError('not-found', 'Rider profile missing');
+      }
+
+      const riderData = riderSnap.data() || {};
+      if (riderData.role !== 'rider' && riderData.role !== 'driver') {
+        throw new HttpsError('invalid-argument', 'User is not a rider or driver.');
+      }
+
+      const assignedRiderName = String(
+        riderData.displayName
+        || riderData.name
+        || riderData.email
+        || 'Rider'
+      ).trim();
+
+      const assignedRiderPhone = String(
+        riderData.phone
+        || ''
+      ).trim();
+
+      // The event payload for FSM
+      const metadata = {
+        source: 'assignRiderToOrder',
+        patch: {
+          assignedRiderId,
+          assignedRiderName,
+          assignedRiderPhone,
+          assignedAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+      };
+
+      console.log(
+        '[assignRiderToOrder:patch]',
+        metadata.patch
+      );
+
+      const orderRef = db.collection('orders').doc(orderId);
+      
+      // Transition the state through FSM to apply metadata
+      // State remains unchanged because type === 'ADMIN_ASSIGN_RIDER' returns `{ status: from }`
+      const { performOrderTransition } = getService('orderTransitionService');
+      const result = await performOrderTransition({
+        db,
+        orderRef,
+        actor: 'admin',
+        actorUid: callerUid,
+        event: { type: 'ADMIN_ASSIGN_RIDER' },
+        metadata
+      });
+
+      log({
+        level: 'info',
+        service: 'assignRiderToOrder',
+        event: 'admin_action',
+        payload: { adminUid: callerUid, assignedRiderId, orderId },
+      });
+
+      return { success: true, result };
+    } catch (err) {
+      console.error(
+        '[assignRiderToOrder:error]',
+        err
+      );
+      
+      const unwrapped = unwrapHttpsError(err);
+      if (unwrapped) throw unwrapped;
+
+      if (err instanceof HttpsError) {
+        throw err;
+      }
+
+      throw new HttpsError(
+        'internal',
+        err.message || 'Assign rider failed'
+      );
+    }
+  }
+);
+
 exports.migrateProductImagePaths = onCall(
   { region: REGION, invoker: 'public' },
   async (request) => {
@@ -1242,3 +1364,69 @@ const { refundOrderByAdmin } = require('./stripeRefundAdmin');
 exports.createStripeCheckout = createStripeCheckout;
 exports.stripeWebhook = stripeWebhook;
 exports.refundOrderByAdmin = refundOrderByAdmin;
+
+exports.createEmployeeAccount = onCall(
+  { region: REGION, invoker: 'public' },
+  async (request) => {
+    assertProductionSecurityMode();
+    enforceCallableAppCheck(request, 'createEmployeeAccount');
+    
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError('unauthenticated', 'Authentication required.');
+    }
+    
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError('permission-denied', 'Only admins can create employee accounts.');
+    }
+
+    const { email, password, name, phone, role } = request.data || {};
+    
+    if (!email || !password || !name || !role) {
+      throw new HttpsError('invalid-argument', 'Missing required fields: email, password, name, role.');
+    }
+    
+    const validRoles = ['admin', 'rider', 'driver', 'kitchen'];
+    if (!validRoles.includes(role)) {
+      throw new HttpsError('invalid-argument', 'Invalid role specified.');
+    }
+
+    try {
+      // 1. Create Firebase Auth User
+      const userRecord = await admin.auth().createUser({
+        email: email.trim(),
+        password: password,
+        displayName: name.trim(),
+        phoneNumber: phone ? phone.trim() : undefined,
+      });
+
+      const uid = userRecord.uid;
+
+      // 2. Set Custom Claims if admin
+      if (role === 'admin') {
+        await admin.auth().setCustomUserClaims(uid, { admin: true });
+      }
+
+      // 3. Create Firestore Profile
+      const db = admin.firestore();
+      await db.collection('users').doc(uid).set({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone ? phone.trim() : '',
+        role: role,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[createEmployeeAccount] Successfully created employee: ${uid} with role: ${role}`);
+
+      return {
+        success: true,
+        uid: uid,
+        message: `Employee ${name} created successfully.`,
+      };
+    } catch (error) {
+      console.error('[createEmployeeAccount:error]', error);
+      throw new HttpsError('internal', error.message || 'Failed to create employee account.');
+    }
+  }
+);

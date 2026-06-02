@@ -262,6 +262,9 @@ module.exports = function createOrderTransitionService({
     if (type === 'ADMIN_REFUND_APPROVED') {
       return { status: 'refunded' };
     }
+    if (type === 'ADMIN_ASSIGN_RIDER') {
+      return { status: from };
+    }
 
     throw new TransitionServiceError('INVALID_TRANSITION', 'Unknown transition event type', {
       from,
@@ -397,7 +400,7 @@ module.exports = function createOrderTransitionService({
         }
         finalFrom = from;
         enforcePaymentConsistency(from, paymentStatus, paymentMethod);
-        const assignedRiderId = String(data.riderId || data?.rider?.id || '').trim() || null;
+        const assignedRiderId = String(data.assignedRiderId || '').trim() || null;
         const nextDerived = deriveNextOrderState(
           from,
           event,
@@ -497,8 +500,8 @@ module.exports = function createOrderTransitionService({
 
         // WHITELIST: only these non-lifecycle extras may be written atomically with the FSM transition.
         // Any other metadata.patch key is intentionally dropped — no blind spreading.
-        // WHITELISTED ONLY: paidAt, stripeCheckoutSessionId, paymentIntentId, plus lastEventId for technical idempotency.
-        const PATCH_WHITELIST = ['paidAt', 'stripeCheckoutSessionId', 'paymentIntentId', 'lastEventId'];
+        // WHITELISTED ONLY: paidAt, stripeCheckoutSessionId, paymentIntentId, lastEventId, assignedRiderId, assignedRiderName, assignedRiderPhone, assignedAt.
+        const PATCH_WHITELIST = ['paidAt', 'stripeCheckoutSessionId', 'paymentIntentId', 'lastEventId', 'assignedRiderId', 'assignedRiderName', 'assignedRiderPhone', 'assignedAt'];
         const whitelistedExtras = {};
         if (metadata?.patch && typeof metadata.patch === 'object') {
           for (const k of PATCH_WHITELIST) {

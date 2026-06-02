@@ -38,6 +38,7 @@ if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: REQUIRED_PROJECT_ID,
+      databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${REQUIRED_PROJECT_ID}-default-rtdb.asia-southeast1.firebasedatabase.app`,
     });
 
     isReady = true;
@@ -50,6 +51,7 @@ if (!admin.apps.length) {
 }
 
 export const db = admin.firestore();
+export const rtdb = admin.database();
 export const auth = admin.auth();
 export const firebaseReady = isReady;
 export default admin;

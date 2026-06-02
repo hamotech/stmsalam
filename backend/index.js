@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
 // Firebase Admin
-import admin, { db, firebaseReady } from './lib/firebase.js';
+import admin, { db, rtdb, firebaseReady } from './lib/firebase.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -251,6 +251,442 @@ app.post('/api/auth/login', async (req, res) => {
     const { password: _, ...safeUser } = user;
     const token = jwt.sign({ id: email }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ success: true, user: safeUser, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: 'Access token required' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 9999;
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; 
+}
+
+const sendPushNotification = async (token, title, body) => {
+  if (!token) return;
+  try {
+    await admin.messaging().send({
+      token,
+      notification: { title, body }
+    });
+  } catch(err) {
+    console.error('FCM Send Error:', err);
+  }
+}
+
+// ============================================================
+// ADMIN DRIVER MANAGEMENT ROUTES
+// ============================================================
+
+app.post('/api/admin/drivers', async (req, res) => {
+  const { name, phone, password, role, vehicleDetails, activeStatus } = req.body;
+  let { email } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
+  email = email.trim().toLowerCase();
+
+  try {
+    const userRef = db.collection('users').doc(email);
+    const existing = await userRef.get();
+    if (existing.exists) return res.status(409).json({ error: 'User exists' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userData = {
+      name, email, phone, password: hashedPassword,
+      role: role || 'driver',
+      vehicleDetails: vehicleDetails || '',
+      activeStatus: activeStatus !== false,
+      isActive: true, // as requested
+      status: activeStatus !== false ? 'active' : 'inactive',
+      createdAt: new Date().toISOString()
+    };
+    await userRef.set(userData);
+
+    const { password: _, ...user } = userData;
+    res.status(201).json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/drivers/:email', async (req, res) => {
+  const { name, phone, password, role, vehicleDetails, activeStatus } = req.body;
+  const email = req.params.email.trim().toLowerCase();
+  try {
+    const userRef = db.collection('users').doc(email);
+    const existing = await userRef.get();
+    if (!existing.exists) return res.status(404).json({ error: 'User not found' });
+
+    const updates = { name, phone, role, vehicleDetails, activeStatus, status: activeStatus ? 'active' : 'inactive' };
+    if (password) {
+      updates.password = await bcrypt.hash(password, 10);
+    }
+    
+    await userRef.update(updates);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/drivers/:email', async (req, res) => {
+  try {
+    await db.collection('users').doc(req.params.email).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/fleet', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const locSnap = await rtdb.ref('live_locations').once('value');
+    const locations = locSnap.val() || {};
+    
+    const ridersSnap = await db.collection('riders').get();
+    const riders = {};
+    ridersSnap.forEach(doc => { riders[doc.id] = doc.data() });
+
+    const usersSnap = await db.collection('users').where('role', 'in', ['driver', 'rider']).get();
+    const users = {};
+    usersSnap.forEach(doc => { users[doc.id] = doc.data() });
+
+    const fleet = [];
+    Object.keys(locations).forEach(driverId => {
+      fleet.push({
+        driverId,
+        location: locations[driverId],
+        profile: riders[driverId] || {},
+        user: users[driverId] || {}
+      });
+    });
+    return res.json({ success: true, orderId, status });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/driver/reject', authenticateToken, async (req, res) => {
+  const { orderId, driverId } = req.body;
+  if (req.user.id !== driverId) return res.status(403).json({ error: 'Unauthorized' });
+  if (!orderId) return res.status(400).json({ error: 'orderId required' });
+  
+  try {
+    const orderRef = db.collection('orders').doc(orderId);
+    const doc = await orderRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Order not found' });
+    
+    const data = doc.data();
+    const dispatchState = data.dispatchState || { rejectedBy: [] };
+    
+    if (dispatchState.offeredTo === driverId) {
+      dispatchState.rejectedBy = [...(dispatchState.rejectedBy || []), driverId];
+      dispatchState.offeredTo = null;
+      dispatchState.offeredAt = null;
+      await orderRef.update({ dispatchState });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// AUTO DISPATCH BACKGROUND TASK
+// ============================================================
+
+setInterval(async () => {
+  try {
+    const ordersSnap = await db.collection('orders')
+      .where('status', 'in', ['placed', 'preparing', 'ready_for_pickup'])
+      .get();
+      
+    if (ordersSnap.empty) return;
+
+    let onlineRiders = null;
+    let liveLocations = null;
+
+    for (const doc of ordersSnap.docs) {
+      const data = doc.data();
+      if (data.assignedRiderId) continue;
+      
+      const dispatchState = data.dispatchState || { rejectedBy: [], fallback: false };
+      if (dispatchState.fallback) continue; // Already in manual fallback
+
+      let needsNewDriver = false;
+
+      if (dispatchState.offeredTo) {
+        const elapsed = Date.now() - (dispatchState.offeredAt || 0);
+        if (elapsed > 25000) { // 25s timeout
+          dispatchState.rejectedBy.push(dispatchState.offeredTo);
+          dispatchState.offeredTo = null;
+          dispatchState.offeredAt = null;
+          needsNewDriver = true;
+        }
+      } else {
+        needsNewDriver = true;
+      }
+
+      if (needsNewDriver) {
+        if (!onlineRiders) {
+          const ridersSnap = await db.collection('riders').where('status', '==', 'online').get();
+          onlineRiders = ridersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const locSnap = await rtdb.ref('live_locations').once('value');
+          liveLocations = locSnap.val() || {};
+        }
+
+        const restaurantLat = 1.3521; // Hardcoded default for STM Salam
+        const restaurantLng = 103.8198; 
+        
+        let nearestDriver = null;
+        let minDistance = Infinity;
+
+        for (const rider of onlineRiders) {
+          if (dispatchState.rejectedBy.includes(rider.id)) continue;
+          
+          const loc = liveLocations[rider.id];
+          if (!loc) continue; // Skip drivers without GPS
+
+          const dist = calculateDistance(restaurantLat, restaurantLng, loc.latitude, loc.longitude);
+          if (dist < minDistance) {
+            minDistance = dist;
+            nearestDriver = rider;
+          }
+        }
+
+        if (nearestDriver) {
+          dispatchState.offeredTo = nearestDriver.id;
+          dispatchState.offeredAt = Date.now();
+          await doc.ref.update({ dispatchState });
+          
+          if (nearestDriver.fcmToken) {
+            await sendPushNotification(nearestDriver.fcmToken, 'New Delivery Assigned!', 'You have 25 seconds to accept.');
+          }
+        } else {
+          // No more drivers available, fallback to manual board
+          dispatchState.fallback = true;
+          await doc.ref.update({ dispatchState });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Auto Dispatch Error:', err);
+  }
+}, 10000); // run every 10 seconds
+
+// ============================================================
+// START SERVER & RIDER ROUTES (Live Tracking & Auth)
+// ============================================================
+
+app.post('/api/driver/login', async (req, res) => {
+  let { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
+  email = email.trim().toLowerCase();
+
+  try {
+    const usersRef = db.collection('users');
+    const snapshot = await usersRef.where('email', '==', email).limit(1).get();
+    if (snapshot.empty) {
+      // Fallback: try checking by document ID just in case the email field is missing but ID is email
+      const docFallback = await db.collection('users').doc(email).get();
+      if (!docFallback.exists) return res.status(401).json({ error: 'Invalid credentials' });
+      var userDoc = docFallback;
+    } else {
+      var userDoc = snapshot.docs[0];
+    }
+    
+    const userRef = db.collection('users').doc(userDoc.id);
+
+    const user = userDoc.data();
+    if (user.role !== 'driver' && user.role !== 'rider') {
+      return res.status(403).json({ error: 'Access Denied. Not a driver.' });
+    }
+    if (user.activeStatus === false || user.status === 'inactive' || user.isActive === false) {
+      return res.status(403).json({ error: 'Access Denied. Contact Admin.' });
+    }
+
+    let isMatch = false;
+    
+    console.log('[DEBUG] Login attempt for driver:', email);
+    console.log('[DEBUG] Located driver:', !!userDoc.exists);
+
+    try {
+      isMatch = await bcrypt.compare(password, user.password);
+      console.log('[DEBUG] bcrypt.compare result:', isMatch);
+    } catch (err) {
+      console.log('[DEBUG] bcrypt error (could be plain-text):', err.message);
+    }
+
+    // Temporary compatibility logic for old plain-text passwords
+    if (!isMatch && password === user.password) {
+      console.log('[DEBUG] Plain-text password matched. Migrating to bcrypt...');
+      isMatch = true;
+      const newHashedPassword = await bcrypt.hash(password, 10);
+      await userRef.update({ password: newHashedPassword });
+      console.log('[DEBUG] Database silently updated with new hashed password.');
+    }
+
+    if (!isMatch) {
+      console.log('[DEBUG] Password validation failed.');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    console.log('[DEBUG] JWT token generated successfully.');
+
+    const { password: _, ...safeUser } = user;
+    const token = jwt.sign({ id: email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ success: true, user: safeUser, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/login', async (req, res) => {
+  let { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
+  email = email.trim().toLowerCase();
+
+  try {
+    const usersRef = db.collection('users');
+    const snapshot = await usersRef.where('email', '==', email).limit(1).get();
+    if (snapshot.empty) {
+      // Fallback: try checking by document ID just in case the email field is missing but ID is email
+      const docFallback = await db.collection('users').doc(email).get();
+      if (!docFallback.exists) return res.status(401).json({ error: 'Invalid credentials' });
+      var userDoc = docFallback;
+    } else {
+      var userDoc = snapshot.docs[0];
+    }
+    
+    const userRef = db.collection('users').doc(userDoc.id);
+
+    const user = userDoc.data();
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access Denied. Not an admin.' });
+    }
+    
+    // Admins may not have activeStatus defined, but if they do, check it
+    if (user.activeStatus === false || user.status === 'inactive' || user.isActive === false) {
+      return res.status(403).json({ error: 'Access Denied. Account inactive.' });
+    }
+
+    let isMatch = false;
+    try {
+      isMatch = await bcrypt.compare(password, user.password);
+    } catch (err) {
+      console.log('[DEBUG] bcrypt error (could be plain-text):', err.message);
+    }
+
+    if (!isMatch && password === user.password) {
+      isMatch = true;
+      const newHashedPassword = await bcrypt.hash(password, 10);
+      await userRef.update({ password: newHashedPassword });
+    }
+
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const { password: _, ...safeUser } = user;
+    const token = jwt.sign({ id: email, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ success: true, user: safeUser, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/driver/location', authenticateToken, async (req, res) => {
+  const { driverId, latitude, longitude } = req.body;
+  
+  if (req.user.id !== driverId) {
+    return res.status(403).json({ error: 'Unauthorized location update' });
+  }
+
+  if (!driverId || latitude === undefined || longitude === undefined) {
+    return res.status(400).json({ error: 'Missing location data' });
+  }
+  try {
+    const locRef = rtdb.ref(`live_locations/${driverId}`);
+    await locRef.set({
+      latitude,
+      longitude,
+      updatedAt: admin.database.ServerValue.TIMESTAMP
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/driver/location/:id', async (req, res) => {
+  try {
+    const locRef = rtdb.ref(`live_locations/${req.params.id}`);
+    const snapshot = await locRef.once('value');
+    if (!snapshot.exists()) return res.status(404).json({ error: 'Location not found' });
+    res.json({ success: true, data: snapshot.val() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/driver/status', authenticateToken, async (req, res) => {
+  const { orderId, status, driverId } = req.body;
+
+  if (req.user.id !== driverId && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized status update' });
+  }
+
+  if (!orderId || !status) return res.status(400).json({ error: 'orderId and status required' });
+  try {
+    // Map to existing endpoint logic if needed, or update firestore directly for simplicity
+    const orderRef = db.collection('orders').doc(orderId);
+    
+    const EVENT_MAP = {
+      placed: 'ORDER_ACCEPTED',
+      preparing: 'ORDER_PREPARING',
+      ready_for_pickup: 'ORDER_READY_FOR_PICKUP',
+      out_for_delivery: 'ORDER_OUT_FOR_DELIVERY',
+      delivered: 'ORDER_DELIVERED',
+      cancelled: 'ORDER_CANCELLED',
+      refunded: 'ADMIN_REFUND_APPROVED'
+    };
+    
+    const eventType = EVENT_MAP[status.trim().toLowerCase()] || status;
+    
+    await performOrderTransition({
+      db,
+      orderRef,
+      actor: 'driver',
+      actorUid: req.body.driverId || 'unknown',
+      event: { type: eventType },
+      metadata: { source: 'driver_api_status_update', patch: {} }
+    });
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

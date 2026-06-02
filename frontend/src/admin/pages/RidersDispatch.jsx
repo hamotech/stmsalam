@@ -19,13 +19,7 @@ const RidersDispatch = () => {
   const [busyId, setBusyId] = useState(null);
 
   const normalizeStatus = (order) => {
-    const s = String(order?.status || order?.orderStatus || order?.stage || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[\s-]+/g, '_');
-    if (s === 'placed') return 'pending';
-    if (s === 'out_for_delivery' || s === 'delivering') return 'assigned';
-    return s || 'pending';
+    return String(order?.status || '').trim().toLowerCase();
   };
 
   const showToast = (message, type = 'success') => {
@@ -44,7 +38,7 @@ const RidersDispatch = () => {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), where('role', '==', 'rider'));
+    const q = query(collection(db, 'users'), where('role', 'in', ['rider', 'driver']));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
       setRiders(list);
@@ -54,12 +48,11 @@ const RidersDispatch = () => {
 
   const riderOrders = orders.filter((o) => {
     const st = normalizeStatus(o);
-    return st === 'ready' || st === 'assigned' || st === 'picked_up';
+    return st === 'ready_for_pickup' || st === 'out_for_delivery';
   });
 
-  /** Same account, multiple READY rows = multiple `orders` docs (e.g. double checkout), not “two riders for one job”. */
   const sameCustomerMultiReady = (() => {
-    const readyOnly = riderOrders.filter((o) => normalizeStatus(o) === 'ready');
+    const readyOnly = riderOrders.filter((o) => normalizeStatus(o) === 'ready_for_pickup');
     const byUid = new Map();
     for (const o of readyOnly) {
       const u = String(o.userId || o.user_id || '').trim();
@@ -84,12 +77,7 @@ const RidersDispatch = () => {
   };
 
   const updateDispatchOrder = async (orderId, patch) => {
-    assertNoDirectOrderLifecycleWrite(patch, 'RidersDispatch.updateDispatchOrder');
-    const orderRef = doc(db, 'orders', orderId);
-    await updateDoc(orderRef, {
-      ...patch,
-      updatedAt: serverTimestamp(),
-    });
+    throw new Error('Direct updateDoc is blocked. Use callables instead.');
   };
 
   return (
@@ -137,7 +125,8 @@ const RidersDispatch = () => {
           const id = order.id;
           const busy = busyId === id;
           const short = id?.slice(-8).toUpperCase();
-          const currentRiderId = order.riderId || null;
+          const currentRiderId = order.assignedRiderId || null;
+          const currentRiderName = order.assignedRiderName || currentRiderId;
           const lineItems = normalizeOrderLineItems(order);
           const accountUid = String(order.userId || order.user_id || '').trim();
 
@@ -146,7 +135,7 @@ const RidersDispatch = () => {
               <div style={{ fontWeight: '950', fontSize: '18px', color: '#0f172a' }}>#{short}</div>
               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '700', marginTop: '6px' }}>
                 {st.replace(/_/g, ' ')}
-                {currentRiderId ? ` · Rider: ${currentRiderId}` : ''}
+                {currentRiderId ? ` · Rider: ${currentRiderName}` : ''}
               </div>
               {accountUid ? (
                 <div style={{ marginTop: '6px', fontSize: '12px', color: '#94a3b8', fontWeight: 700 }} title={accountUid}>
@@ -166,7 +155,7 @@ const RidersDispatch = () => {
                 <div style={{ marginTop: '12px', fontSize: '13px', color: '#94a3b8', fontWeight: '700' }}>No line items on document</div>
               )}
 
-              {st === 'ready' ? (
+              {st === 'ready_for_pickup' ? (
                 <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '420px' }}>
                   <input
                     placeholder="Rider UID"
@@ -183,7 +172,8 @@ const RidersDispatch = () => {
                       <option value="">Select rider (UID)</option>
                       {riders.map((r) => (
                         <option key={r.uid} value={r.uid}>
-                          {(r.name || r.email || 'Rider')} · {r.uid}
+                          {(r.displayName || r.name || r.email || 'Rider')}
+                          {r.phone ? ` (+${r.phone.replace('+', '')})` : ''}
                         </option>
                       ))}
                     </select>
@@ -199,56 +189,46 @@ const RidersDispatch = () => {
                           throw new Error('Rider UID mismatch. Pick from list.');
                         }
                         safeLog('Assign Rider →', assignedRiderId);
-                        await updateDispatchOrder(id, {
-                          riderId: assignedRiderId,
-                          'rider.legStatus': 'ASSIGNED',
-                          'timestamps.assignedAt': serverTimestamp(),
-                        });
+                        const assignRiderToOrder = httpsCallable(functions, 'assignRiderToOrder');
+                        const res = await assignRiderToOrder({ orderId: id, assignedRiderId: assignedRiderId });
+                        console.log(
+                          '[DISPATCH_ASSIGNMENT]',
+                          {
+                            orderId: id,
+                            assignedRiderId,
+                            assignedRiderName: res?.data?.result?.patch?.assignedRiderName || 'Dispatched'
+                          }
+                        );
                       })}
                       style={{ padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#0A8754', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
                     >
                       <Bike size={16} /> Assign Rider
                     </button>
+                    {currentRiderId && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => run(id, async () => {
+                          const adminTransition = httpsCallable(functions, 'adminTransition');
+                          await adminTransition({ orderId: id, eventName: 'out_for_delivery' });
+                        })}
+                        style={{ padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#0369a1', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
+                      >
+                        <Package size={18} /> Mark Picked Up
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : null}
 
-              {st === 'assigned' ? (
+              {st === 'out_for_delivery' ? (
                 <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => run(id, async () => {
-                      await updateDispatchOrder(id, {
-                        'rider.legStatus': 'PICKED_UP',
-                        riderId: currentRiderId || null,
-                        'timestamps.pickedUpAt': serverTimestamp(),
-                      });
-                    })}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#0369a1', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
-                  >
-                    <Package size={18} /> Mark Picked Up
-                  </button>
-                </div>
-              ) : null}
-
-              {st === 'picked_up' ? (
-                <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => run(id, async () => {
-                      const transitionOrderStatus = httpsCallable(functions, 'transitionOrderStatus');
-                      await transitionOrderStatus({
-                        orderId: id,
-                        nextStatus: 'delivered',
-                        metadata: { source: 'RidersDispatch.deliver' },
-                      });
-                      await updateDispatchOrder(id, {
-                        'rider.legStatus': 'COMPLETED',
-                        riderId: currentRiderId || null,
-                        'timestamps.deliveredAt': serverTimestamp(),
-                      });
+                      const adminTransition = httpsCallable(functions, 'adminTransition');
+                      await adminTransition({ orderId: id, eventName: 'delivered' });
                     })}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#013220', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
                   >

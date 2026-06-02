@@ -10,6 +10,7 @@ import {
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
+import { getMessaging, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -79,6 +80,15 @@ export const appCheck = initWebAppCheck(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+
+let messagingInstance = null;
+isSupported().then((supported) => {
+  if (supported) {
+    messagingInstance = getMessaging(app);
+  }
+}).catch(console.warn);
+
+export const getMessagingInstance = () => messagingInstance;
 
 /** Must match `onCall({ region })` in `frontend/functions` (default us-central1). */
 export const FUNCTIONS_REGION =
