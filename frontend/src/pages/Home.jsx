@@ -44,11 +44,17 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
     setTimeout(() => setIsJustAdded(false), 2000);
   };
 
+  const { user } = useAuth() || {};
+  console.log("FavoriteItemCard Render - User:", user);
+  console.log("FavoriteItemCard Render - Role:", user?.role);
+  console.log("FavoriteItemCard Render - Rendering Add To Cart for:", item.id);
+
   const badges = ["Popular", "Best Seller", "Hot Pick", "Recommended"];
   const badge = badges[idx % badges.length];
 
   return (
     <motion.div 
+      className="product-card"
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -76,17 +82,17 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
         </div>
       </div>
       
-      <div style={{ padding: '32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.2 }}>{item.name}</h3>
-          <span style={{ fontSize: '22px', fontWeight: 950, color: 'var(--green-mid)' }}>${parseFloat(item.price).toFixed(2)}</span>
-        </div>
+      <div style={{ padding: '32px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.2 }}>{item.name}</h3>
         
-        <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 500, lineHeight: 1.6, marginBottom: '24px', flex: 1 }}>
+        <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 500, lineHeight: 1.6, flex: 1 }}>
           {item.description || 'Authentic taste prepared fresh daily with the finest ingredients.'}
         </p>
+
+        <span style={{ fontSize: '22px', fontWeight: 950, color: 'var(--green-mid)', marginBottom: '8px' }}>${parseFloat(item.price).toFixed(2)}</span>
         
         <button 
+          className="add-to-cart-btn"
           onClick={handleAdd}
           style={{ 
             width: '100%',
@@ -120,7 +126,7 @@ function FavoriteItemCard({ item, idx, inCart, addToCart, navigate }) {
 }
 
 export default function Home() {
-  const { products: dynamicProducts, gallery: dynamicGallery } = useData()
+  const { products: dynamicProducts = [], gallery: dynamicGallery = [] } = useData() || {}
   const [heroIdx, setHeroIdx] = useState(0)
   const defaultHeroImages = [
     '/aboutusimage/tehtarik_premium.png', 
@@ -131,7 +137,7 @@ export default function Home() {
   const heroImages = dynamicGallery.length > 0 
     ? dynamicGallery.slice(0, 4).map(item => item.url) 
     : defaultHeroImages;
-  const { cartItems, subtotal, addToCart, updateQty } = useCart()
+  const { cartItems = [], subtotal = 0, addToCart, updateQty } = useCart() || {}
   const navigate = useNavigate()
   const scrollRef = useRef(null)
   const [weatherAlert, setWeatherAlert] = useState(true)
@@ -152,7 +158,7 @@ export default function Home() {
   }
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '120px', position: 'relative', overflow: 'hidden' }}>
+    <div className="content-container" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '120px', position: 'relative' }}>
       
       {/* ══════════ SHOP HIGHLIGHTS (Premium Style) ══════════ */}
       <motion.div 
@@ -273,17 +279,17 @@ export default function Home() {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ maxWidth: '800px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div style={{ width: '40px', height: '2px', background: 'var(--gold)' }} />
-              <span style={{ color: 'var(--gold)', fontWeight: 800, letterSpacing: '3px', fontSize: '14px', textTransform: 'uppercase' }}>EST. 1988 · Singapore</span>
+              <span className="fade-up" style={{ color: 'var(--gold)', fontWeight: 800, letterSpacing: '4px', fontSize: '14px', textTransform: 'uppercase' }}>GoldenGravityExpressX · MARINE TERRACE</span>
             </div>
-            <h1 style={{ color: 'white', fontSize: 'clamp(38px, 6vw, 72px)', fontWeight: 900, lineHeight: 1.2, letterSpacing: '-1.5px', marginBottom: '28px' }}>
-              Authentic Drinks and Warm Comfort Food <span style={{ color: 'var(--gold)', letterSpacing: '-0.5px' }}>Delivered Fresh</span>
+            <h1 style={{ color: 'var(--white)', fontSize: 'clamp(38px, 6vw, 72px)', fontWeight: 900, lineHeight: 1.2, letterSpacing: '-1.5px', marginBottom: '28px', textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+              Authentic Drinks & <span style={{ color: 'var(--gold)', letterSpacing: '-0.5px' }}>Warm Comfort Food</span>
             </h1>
             <div className="hero-buttons" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <Link to="/menu" className="btn btn-gold" style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-                <ShoppingBag size={20} color="var(--green-dark)" /> Order Now
+              <Link to="/menu" className="btn btn-launch-glow" style={{ borderRadius: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Zap size={20} /> View Menu & Order
               </Link>
               <WhatsAppChatButton 
-                message="Hi STM Salam, I want to know more about your menu." 
+                message="Hi GoldenGravityExpressX, I want to know more about your menu." 
                 type="button" 
                 label="Chat with Admin"
                 style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} 
@@ -367,7 +373,7 @@ export default function Home() {
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
-                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n💳 Payment Method: ScanPay (SGQR PayNow)\n📞 Contact: My attached screenshot\n\nPlease verify my payment. Thank you! 🙏`
+                    const message = `Hello GoldenGravityExpressX! 👋\n\nI have completed my PayNow payment.\n\n💳 Payment Method: ScanPay (SGQR PayNow)\n📞 Contact: My attached screenshot\n\nPlease verify my payment. Thank you! 🙏`
                     const whatsappUrl = `https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
                     window.open(whatsappUrl, '_blank')
                   }}
@@ -467,7 +473,7 @@ export default function Home() {
                   onClick={() => {
                     const tempId = `PN-${Math.floor(1000 + Math.random() * 9000)}`;
                     const total = subtotal.toFixed(2);
-                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Item subtotal: SGD ${total}\n(Delivery & final total confirmed at checkout.)\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
+                    const message = `Hello GoldenGravityExpressX! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Item subtotal: SGD ${total}\n(Delivery & final total confirmed at checkout.)\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
                     window.open(`https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
                     setShowPayNow(false);
                   }}
@@ -532,7 +538,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               style={{ color: 'var(--text-light)', fontSize: '18px', fontWeight: 500, maxWidth: '600px', margin: '0 auto' }}
             >
-              Enjoy STM Salam’s most-loved drinks and snacks, freshly prepared every day.
+              Enjoy GoldenGravityExpressX’s most-loved drinks and snacks, freshly prepared every day.
             </motion.p>
           </div>
 
@@ -660,17 +666,17 @@ export default function Home() {
           </motion.div>
         </section>
 
-        {/* ══════════ WHY CHOOSE STM SALAM ══════════ */}
+        {/* ══════════ WHY CHOOSE GoldenGravityExpressX ══════════ */}
         <section style={{ marginBottom: '64px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
             {[
-              { icon: <Flame size={32} />, title: 'Freshly Made', desc: 'Prepared hot upon your order.' },
-              { icon: <Zap size={32} />, title: 'Fast Delivery', desc: 'Zero-G delivery speeds direct to you.' },
-              { icon: <Heart size={32} />, title: 'Local Favorites', desc: 'Authentic Marine Terrace Kopitiam taste.' },
-              { icon: <Tag size={32} />, title: 'Affordable Prices', desc: 'Delicious food without breaking the bank.' }
+              { icon: <Flame size={32} />, title: 'Hyper-Fresh', desc: 'Synthesized hot upon your request.' },
+              { icon: <Zap size={32} />, title: 'Quantum Speed', desc: 'Zero-G drones bypass traffic.' },
+              { icon: <ShieldCheck size={32} />, title: 'Secure Streams', desc: 'Encrypted payment gateways.' },
+              { icon: <Target size={32} />, title: 'Precision Drop', desc: 'Pinpoint accuracy delivery.' }
             ].map((f, i) => (
-              <div key={i} style={{ background: 'var(--cream)', borderRadius: '24px', padding: '32px', textAlign: 'center' }}>
-                <div style={{ width: '64px', height: '64px', background: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green-mid)', margin: '0 auto 16px', boxShadow: '0 10px 20px rgba(0,0,0,0.05)' }}>
+              <div key={i} className="hologram-panel" style={{ borderRadius: '24px', padding: '32px', textAlign: 'center' }}>
+                <div style={{ width: '64px', height: '64px', background: 'rgba(0, 243, 255, 0.1)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-cyan)', margin: '0 auto 16px', boxShadow: 'inset 0 0 15px rgba(0, 243, 255, 0.2)' }}>
                   {f.icon}
                 </div>
                 <h4 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--green-dark)', marginBottom: '8px' }}>{f.title}</h4>
@@ -733,7 +739,7 @@ export default function Home() {
               })
             ) : (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: 'var(--cream)', borderRadius: '24px', border: '1px dashed #cbd5e1' }}>
-                 <p style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '15px' }}>Check back soon for latest moments at STM Salam!</p>
+                 <p style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '15px' }}>Check back soon for latest moments at GoldenGravityExpressX!</p>
               </div>
             )}
           </div>
@@ -833,7 +839,7 @@ export default function Home() {
                   whileTap={{ scale: 0.97 }}
                   onClick={() => navigate('/menu')} 
                   style={{ 
-                    background: '#FFFFFF', 
+                    background: 'white', 
                     color: '#059669', 
                     padding: '18px 48px', 
                     borderRadius: '14px', 
@@ -944,7 +950,7 @@ export default function Home() {
               transition={{ delay: 0.05 }}
               style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 950, color: 'var(--green-dark)', letterSpacing: '-2px', lineHeight: 1.1, marginBottom: '20px' }}
             >
-              Your STM Salam,<br /><span style={{ color: 'var(--green-mid)' }}>in your pocket.</span>
+              Your GoldenGravityExpressX,<br /><span style={{ color: 'var(--green-mid)' }}>in your pocket.</span>
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -962,7 +968,7 @@ export default function Home() {
             {[
               { icon: '🏠', title: 'Smart Home Feed', desc: 'Curated favourites, seasonal highlights & live promotions front and centre.', color: '#e0f2fe', accent: '#0ea5e9' },
               { icon: '🍽️', title: 'Full Menu Browsing', desc: 'Filter by category, search, and add to cart with one tap — just like the web.', color: '#d1fae5', accent: 'var(--green-mid)' },
-              { icon: '📍', title: 'Live Order Tracking', desc: 'Watch your rider on the map in real-time from kitchen to your door.', color: '#fef3c7', accent: '#f59e0b' },
+              { icon: '📍', title: 'Live Order Tracking', desc: 'Watch your rider on the map in real-time from kitchen to your door.', color: 'rgba(212,175,55,0.12)', accent: '#D4AF37' },
               { icon: '💳', title: 'In-App Payments', desc: 'PayNow QR and Stripe card payments — all secured in the app.', color: '#ede9fe', accent: '#7c3aed' },
               { icon: '💬', title: 'Order Chat & Support', desc: 'Message the STM team directly via in-app chat or WhatsApp any time.', color: '#fce7f3', accent: '#db2777' },
               { icon: '👤', title: 'Profile & History', desc: 'View past orders, re-order favourites, and manage your account settings.', color: '#ecfdf5', accent: 'var(--green-dark)' },
@@ -1003,7 +1009,7 @@ export default function Home() {
                 <Smartphone size={14} /> STM Mobile · React Native
               </div>
               <h2 style={{ color: 'white', fontSize: 'clamp(28px,4vw,46px)', fontWeight: 950, marginBottom: '20px', lineHeight: 1.1, letterSpacing: '-1.5px' }}>
-                Download the STM Salam App
+                Download the GoldenGravityExpressX App
                 <span style={{ display: 'inline-block', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase', marginLeft: '12px', verticalAlign: 'middle' }}>
                   Coming Soon
                 </span>
@@ -1067,7 +1073,7 @@ export default function Home() {
               >
                 {/* Status bar */}
                 <div style={{ padding: '14px 14px 8px', background: '#062410', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--gold)', fontSize: '9px', fontWeight: 900, letterSpacing: '1px' }}>STM SALAM</span>
+                  <span style={{ color: 'var(--gold)', fontSize: '9px', fontWeight: 900, letterSpacing: '1px' }}>GoldenGravityExpressX</span>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
@@ -1108,7 +1114,7 @@ export default function Home() {
                 {/* Top bar */}
                 <div style={{ padding: '18px 16px 12px', background: 'var(--green-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontSize: '8px', color: 'var(--gold)', fontWeight: 800, letterSpacing: '1px' }}>STM SALAM</div>
+                    <div style={{ fontSize: '8px', color: 'var(--gold)', fontWeight: 800, letterSpacing: '1px' }}>GoldenGravityExpressX</div>
                     <div style={{ fontSize: '13px', color: 'white', fontWeight: 900 }}>Home</div>
                   </div>
                   <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👤</div>
@@ -1202,13 +1208,13 @@ function ActiveOrderTracker() {
 
   const statusKey = normalizeStatus(activeOrder.status || activeOrder.stage || activeOrder.orderStatus)
   const statusMap = {
-    pending: 'Order Placed',
-    confirmed: 'Confirmed',
-    preparing: 'Preparing your food',
-    ready: 'Ready for pickup',
-    assigned: 'Rider assigned',
-    picked_up: 'Out for delivery',
-    delivered: 'Delivered',
+    pending: 'Stream Initialized',
+    confirmed: 'Sequence Confirmed',
+    preparing: 'Synthesizing Rations',
+    ready: 'Ready for Uplink',
+    assigned: 'Cyber-Rider Assigned',
+    picked_up: 'In Transit (Zero-G)',
+    delivered: 'Payload Delivered',
   }
   const progressMap = { pending: 12, preparing: 35, ready: 55, assigned: 72, picked_up: 90, delivered: 100 }
 

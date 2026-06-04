@@ -372,17 +372,42 @@ const Products = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .mobile-stack-buttons {
+            flex-direction: column !important;
+            width: 100% !important;
+            gap: 8px !important;
+          }
+          .mobile-stack-buttons > button, .mobile-stack-buttons > input {
+            width: 100% !important;
+            margin-bottom: 0px !important;
+            box-sizing: border-box;
+          }
+          .desktop-product-table { display: none !important; }
+          .mobile-product-cards { display: flex !important; }
+          .admin-page-header {
+             flex-direction: column !important;
+             align-items: flex-start !important;
+             gap: 16px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .mobile-product-cards { display: none !important; }
+        }
+      `}</style>
+
+      <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a' }}>Products Management</h2>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="mobile-stack-buttons" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
           <input type="text" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '600', outline: 'none' }} />
           <button
             onClick={handleDryRunImageFix}
             disabled={migrationLoading}
             title="Preview broken image paths without writing"
             style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              backgroundColor: migrationLoading ? '#94a3b8' : '#f59e0b',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              backgroundColor: migrationLoading ? '#94a3b8' : '#D4AF37',
               color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px',
               fontWeight: 'bold', cursor: migrationLoading ? 'wait' : 'pointer',
               boxShadow: '0 4px 12px rgba(245,158,11,0.25)'
@@ -395,7 +420,7 @@ const Products = () => {
             disabled={!dryRunCompleted || migrationLoading}
             title="Apply image path fixes to broken entries"
             style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               backgroundColor: (!dryRunCompleted || migrationLoading) ? '#94a3b8' : '#0f766e',
               color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px',
               fontWeight: 'bold', cursor: (!dryRunCompleted || migrationLoading) ? 'not-allowed' : 'pointer',
@@ -404,14 +429,14 @@ const Products = () => {
           >
             <Wand2 size={18} /> Apply Image Fix
           </button>
-          <button onClick={() => { setCurrentProduct(getEmptyProduct()); setView('add'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--green-dark)', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(1,50,32,0.2)' }}>
+          <button onClick={() => { setCurrentProduct(getEmptyProduct()); setView('add'); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--green-dark)', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(1,50,32,0.2)' }}>
             <Plus size={18} /> Add Product
           </button>
         </div>
       </div>
 
       {migrationReport && (
-        <div style={{ marginBottom: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '16px' }}>
+        <div style={{ marginBottom: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '16px', overflowX: 'auto' }}>
           <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '13px', fontWeight: 800, color: '#334155', marginBottom: '12px' }}>
             <span>Total: {migrationReport.totalProductsScanned}</span>
             <span>Broken: {migrationReport.brokenCount}</span>
@@ -439,7 +464,7 @@ const Products = () => {
                       <td style={{ padding: '8px' }}>{entry.category || '-'}</td>
                       <td style={{ padding: '8px', color: '#64748b' }}>{entry.currentImage || '-'}</td>
                       <td style={{ padding: '8px', color: '#0f766e' }}>{entry.proposedReplacementImage}</td>
-                      <td style={{ padding: '8px', color: '#b45309' }}>{entry.reason}</td>
+                      <td style={{ padding: '8px', color: '#B8860B' }}>{entry.reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -449,7 +474,8 @@ const Products = () => {
         </div>
       )}
 
-      <div style={{ backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.03)', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.02)' }}>
+      {/* Desktop Table View */}
+      <div className="desktop-product-table" style={{ backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.03)', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.02)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #eef2f6' }}>
             <tr style={{ textAlign: 'left', color: '#64748b' }}>
@@ -522,6 +548,58 @@ const Products = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards View */}
+      <div className="mobile-product-cards" style={{ display: 'none', flexDirection: 'column', gap: '16px' }}>
+        {filteredProducts.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontWeight: 'bold', background: 'white', borderRadius: '16px' }}>
+             {products.length === 0 ? '⏳ Loading products...' : 'No products found.'}
+          </div>
+        ) : (
+          filteredProducts.map(product => {
+            const matchedCat = categories.find(c => c.id === product.categoryId);
+            const fallbackCategoryName = String(product.category || product.categoryId || '').trim();
+            const matchedByName = !matchedCat && fallbackCategoryName
+              ? categories.find((c) => String(c.name || '').toLowerCase() === fallbackCategoryName.toLowerCase())
+              : null;
+            const categoryLabel = matchedCat
+              ? `${matchedCat.icon || '📦'} ${matchedCat.name || 'Uncategorized'}`
+              : matchedByName
+                ? `${matchedByName.icon || '📦'} ${matchedByName.name || 'Uncategorized'}`
+                : fallbackCategoryName
+                  ? `📦 ${fallbackCategoryName}`
+                  : '📦 Uncategorized';
+
+            return (
+              <div key={product.id} style={{ background: 'white', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0' }}>
+                 <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                   <img loading="lazy" 
+                     src={product.image || product.img || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=120'}
+                     style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', background: '#f1f5f9' }} 
+                   />
+                   <div style={{ flex: 1 }}>
+                     <h3 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 6px 0', color: '#0f172a' }}>{product.name}</h3>
+                     <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Category: {categoryLabel}</div>
+                     <div style={{ fontSize: '16px', fontWeight: '900', color: 'var(--green-dark)' }}>${parseFloat(product.price || 0).toFixed(2)}</div>
+                     {product.featured && <div style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}><Star size={12} fill="currentColor" /> Featured</div>}
+                   </div>
+                 </div>
+                 
+                 <div style={{ display: 'flex', gap: '8px' }}>
+                   <button onClick={() => { setCurrentProduct(product); setView('edit'); }} style={{ flex: 1, backgroundColor: '#f1f5f9', color: '#0ea5e9', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                     <Edit size={16} /> Edit
+                   </button>
+                   {isAuthenticated && (
+                     <button onClick={() => handleDelete(product.id)} style={{ flex: 1, backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                       <Trash2 size={16} /> Delete
+                     </button>
+                   )}
+                 </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

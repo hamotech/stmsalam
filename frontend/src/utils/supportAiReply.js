@@ -1,13 +1,13 @@
 import { shopInfo } from '../data/menuData'
 
 /**
- * Lightweight on-device “AI” assistant: keyword + FAQ matching for STM Salam.
+ * Lightweight on-device “AI” assistant: keyword + FAQ matching for GoldenGravityExpressX.
  * No external API keys required. Replace with a hosted LLM later if needed.
  */
 export function getSupportAiReply(userText) {
   const q = (userText || '').toLowerCase().trim()
   if (!q) {
-    return "Hi! I’m the STM Salam assistant. Try asking about **opening hours**, **delivery**, **minimum order**, **our address**, or **how to track an order**."
+    return "Hi! I’m the GoldenGravityExpressX assistant. Try asking about **opening hours**, **delivery**, **minimum order**, **our address**, or **how to track an order**."
   }
 
   const outlet = `${shopInfo.outletName} — ${shopInfo.outletAddress}`

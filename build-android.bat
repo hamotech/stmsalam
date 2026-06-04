@@ -45,7 +45,7 @@ if errorlevel 1 (
 )
 rem Create/overwrite capacitor.config.json
 > capacitor.config.json (
-    echo {^"appId^": ^"com.stmsalam.app^",^"appName^": ^"STMAPP^",^"webDir^": ^"stmapp^",^"server^": {^"androidScheme^": ^"http^",^"hostname^": ^"10.0.2.2^",^"cleartext^": true}}
+    echo {^"appId^": ^"com.stmsalam.app^",^"appName^": ^"GoldenGravityExpressX^",^"webDir^": ^"stmapp^",^"server^": {^"androidScheme^": ^"https^",^"hostname^": ^"teh-tarik-app-my-own.web.app^",^"cleartext^": true}}
 )
 rem Initialise Capacitor if not already
 if not exist ios (

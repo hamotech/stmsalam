@@ -172,6 +172,8 @@ async function applyStripeWebhookPaidOrder(db, orderId, patchExtras, requestId) 
           ? { stripeCheckoutSessionId: patchExtras.stripeCheckoutSessionId }
           : {}),
         ...(patchExtras.paymentIntentId ? { paymentIntentId: patchExtras.paymentIntentId } : {}),
+        ...(patchExtras.totalAmount ? { totalAmount: patchExtras.totalAmount } : {}),
+        ...(patchExtras.currency ? { currency: patchExtras.currency } : {}),
         // Written atomically with FSM transition — no external update() needed.
         ...(patchExtras.eventId ? { lastEventId: patchExtras.eventId } : {}),
       },
@@ -294,6 +296,8 @@ async function handleStripeWebhookEvent(event, db) {
     await applyStripeWebhookPaidOrder(db, orderId, {
       stripeCheckoutSessionId: session.id,
       paymentIntentId: extractPaymentIntentIdFromSession(session),
+      totalAmount: session.amount_total ? session.amount_total / 100 : undefined,
+      currency: session.currency ? session.currency.toUpperCase() : undefined,
       eventId,
     }, eventId);
     await recordProcessedStripeEventId(db, orderId, eventId);

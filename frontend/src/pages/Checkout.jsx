@@ -587,36 +587,65 @@ export default function Checkout() {
   const hasFirebaseForStripe = !!String(import.meta.env.VITE_FIREBASE_PROJECT_ID || '').trim()
   const stripePaymentConfigured = hasFirebaseForStripe
 
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.')
-      return
-    }
+  const handleDetectLocation = async () => {
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords
+    
+    try {
+      let lat, lng;
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`, {
-            headers: { 'User-Agent': 'STM-Salam-Digital-Platform' }
-          });
-          const data = await res.json()
-          const address = data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-          setFormData(prev => ({ ...prev, address }))
-        } catch (err) {
-          console.error('Geocoding error:', err)
-          setFormData(prev => ({ ...prev, address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` }))
-        } finally {
-          setLocating(false)
+          const checkPerms = await Geolocation.checkPermissions();
+          if (checkPerms.location !== 'granted') {
+            const reqPerms = await Geolocation.requestPermissions();
+            if (reqPerms.location !== 'granted') {
+              alert('Location permission denied. Please enable it in your device settings.');
+              setLocating(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('Error checking/requesting permissions:', e);
         }
-      },
-      (err) => {
-        console.error('Geolocation error:', err)
-        alert('Unable to get your location. Please check browser permissions.')
-        setLocating(false)
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    )
+
+        const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+      } else {
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser.')
+          setLocating(false)
+          return
+        }
+        
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 });
+        });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+      }
+      
+      // Reverse Geocoding via Nominatim
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
+          headers: { 'User-Agent': 'STM-Salam-Digital-Platform' }
+        });
+        const data = await res.json()
+        const address = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        setFormData(prev => ({ ...prev, address }))
+      } catch (err) {
+        console.error('Geocoding error:', err)
+        setFormData(prev => ({ ...prev, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}` }))
+      }
+      
+    } catch (err) {
+      console.error('Location detection error:', err)
+      alert('Unable to detect location. Please enable GPS or enter address manually.')
+    } finally {
+      setLocating(false)
+    }
   }
 
   if (loading) {
@@ -647,7 +676,7 @@ export default function Checkout() {
   }
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '100px' }}>
+    <div className="cart-container" style={{ background: '#f8fafc', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ background: 'var(--green-dark)', padding: '60px 0 40px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, opacity: 0.1, background: 'url(https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=1000)', backgroundSize: 'cover' }} />
@@ -737,11 +766,11 @@ export default function Checkout() {
                         ≈ <strong>{deliveryDistanceKm.toFixed(1)} km</strong> from outlet —{' '}
                         {deliveryQuote.freeDelivery
                           ? <strong style={{ color: '#15803d' }}>free delivery applies</strong>
-                          : <strong style={{ color: '#b45309' }}>SGD {shopInfo.deliveryFee.toFixed(2)} delivery fee</strong>}
+                          : <strong style={{ color: '#B8860B' }}>SGD {shopInfo.deliveryFee.toFixed(2)} delivery fee</strong>}
                       </span>
                     )}
                     {!geoLoading && geoError && (
-                      <span style={{ color: '#b45309' }}>{geoError}</span>
+                      <span style={{ color: '#B8860B' }}>{geoError}</span>
                     )}
                     {!geoLoading && !geoError && deliveryDistanceKm == null && (formData.address || '').trim().length >= 8 && (
                       <span style={{ color: '#64748b' }}>Could not measure distance yet — fee may apply until confirmed.</span>
@@ -841,7 +870,7 @@ export default function Checkout() {
                 })}
               </div>
               {(payment === PAYMENT_MODE.STRIPE && missingStripeEnv && !stripePaymentConfigured) && (
-                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontSize: '12px', fontWeight: 700 }}>
+                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(212,175,55,0.08)', color: '#B8860B', border: '1px solid rgba(212,175,55,0.3)', fontSize: '12px', fontWeight: 700 }}>
                   Running in <strong>demo mode</strong> — no real payment will be captured. For Stripe, set <code>VITE_FIREBASE_PROJECT_ID</code> and deploy <code>createStripePendingOrder</code> + Cloud Run <code>createStripeCheckout</code> (URL is fixed in code).
                 </div>
               )}
@@ -862,12 +891,12 @@ export default function Checkout() {
                  </span>
                </div>
                {mode === 'delivery' && deliveryQuote.blocked && (
-                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', background: '#fffbeb', padding: '10px', borderRadius: '10px', border: '1px solid #fde68a' }}>
+                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#B8860B', background: 'rgba(212,175,55,0.08)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.3)' }}>
                    Minimum SGD {(shopInfo.minOrderDelivery ?? 10).toFixed(2)} for delivery. Add items or choose pickup.
                  </div>
                )}
                {checkoutForeignTabLock && (
-                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', background: '#fffbeb', padding: '10px', borderRadius: '10px', border: '1px solid #fde68a', marginTop: '10px' }}>
+                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#B8860B', background: 'rgba(212,175,55,0.08)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.3)', marginTop: '10px' }}>
                    Another tab is using checkout. Complete or close it first — otherwise the same order could be placed twice.
                  </div>
                )}
@@ -876,6 +905,7 @@ export default function Checkout() {
             <button 
               onClick={handlePlaceOrder} 
               disabled={processing || checkoutForeignTabLock || (mode === 'delivery' && deliveryQuote.blocked)} 
+              className="proceed-btn"
               style={{ 
                 width: '100%', 
                 padding: '20px', 
@@ -893,7 +923,7 @@ export default function Checkout() {
             </button>
             
             <WhatsAppChatButton 
-              message="Hi STM Salam, I want help with payment." 
+              message="Hi GoldenGravityExpressX, I want help with payment." 
               type="button" 
               label="Payment Help?" 
               style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--gold-tint)', color: 'var(--green-dark)', boxShadow: 'none' }} 

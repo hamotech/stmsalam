@@ -324,7 +324,7 @@ export default function SupportHubWidget() {
 
             {tab === 'team' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                <div style={{ fontSize: 11, color: '#64748b', padding: '8px 14px', fontWeight: 700, background: '#fffbeb', borderBottom: '1px solid #fde68a' }}>
+                <div style={{ fontSize: 11, color: '#64748b', padding: '8px 14px', fontWeight: 700, background: 'rgba(212,175,55,0.08)', borderBottom: '1px solid rgba(212,175,55,0.3)' }}>
                   Thread ID: <code style={{ fontSize: 10 }}>{convId.slice(0, 18)}…</code> — staff reply from Admin → Support.
                 </div>
                 <SupportLiveChat conversationId={convId} role="customer" />

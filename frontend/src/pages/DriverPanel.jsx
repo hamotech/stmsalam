@@ -9,16 +9,19 @@ import { getMessagingInstance } from '../lib/firebase'
 import { httpsCallable } from 'firebase/functions'
 import { safeLog } from '../utils/runtimeSafety'
 import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
-
+import { advanceRiderLeg } from '../admin/services/dataService'
 /** Align with unified `orders.status` + legacy rider UI strings. */
 const STATUS_FILTER = ['assigned', 'picked_up', 'ready_for_pickup', 'out_for_delivery']
 const TASK_STATUS_FILTER = new Set(STATUS_FILTER)
 
-const toOrderStatus = (raw) =>
-  String(raw || '')
+const toOrderStatus = (raw) => {
+  let val = String(raw || '')
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_')
+  if (val === 'assigned') return 'ready_for_pickup'
+  return val
+}
 
 const riderTaskStatusLabel = (raw) => {
   const st = toOrderStatus(raw)
@@ -82,7 +85,7 @@ export default function DriverPanel() {
         (r.dispatchState?.offeredTo === riderId || r.dispatchState?.fallback === true)
       )
       setAvailableOrders(available)
-    }, (e) => setPanelError(e?.message || 'Failed to subscribe available orders.'))
+    }, (e) => setPanelError('AvailableOrders: ' + (e?.message || 'Failed to subscribe available orders.')))
     return () => unsub()
   }, [isRiderAllowed, riderId, riderProfile.status, rejectedOrders])
 
@@ -118,10 +121,10 @@ export default function DriverPanel() {
           })
           if (import.meta.env.DEV) safeLog('Rider active status', statusRaw)
         } catch (e) {
-          setPanelError(e?.message || 'Failed to load rider profile.')
+          setPanelError('Profile1: ' + (e?.message || 'Failed to load rider profile.'))
         }
       },
-      (e) => setPanelError(e?.message || 'Failed to subscribe rider profile.')
+      (e) => setPanelError('Profile2: ' + (e?.message || 'Failed to subscribe rider profile.'))
     )
     return () => unsub()
   }, [isRiderAllowed, riderId])
@@ -150,6 +153,8 @@ export default function DriverPanel() {
         
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
+        const heading = pos.coords.heading || 0
+        const speed = pos.coords.speed || 0
         
         if (lastGpsCoordsRef.current) {
           const dist = calculateDistance(lat, lng, lastGpsCoordsRef.current.lat, lastGpsCoordsRef.current.lng)
@@ -159,27 +164,21 @@ export default function DriverPanel() {
         lastGpsPushRef.current = now
         lastGpsCoordsRef.current = { lat, lng }
         
+        console.log("Updating driver GPS:", {
+          uid: riderId,
+          lat,
+          lng
+        });
+        
         try {
-          // Send location to RTDB via Backend API
-          fetch('http://localhost:5000/api/driver/location', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            },
-            body: JSON.stringify({
-              driverId: riderId,
-              latitude: lat,
-              longitude: lng
-            })
-          }).catch(err => safeLog('API Loc Update Error', err))
-          
           await setDoc(
             doc(db, 'drivers', riderId),
             {
               location: {
                 lat,
                 lng,
+                heading,
+                speed,
                 updatedAt: serverTimestamp(),
               },
             },
@@ -242,7 +241,7 @@ export default function DriverPanel() {
           }
         }
       },
-      (e) => setPanelError(e?.message || 'Failed to subscribe assigned deliveries.')
+      (e) => setPanelError('AssignedOrders: ' + (e?.message || 'Failed to subscribe assigned deliveries.'))
     )
     return () => unsub()
   }, [isRiderAllowed, riderId])
@@ -312,56 +311,47 @@ export default function DriverPanel() {
     if (import.meta.env.DEV) safeLog('Rider active status', next)
   }
 
-  const markTransition = async (orderId, nextStatus) => {
+  const startDelivery = async (orderId) => {
     if (!orderId) return
     setBusyOrderId(orderId)
     try {
-      const res = await fetch('http://localhost:5000/api/driver/status', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}` 
-        },
-        body: JSON.stringify({ orderId, status: nextStatus, driverId: riderId })
-      });
-      if (!res.ok) throw new Error('Failed to update status');
-      
-      const patch = {}
-      if (nextStatus === 'out_for_delivery') {
-        patch['timestamps.pickedUpAt'] = serverTimestamp()
-        setShiftStatus('busy')
-      } else if (nextStatus === 'delivered') {
-        patch['timestamps.deliveredAt'] = serverTimestamp()
-        setShiftStatus('online')
-      }
-      if (Object.keys(patch).length > 0) {
-        assertNoDirectOrderLifecycleWrite(patch, 'DriverPanel.markTransition')
-        await updateDoc(doc(db, 'orders', orderId), patch)
-      }
+      await advanceRiderLeg(orderId, 'pickup');
+      setShiftStatus('busy')
     } catch(err) {
-      safeLog('Error updating status', err);
+      safeLog('Error starting delivery', err);
+      setPanelError(err.message || 'Error starting delivery');
     } finally {
       setBusyOrderId('')
     }
   }
 
-  const acceptOrder = async (orderId) => {
+  const markDelivered = async (orderId) => {
     if (!orderId) return
     setBusyOrderId(orderId)
     try {
-      console.log("Driver UID:", user?.uid || riderId);
-      const order = assignedOrders.find(o => o.id === orderId) || {};
-      console.log("Assigned Driver:", order.assignedDriverId);
-      console.log("Accepting order:", order.id || orderId);
+      await advanceRiderLeg(orderId, 'deliver');
+      setShiftStatus('online')
+    } catch(err) {
+      safeLog('Error marking delivered', err);
+      setPanelError(err.message || 'Error marking delivered');
+    } finally {
+      setBusyOrderId('')
+    }
+  }
 
-      await updateDoc(doc(db, 'orders', orderId), { 
-        status: 'picked_up',
-        acceptedAt: serverTimestamp(),
-        riderAccepted: true
-      })
+  const acceptOrder = async (order) => {
+    if (!order || !order.id) return
+    if (toOrderStatus(order.status) !== 'ready_for_pickup') {
+      setPanelError("Rider accept only when order is ready_for_pickup");
+      throw new Error("Rider accept only when order is ready_for_pickup");
+    }
+    setBusyOrderId(order.id)
+    try {
+      await advanceRiderLeg(order.id, 'accept');
       setShiftStatus('busy')
     } catch(err) {
       safeLog('Error accepting order', err);
+      setPanelError(err.message || 'Error accepting order');
     } finally {
       setBusyOrderId('')
     }
@@ -369,18 +359,6 @@ export default function DriverPanel() {
 
   const rejectOrder = async (orderId) => {
     setRejectedOrders(prev => new Set(prev).add(orderId))
-    try {
-      await fetch('http://localhost:5000/api/driver/reject', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}` 
-        },
-        body: JSON.stringify({ orderId, driverId: riderId })
-      });
-    } catch(err) {
-      safeLog('Error rejecting order', err);
-    }
   }
 
   const openMaps = (order) => {
@@ -423,7 +401,7 @@ export default function DriverPanel() {
   }
 
   return (
-    <div style={{ background: 'var(--bg-body)', minHeight: '100vh', maxWidth: '560px', margin: '0 auto', paddingBottom: '24px' }}>
+    <div style={{ background: '#f8fafc', minHeight: '100vh', maxWidth: '560px', margin: '0 auto', paddingBottom: '24px' }}>
       <header style={{ background: 'var(--green-dark)', padding: '24px', color: 'white', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -440,7 +418,7 @@ export default function DriverPanel() {
           <button
             type="button"
             onClick={() => setShiftStatus(riderProfile.status === 'offline' ? 'online' : 'offline')}
-            style={{ border: 'none', borderRadius: '12px', padding: '10px 14px', cursor: 'pointer', fontWeight: 900, background: riderProfile.status !== 'offline' ? '#fee2e2' : '#dcfce7', color: riderProfile.status !== 'offline' ? '#b91c1c' : '#166534' }}
+            style={{ border: 'none', borderRadius: '12px', padding: '10px 14px', cursor: 'pointer', fontWeight: 900, background: riderProfile.status !== 'offline' ? '#fee2e2' : '#dcfce7', color: riderProfile.status !== 'offline' ? '#b91c1c' : '#166534', transition: 'all 0.2s' }}
           >
             {riderProfile.status !== 'offline' ? 'Go Offline' : 'Go Online'}
           </button>
@@ -480,12 +458,21 @@ export default function DriverPanel() {
                 <button onClick={() => callCustomer(activeDelivery)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><Phone size={18} /> Call</button>
                 <button onClick={() => setChatOrderId(activeDelivery.id)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><MessageSquare size={18} /> Chat</button>
               </div>
-              {toOrderStatus(activeDelivery.status) === 'ready_for_pickup' || toOrderStatus(activeDelivery.status) === 'preparing' || toOrderStatus(activeDelivery.status) === 'placed' || toOrderStatus(activeDelivery.status) === 'picked_up' ? (
+              {toOrderStatus(activeDelivery.status) === 'ready_for_pickup' ? (
                 <button
                   type="button"
                   disabled={busyOrderId === activeDelivery.id}
-                  onClick={() => markTransition(activeDelivery.id, 'out_for_delivery')}
-                  style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#0369a1', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 6px rgba(3,105,161,0.2)' }}
+                  onClick={() => acceptOrder(activeDelivery)}
+                  style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#013220', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(1,50,32,0.2)' }}
+                >
+                  {busyOrderId === activeDelivery.id ? 'Updating...' : 'Accept Assigned Delivery'}
+                </button>
+              ) : activeDelivery.rider?.legStatus !== 'PICKED_UP' ? (
+                <button
+                  type="button"
+                  disabled={busyOrderId === activeDelivery.id}
+                  onClick={() => startDelivery(activeDelivery.id)}
+                  style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#0369a1', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(3,105,161,0.2)' }}
                 >
                   {busyOrderId === activeDelivery.id ? 'Updating...' : 'Start Delivery (Live Track)'}
                 </button>
@@ -493,8 +480,8 @@ export default function DriverPanel() {
                 <button
                   type="button"
                   disabled={busyOrderId === activeDelivery.id}
-                  onClick={() => markTransition(activeDelivery.id, 'delivered')}
-                  style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#013220', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 6px rgba(1,50,32,0.2)' }}
+                  onClick={() => markDelivered(activeDelivery.id)}
+                  style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#013220', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(1,50,32,0.2)' }}
                 >
                   {busyOrderId === activeDelivery.id ? 'Updating...' : 'Swipe: Mark Delivered'}
                 </button>
@@ -522,8 +509,20 @@ export default function DriverPanel() {
                     {(order.customerSnapshot?.name || order.customer?.name || 'Customer')} · {(order.customerSnapshot?.address || order.customer?.address || order.address || 'No address')}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button disabled={busyOrderId === order.id} onClick={() => acceptOrder(order.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: '#013220', color: 'white', fontWeight: 800, cursor: 'pointer' }}>
-                      Accept Order
+                    <button 
+                      disabled={busyOrderId === order.id || toOrderStatus(order.status) !== 'ready_for_pickup'} 
+                      onClick={() => acceptOrder(order)} 
+                      style={{ 
+                        flex: 1, 
+                        padding: '10px', 
+                        borderRadius: '10px', 
+                        border: 'none', 
+                        background: toOrderStatus(order.status) === 'ready_for_pickup' ? '#013220' : '#cbd5e1', 
+                        color: toOrderStatus(order.status) === 'ready_for_pickup' ? 'white' : '#64748b', 
+                        fontWeight: 800, 
+                        cursor: toOrderStatus(order.status) === 'ready_for_pickup' ? 'pointer' : 'not-allowed' 
+                      }}>
+                      {toOrderStatus(order.status) === 'ready_for_pickup' ? 'Accept Order' : 'Prep...'}
                     </button>
                     <button onClick={() => rejectOrder(order.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white', color: '#64748b', fontWeight: 800, cursor: 'pointer' }}>
                       Reject
@@ -560,7 +559,7 @@ export default function DriverPanel() {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <span style={{ fontSize: '11px', fontWeight: 800, background: '#e2e8f0', padding: '4px 8px', borderRadius: '8px' }}>assigned</span>
             <span style={{ fontSize: '11px', fontWeight: 800, background: '#dbeafe', padding: '4px 8px', borderRadius: '8px' }}>picked_up</span>
-            <span style={{ fontSize: '11px', fontWeight: 800, background: '#fef3c7', padding: '4px 8px', borderRadius: '8px' }}>out_for_delivery</span>
+            <span style={{ fontSize: '11px', fontWeight: 800, background: 'rgba(212,175,55,0.12)', padding: '4px 8px', borderRadius: '8px' }}>out_for_delivery</span>
           </div>
           <div style={{ display: 'grid', gap: '10px' }}>
             {assignedOrders.filter((o) => TASK_STATUS_FILTER.has(toOrderStatus(o.status))).length === 0 ? (

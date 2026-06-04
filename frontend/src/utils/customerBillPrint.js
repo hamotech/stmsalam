@@ -162,7 +162,7 @@ export function buildCustomerBillHtml(order) {
   <div class="tot">Subtotal <strong>$${formatMoney(subtotal)}</strong></div>
   <div class="tot">Delivery <strong>$${formatMoney(delivery)}</strong></div>
   <div class="tot" style="font-size:1.1rem;margin-top:8px;">Total <strong>$${formatMoney(total)}</strong></div>
-  <p class="muted" style="margin-top:24px;text-align:center;">Thank you — STM Salam</p>
+  <p class="muted" style="margin-top:24px;text-align:center;">Thank you — GoldenGravityExpressX</p>
 </body></html>`
 }
 

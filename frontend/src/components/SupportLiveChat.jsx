@@ -87,10 +87,10 @@ export default function SupportLiveChat({ conversationId, role = 'customer' }) {
                   style={{
                     padding: '10px 14px',
                     borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                    background: isMe ? 'var(--green-dark)' : isBot ? '#fffbeb' : 'white',
-                    color: isMe ? 'white' : isBot ? '#78350f' : '#0f172a',
+                    background: isMe ? 'var(--green-dark)' : isBot ? 'rgba(212,175,55,0.08)' : 'white',
+                    color: isMe ? 'white' : isBot ? '#B8860B' : '#0f172a',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                    border: isMe ? 'none' : `1px solid ${isBot ? '#fde68a' : '#e2e8f0'}`,
+                    border: isMe ? 'none' : `1px solid ${isBot ? 'rgba(212,175,55,0.3)' : '#e2e8f0'}`,
                     fontSize: 14,
                     lineHeight: 1.45,
                     fontWeight: 600,

@@ -375,10 +375,14 @@ module.exports = function createOrderTransitionService({
             normalizationWarningsCount: Number(readNorm.normalizationWarningsCount || 0),
           });
         }
-        const canonical = getCanonicalOrderState(data);
-        const from = canonical.status;
-        const paymentStatus = canonical.paymentStatus;
-        const paymentMethod = canonical.paymentMethod;
+        // Use the robust normalization that handles legacy mapping (e.g. pending -> paid)
+        const from = readNorm.status;
+        const paymentStatus = readNorm.paymentStatus;
+        const paymentMethod = readNorm.paymentMethod;
+
+        console.log("RAW STATUS:", data.status || 'undefined');
+        console.log("NORMALIZED STATUS:", readNorm.status);
+        console.log("TARGET EVENT:", eventType);
         console.log('[Kitchen FSM transition]', {
           currentStatus: from,
           eventName: eventType,
@@ -398,20 +402,30 @@ module.exports = function createOrderTransitionService({
             actor: normalizedActor,
           });
         }
-        finalFrom = from;
-        enforcePaymentConsistency(from, paymentStatus, paymentMethod);
+        
+        // Backend normalization: auto-transition pending_payment to paid before FSM validation if Admin is pushing to Kitchen
+        let effectiveFrom = from;
+        let effectivePaymentStatus = paymentStatus;
+        if (eventType === 'ORDER_PREPARING' && from === 'pending_payment') {
+          console.log('[orderTransitionService] Normalizing pending_payment -> paid before FSM validation for kitchen accept');
+          effectiveFrom = 'paid';
+          effectivePaymentStatus = 'PAID';
+        }
+
+        finalFrom = effectiveFrom;
+        enforcePaymentConsistency(effectiveFrom, effectivePaymentStatus, paymentMethod);
         const assignedRiderId = String(data.assignedRiderId || '').trim() || null;
         const nextDerived = deriveNextOrderState(
-          from,
+          effectiveFrom,
           event,
           {
-            paymentStatus,
+            paymentStatus: effectivePaymentStatus,
             paymentMethod,
             actor: normalizedActor,
             assignedRiderId,
           }
         );
-        const nextPaymentStatus = String(nextDerived.paymentStatus || paymentStatus).trim().toUpperCase();
+        const nextPaymentStatus = String(nextDerived.paymentStatus || effectivePaymentStatus).trim().toUpperCase();
         const finalState = {
           status: String(nextDerived.status || '').trim().toLowerCase(),
           // Final safety: ensure no write operation ever persists legacy COD_PENDING.

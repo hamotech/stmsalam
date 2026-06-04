@@ -23,7 +23,7 @@ const KitchenView = () => {
 
   const kitchenOrders = orders.filter((o) => {
     const st = readCanonicalOrderStatus(o);
-    return st === 'preparing' || st === 'ready_for_pickup';
+    return st === 'preparing';
   });
 
   const onAdvance = async (order, nextCanonical) => {
@@ -46,13 +46,13 @@ const KitchenView = () => {
 
       <div style={{ marginBottom: '28px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '950', color: '#0f172a' }}>Kitchen view</h2>
-        <p style={{ color: '#64748b', fontWeight: 600 }}>Queue after ops acceptance — preparing → ready_for_pickup only.</p>
+        <p style={{ color: '#64748b', fontWeight: 600 }}>Orders currently being prepared in the kitchen.</p>
       </div>
 
       <div style={{ display: 'grid', gap: '16px' }}>
         {kitchenOrders.length === 0 ? (
           <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontWeight: '800', background: 'white', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-            No orders in kitchen queue (preparing / ready_for_pickup).
+            No orders in kitchen queue (preparing).
           </div>
         ) : (
           kitchenOrders.map((order) => {

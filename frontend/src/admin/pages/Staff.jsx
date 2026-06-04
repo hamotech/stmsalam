@@ -4,6 +4,8 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, functions } from '../../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 
+const createEmployeeAccount = httpsCallable(functions, 'createEmployeeAccount');
+
 export default function Staff() {
   const [staff, setStaff] = useState([]);
   const [search, setSearch] = useState('');
@@ -60,7 +62,6 @@ export default function Staff() {
 
     setSubmitting(true);
     try {
-      const createEmployeeAccount = httpsCallable(functions, 'createEmployeeAccount');
       const res = await createEmployeeAccount({
         name: formData.name,
         email: formData.email,

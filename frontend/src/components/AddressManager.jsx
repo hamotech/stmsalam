@@ -58,38 +58,64 @@ export default function AddressManager() {
     setShowModal(true)
   }
 
-  // Use current location via browser Geolocation API
-  const useCurrentLocation = () => {
+  // Use current location via Capacitor (Android) or browser Geolocation API
+  const useCurrentLocation = async () => {
     console.log('[AddressManager] useCurrentLocation triggered');
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.');
-      return;
-    }
-    
     setLocating(true);
-    console.log('[AddressManager] Requesting position...');
     
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        console.log(`[AddressManager] Position received: ${latitude}, ${longitude}`);
-        setMapCenter({ lat: latitude, lng: longitude });
-        setGeocoding(true);
-        const address = await reverseGeocode(latitude, longitude);
-        setFormData(prev => ({ ...prev, address }));
-        setGeocoding(false);
-        setLocating(false);
-      },
-      (err) => {
-        console.error('[AddressManager] Geolocation error:', err);
-        let msg = 'Unable to get your location. Please allow location access.';
-        if (err.code === 1) msg = 'Location access denied. Please enable it in browser settings.';
-        if (err.code === 3) msg = 'Location request timed out.';
-        alert(msg);
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    try {
+      let lat, lng;
+      
+      const { Capacitor } = await import('@capacitor/core');
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        
+        try {
+          const checkPerms = await Geolocation.checkPermissions();
+          if (checkPerms.location !== 'granted') {
+            const reqPerms = await Geolocation.requestPermissions();
+            if (reqPerms.location !== 'granted') {
+              alert('Location permission denied. Please enable it in your device settings.');
+              setLocating(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('[AddressManager] Error checking/requesting permissions:', e);
+        }
+
+        const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+      } else {
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser.');
+          setLocating(false);
+          return;
+        }
+        
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+        });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+      }
+      
+      console.log(`[AddressManager] Position received: ${lat}, ${lng}`);
+      setMapCenter({ lat, lng });
+      setGeocoding(true);
+      
+      const address = await reverseGeocode(lat, lng);
+      setFormData(prev => ({ ...prev, address }));
+      
+      setGeocoding(false);
+    } catch (err) {
+      console.error('[AddressManager] Geolocation error:', err);
+      alert('Unable to detect location. Please enable GPS or enter address manually.');
+    } finally {
+      setLocating(false);
+    }
   }
 
   // Choose location on the embedded map manually — reverse geocode from center

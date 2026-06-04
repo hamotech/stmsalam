@@ -1,1 +1,0 @@
-const s=new Set(["status","paymentStatus","paymentMethod"]);function i(e){return!e||typeof e!="object"?!1:Object.keys(e).some(t=>{const r=String(t||"").split(".")[0];return s.has(r)})}function n(e,t=""){if(i(e)){const r=t?` (${t})`:"";throw new Error(`Direct order lifecycle writes are disabled. Use transitionOrderStatus only.${r}`)}}export{n as a};

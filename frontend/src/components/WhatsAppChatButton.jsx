@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { shopInfo } from '../data/menuData';
 
 const WhatsAppChatButton = ({ 
-  message = "Hi STM Salam, I need help with my order", 
+  message = "Hi GoldenGravityExpressX, I need help with my order", 
   type = 'floating', 
   label = 'Chat with Admin',
   className = '',

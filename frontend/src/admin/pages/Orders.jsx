@@ -95,7 +95,8 @@ const Orders = () => {
     const isCod = orderPaymentMode === 'COD' || orderPaymentMode === 'CASH';
 
     if (isCod && targetPaymentStatus === 'PENDING') {
-      targetPaymentStatus = 'COD_PENDING';
+      // Backend validates allowed payment statuses. Don't send COD_PENDING.
+      // Leave it as PENDING, the FSM will handle COD rules.
     }
 
     try {
@@ -306,7 +307,7 @@ const Orders = () => {
                   <td style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                         <div style={{ background: payNorm === 'PAID' ? '#f0fdf4' : '#fff7ed', color: payNorm === 'PAID' ? '#16a34a' : '#d97706', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         <div style={{ background: payNorm === 'PAID' ? '#f0fdf4' : '#fff7ed', color: payNorm === 'PAID' ? '#16a34a' : '#B8860B', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <CreditCard size={12} /> {payNorm === 'PAID' ? 'PAID' : 'PENDING'}
                          </div>
                          <button onClick={(e) => { e.stopPropagation(); handlePaymentToggle(order); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}>
@@ -362,7 +363,7 @@ const Orders = () => {
                             </button>
                           </div>
                           {!confirmGate.ok ? (
-                            <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '700', maxWidth: '220px' }}>{confirmGate.reason}</span>
+                            <span style={{ fontSize: '11px', color: '#B8860B', fontWeight: '700', maxWidth: '220px' }}>{confirmGate.reason}</span>
                           ) : null}
                         </>
                       ) : null}
@@ -400,7 +401,7 @@ const Orders = () => {
                           )}
                        </button>
                        <button 
-                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || order.customerPhone || order.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
+                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || order.customerPhone || order.phone || '').replace(/\D/g,'')}?text=Hi, your GoldenGravityExpressX order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
                          style={{ background: '#25D366', border: 'none', padding: '10px', borderRadius: '10px', color: 'white', cursor: 'pointer' }}
                        >
                           <MessageSquare size={18} />

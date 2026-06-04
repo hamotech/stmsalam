@@ -69,7 +69,7 @@ export default function DataSeedPage() {
           {[
             { label: 'Categories', count: local.categories?.length || 0, color: '#0ea5e9' },
             { label: 'Products', count: local.products?.length || 0, color: '#10b981' },
-            { label: 'Orders', count: local.orders?.length || 0, color: '#d97706' },
+            { label: 'Orders', count: local.orders?.length || 0, color: '#B8860B' },
             { label: 'Gallery', count: 30, color: '#8b5cf6' },
           ].map(({ label, count, color }) => (
             <div key={label} style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px 8px', textAlign: 'center', border: `2px solid ${color}22` }}>
@@ -81,10 +81,10 @@ export default function DataSeedPage() {
 
         {/* Warning if no data */}
         {(!local.categories || local.categories.length === 0) && (!local.products || local.products.length === 0) && (!local.orders || local.orders.length === 0) && (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '16px', padding: '20px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '16px', padding: '20px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <AlertCircle size={20} color="#B8860B" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <div style={{ fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>Limited local data found</div>
+              <div style={{ fontWeight: '800', color: '#B8860B', marginBottom: '4px' }}>Limited local data found</div>
               <div style={{ fontSize: '13px', color: '#a16207', lineHeight: '1.5' }}>
                 We will still migrate your baseline categories and gallery photos into Firebase.
               </div>

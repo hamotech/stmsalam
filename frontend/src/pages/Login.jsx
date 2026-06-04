@@ -14,12 +14,14 @@ import {
   sendPasswordResetEmail,
   setPersistence, 
   browserLocalPersistence,
+  indexedDBLocalPersistence,
   getIdTokenResult,
   signInWithCustomToken
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { resolveUserRole } from '../config/adminAccess'
 import { normalizePhone } from '../utils/runtimeSafety'
+import { Capacitor } from '@capacitor/core'
 
 /** Firebase Auth / Firestore error code for logging and branching (never logs PII). */
 function getAuthCode(err) {
@@ -140,7 +142,7 @@ export default function Login() {
       const userSnap = await getDoc(userRef);
       
       if (!userSnap.exists()) {
-        const initialRole = resolveUserRole(safeEmail, 'user');
+        const initialRole = resolveUserRole(safeEmail, 'customer');
         const normalizedPhone = normalizePhone(formData.phone);
         await setDoc(userRef, {
           uid: user.uid,
@@ -158,7 +160,7 @@ export default function Login() {
       setSuccess('Account created! A verification link has also been sent to your email.');
       
       // Auto-login after registration (Maintains existing flow)
-      const registeredRole = resolveUserRole(safeEmail, 'user');
+      const registeredRole = resolveUserRole(safeEmail, 'customer');
       login({ id: user.uid, name: formData.name, email: safeEmail, role: registeredRole });
       
       setTimeout(() => navigate(registeredRole === 'rider' ? '/rider' : redirectPath), 2000);
@@ -232,71 +234,44 @@ export default function Login() {
     });
 
     try {
-      let isFirebase = loginRole === 'customer';
+      // ── Unified Login via Firebase Email/Password ─────────────────────────────
+      // Guard: confirm credentials are non-empty before calling Firebase
+      if (!safeEmail || !formData.password) {
+        throw new Error('Email and password are required.');
+      }
       
-      if (!isFirebase) {
-        // Driver and Admin login using custom API endpoint
-        let apiUrl = '';
-        if (loginRole === 'driver') {
-          apiUrl = `${BASE_URL || 'http://localhost:5000'}/api/driver/login`;
-        } else if (loginRole === 'admin') {
-          apiUrl = `${BASE_URL || 'http://localhost:5000'}/api/admin/login`;
-        }
-        
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: safeEmail, password: formData.password })
-        });
-        const data = await res.json();
-        
-        if (res.ok && data.success) {
-          localStorage.setItem('token', data.token);
-          const userRole = data.user.role || loginRole;
-          localStorage.setItem('role', userRole);
-          
-          if (data.firebaseToken) {
-            try {
-              await signInWithCustomToken(auth, data.firebaseToken);
-              console.log('[AUTH_SUCCESS] Firebase custom token applied successfully.');
-            } catch (err) {
-              console.warn('[AUTH_WARN] Failed to sign in with Firebase custom token:', err);
-            }
-          }
-          
-          login({
-            id: data.user.uid || data.user.email || safeEmail,
-            name: data.user.name || (userRole === 'admin' ? 'Admin' : 'Driver'),
-            email: safeEmail,
-            role: userRole
-          });
-          
-          if (userRole === 'admin') {
-            setSuccess('Admin authenticated! Accessing Command Center...');
-            setTimeout(() => navigate('/admin'), 1200);
-          } else {
-            setSuccess(`${userRole === 'rider' ? 'Rider' : 'Driver'} authenticated! Opening Dashboard...`);
-            setTimeout(() => navigate('/driver'), 1200);
-          }
-          return;
-        } else {
-          throw new Error(data.error || 'Invalid credentials. Please try again.');
-        }
-      } else {
-        // ── Customer login via Firebase Email/Password ─────────────────────────────
-        // Guard: confirm credentials are non-empty before calling Firebase
-        if (!safeEmail || !formData.password) {
-          throw new Error('Email and password are required.');
-        }
-        await setPersistence(auth, browserLocalPersistence);
-        const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
-        const fbUser = firebaseResult.user;
-        setLoginFailCount(0)
-        trackAuthAnalytics('login_success', { reqId })
-        console.log('[AUTH_SUCCESS]', { reqId, email: fbUser.email ?? safeEmail, uid: fbUser.uid });
+      const persistenceType = Capacitor.isNativePlatform() 
+        ? indexedDBLocalPersistence 
+        : browserLocalPersistence;
+      await setPersistence(auth, persistenceType);
+      
+      const firebaseResult = await signInWithEmailAndPassword(auth, safeEmail, formData.password);
+      const fbUser = firebaseResult.user;
+      setLoginFailCount(0)
+      trackAuthAnalytics('login_success', { reqId })
+      console.log('[AUTH_SUCCESS]', { reqId, email: fbUser.email ?? safeEmail, uid: fbUser.uid });
 
-        let role = 'user';
-        let profileName = fbUser.displayName || 'Customer';
+      await fbUser.getIdToken(true); // Force token refresh to sync with Firestore websocket
+      await new Promise(resolve => setTimeout(resolve, 800)); // Allow Firestore websocket to sync with Auth state
+
+      let role = 'customer';
+      let profileName = fbUser.displayName || 'Customer';
+      
+      // 1. Try drivers collection
+      try {
+        const driverRef = doc(db, 'drivers', fbUser.uid);
+        const driverSnap = await getDoc(driverRef);
+        if (driverSnap.exists()) {
+          role = driverSnap.data().role || 'driver';
+          profileName = driverSnap.data().name || 'Driver';
+        }
+      } catch (err) {
+        console.error('[AUTH_READ_DRIVER_FAIL]', { uid: fbUser.uid }, err);
+        // Do not throw, fall back to checking users collection
+      }
+
+      // 2. Try users collection if not found in drivers
+      if (role === 'customer') {
         try {
           const userRef = doc(db, 'users', fbUser.uid);
           const userSnap = await getDoc(userRef);
@@ -307,32 +282,42 @@ export default function Login() {
           } else {
             role = resolveUserRole(safeEmail, null);
           }
-        } catch (profileErr) {
-          const pCode = getAuthCode(profileErr)
-          console.error('[AUTH_PROFILE_READ_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: pCode }, profileErr);
+        } catch (err) {
+          console.error('[AUTH_READ_USER_FAIL]', { uid: fbUser.uid }, err);
           role = resolveUserRole(safeEmail, null);
         }
+      }
 
-        await fbUser.getIdToken(true);
-        try {
-          const tr = await getIdTokenResult(fbUser);
-          if (tr.claims?.admin === true) {
-            role = 'admin';
-          }
-        } catch (claimErr) {
-          const cCode = getAuthCode(claimErr)
-          console.error('[AUTH_TOKEN_CLAIMS_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: cCode }, claimErr);
+      try {
+        const tr = await getIdTokenResult(fbUser);
+        if (tr.claims?.admin === true) {
+          role = 'admin';
         }
+      } catch (claimErr) {
+        const cCode = getAuthCode(claimErr)
+        console.error('[AUTH_TOKEN_CLAIMS_FAIL]', { reqId, email: safeEmail, uid: fbUser.uid, code: cCode }, claimErr);
+      }
 
-        if (role === 'admin') {
-          login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
-          setSuccess('Admin authenticated! Accessing Command Center...');
-          setTimeout(() => navigate('/admin'), 1200);
-        } else {
-          login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'user' });
-          setSuccess('Welcome back! Redirecting...');
-          setTimeout(() => navigate(redirectPath), 1200);
-        }
+      // Check if user requested a specific role login, verify they have permission
+      if (loginRole === 'admin' && role !== 'admin') {
+        throw new Error('This account does not have Admin privileges.');
+      }
+      if (loginRole === 'driver' && role !== 'driver' && role !== 'rider' && role !== 'admin') {
+        throw new Error('This account does not have Driver privileges.');
+      }
+
+      if (role === 'admin') {
+        login({ id: fbUser.uid, name: profileName || 'Admin Master', email: safeEmail, role: 'admin' });
+        setSuccess('Admin authenticated! Accessing Command Center...');
+        setTimeout(() => navigate('/admin'), 1200);
+      } else if (role === 'driver' || role === 'rider') {
+        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: role });
+        setSuccess('Driver authenticated! Opening Dashboard...');
+        setTimeout(() => navigate('/driver'), 1200);
+      } else {
+        login({ id: fbUser.uid, name: profileName, email: safeEmail, role: 'customer' });
+        setSuccess('Welcome back! Redirecting...');
+        setTimeout(() => navigate(redirectPath), 1200);
       }
     } catch (err) {
       // ── Production-safe error capture – never logs password ────────────────────
@@ -479,8 +464,8 @@ export default function Login() {
             {mode === 'register' ? 'Create Account' : headerTitle}
           </h1>
           <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 600 }}>
-            {mode === 'register' ? 'Join STM Salam for exclusive deals' :
-             'Sign in to your STM Salam account'}
+            {mode === 'register' ? 'Join GoldenGravityExpressX for exclusive deals' :
+             'Sign in to your GoldenGravityExpressX account'}
           </p>
         </div>
 
@@ -617,7 +602,7 @@ export default function Login() {
         {/* FOOTER */}
         <div style={{ marginTop: '40px', paddingTop: '28px', borderTop: '2px dashed var(--border)' }}>
           <p style={{ color: 'var(--text-light)', fontSize: '13px', lineHeight: 1.6, fontWeight: 600 }}>
-            Secure login for STM Salam.<br />
+            Secure login for GoldenGravityExpressX.<br />
             By entering, you accept our <span style={{ color: 'var(--green-mid)', fontWeight: 800 }}>User Terms</span> & <span style={{ color: 'var(--green-mid)', fontWeight: 800 }}>Privacy</span>.
           </p>
         </div>

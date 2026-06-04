@@ -1,5 +1,5 @@
 // src/lib/firebase.js
-// Firebase initialization for STM Salam Teh Tarik App (Vite setup)
+// Firebase initialization for GoldenGravityExpressX App (Vite setup)
 
 import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
@@ -93,12 +93,19 @@ export const auth = getAuth(app);
 // ── Emulator – set VITE_USE_FIREBASE_EMULATOR=true in .env.local to enable ──
 export const IS_EMULATOR = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
 console.log('EMULATOR:', IS_EMULATOR);
+import { connectFirestoreEmulator } from "firebase/firestore";
+import { connectFunctionsEmulator } from "firebase/functions";
+
 if (IS_EMULATOR) {
   try {
     connectAuthEmulator(auth, 'http://localhost:9099');
     console.info('[⚡️] Firebase Auth emulator connected → http://localhost:9099');
+    connectFirestoreEmulator(db, 'localhost', 8080);
+    console.info('[⚡️] Firebase Firestore emulator connected → localhost:8080');
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.info('[⚡️] Firebase Functions emulator connected → localhost:5001');
   } catch (e) {
-    console.warn('[⚡️] Failed to connect Auth emulator:', e);
+    console.warn('[⚡️] Failed to connect emulators:', e);
   }
 }
 

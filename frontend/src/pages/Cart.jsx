@@ -9,8 +9,8 @@ import WhatsAppChatButton from '../components/WhatsAppChatButton'
 import SmartImage from '../components/common/SmartImage'
 
 export default function Cart() {
-  const { cartItems, updateQty, removeFromCart, subtotal, totalItems, clearCart } = useCart()
-  const { user, isGuest } = useAuth()
+  const { cartItems = [], updateQty, removeFromCart, subtotal = 0, totalItems = 0, clearCart } = useCart() || {}
+  const { user, isGuest } = useAuth() || {}
   const [promoCode, setPromoCode] = useState('')
   const [activePromo, setActivePromo] = useState(null)
   const [promoError, setPromoError] = useState('')
@@ -58,7 +58,7 @@ export default function Cart() {
       `Customer: Guest Customer\n\n` +
       `*Items:*\n${itemsList}\n\n` +
       `*Total: SGD ${total.toFixed(2)}*\n\n` +
-      `Hello STM Salam, I would like to place this order via WhatsApp. Please advise on delivery timing and payment.`;
+      `Hello GoldenGravityExpressX, I would like to place this order via WhatsApp. Please advise on delivery timing and payment.`;
     
     const whatsappUrl = `https://wa.me/${(shopInfo?.whatsapp || '').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, '_blank')
@@ -69,7 +69,7 @@ export default function Cart() {
 
   if (cartItems.length === 0) {
     return (
-      <div style={{ background: 'var(--bg-body)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ background: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
          <div style={{ background: 'white', padding: '60px 40px', borderRadius: '40px', textAlign: 'center', boxShadow: 'var(--shadow-lg)', maxWidth: '440px', width: '100%' }}>
             <div style={{ width: '120px', height: '120px', background: 'var(--cream)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 32px' }}>
                <ShoppingBag size={56} color="var(--text-light)" strokeWidth={1.5} />
@@ -85,7 +85,7 @@ export default function Cart() {
   }
 
   return (
-    <div style={{ background: 'var(--bg-body)', minHeight: '100vh', paddingBottom: '100px' }}>
+    <div className="cart-container" style={{ background: '#f8fafc', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ background: 'var(--green-dark)', padding: '60px 0 40px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=1800)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.1 }} />
@@ -170,7 +170,7 @@ export default function Cart() {
 
               <button 
                 onClick={handleProceed} 
-                className="btn btn-gold" 
+                className="btn btn-gold proceed-btn" 
                 style={{ 
                   width: '100%', 
                   padding: '20px', 
@@ -185,7 +185,7 @@ export default function Cart() {
               </button>
 
               <WhatsAppChatButton 
-                message="Hi STM Salam, I need help with my cart." 
+                message="Hi GoldenGravityExpressX, I need help with my cart." 
                 type="button" 
                 label="Help with Order?" 
                 style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--cream)', color: 'var(--green-dark)', boxShadow: 'none' }} 

@@ -36,7 +36,7 @@ export default function Navbar() {
       position: 'relative'
     }}>
       <marquee scrollamount="6" style={{ display: 'block' }}>
-        ✨ MINIMUM ORDER SGD 10.00 FOR ALL DELIVERIES AND PICKUPS ✨ ENJOY AUTHENTIC STM SALAM FLAVORS ✨ MINIMUM ORDER SGD 10.00 ✨
+        ✨ MINIMUM ORDER SGD 10.00 FOR ALL DELIVERIES AND PICKUPS ✨ ENJOY AUTHENTIC GoldenGravityExpressX FLAVORS ✨ MINIMUM ORDER SGD 10.00 ✨
       </marquee>
     </div>
   );

@@ -89,7 +89,7 @@ export function canTransitionTo(current, next) {
 
 /** Low-level; prefer `getOrderContext(order).isCOD` in UI. */
 export function normalizePaymentMethod(order) {
-  const m = order.paymentMethod ?? order.payment_method ?? '';
+  const m = order.paymentMethod ?? order.payment_method ?? order.paymentMode ?? order.payment_mode ?? 'cod';
   return String(m).toLowerCase().trim();
 }
 

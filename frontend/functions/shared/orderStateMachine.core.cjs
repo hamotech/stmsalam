@@ -166,7 +166,7 @@ const LEGACY_STATUS_MAP = {
   completed: 'delivered',
   refunded: 'refunded',
   canceled: 'cancelled',
-  assigned: 'out_for_delivery',
+  assigned: 'ready_for_pickup',
   picked_up: 'out_for_delivery',
 };
 

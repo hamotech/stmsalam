@@ -16,7 +16,11 @@
   "description": "",
   "devDependencies": {
     "@capacitor/android": "^8.3.4",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4"
+  },
+  "dependencies": {
+    "@capacitor/geolocation": "^8.2.0"
   }
 }

@@ -42,7 +42,7 @@ export default function DemoPaymentGateway() {
   const [error, setError] = useState('')
 
   const brandColors = useMemo(() => {
-    if (method === 'paypal') return { top: '#003087', accent: '#FFC439', name: 'PayPal' }
+    if (method === 'paypal') return { top: '#003087', accent: '#D4AF37', name: 'PayPal' }
     if (method === 'stripe') return { top: '#635BFF', accent: '#0A2540', name: 'Stripe' }
     return { top: '#0f172a', accent: '#0ea5e9', name: 'Secure Checkout' }
   }, [method])
@@ -147,7 +147,7 @@ export default function DemoPaymentGateway() {
           padding: '24px 28px 4px', borderBottom: '1px solid #f1f5f9',
         }}>
           <div style={{ color: '#64748b', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-            Pay STM Salam
+            Pay GoldenGravityExpressX
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '6px 0 4px' }}>
             <span style={{ color: '#0f172a', fontWeight: 900, fontSize: '32px' }}>

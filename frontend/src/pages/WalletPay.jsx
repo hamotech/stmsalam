@@ -144,11 +144,11 @@ export default function WalletPay() {
 
         {/* Payment / Insufficient Balance Warning */}
         {!isSufficient ? (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '16px', padding: '16px', display: 'flex', gap: '12px', marginBottom: '24px' }}>
-            <AlertCircle size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', gap: '12px', marginBottom: '24px' }}>
+            <AlertCircle size={20} color="#B8860B" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <div style={{ color: '#92400e', fontWeight: 900, fontSize: '14px', marginBottom: '4px' }}>Insufficient Balance</div>
-              <div style={{ color: '#b45309', fontSize: '13px', fontWeight: 600 }}>
+              <div style={{ color: '#B8860B', fontWeight: 900, fontSize: '14px', marginBottom: '4px' }}>Insufficient Balance</div>
+              <div style={{ color: '#B8860B', fontSize: '13px', fontWeight: 600 }}>
                 You need another **SGD ${shortfall.toFixed(2)}** to pay for this order. Please top up below.
               </div>
             </div>

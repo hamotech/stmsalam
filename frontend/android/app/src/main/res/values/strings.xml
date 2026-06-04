@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Teh Tarik App</string>
+    <string name="title_activity_main">Teh Tarik App</string>
+    <string name="package_name">com.tehtarik.app</string>
+    <string name="custom_url_scheme">com.tehtarik.app</string>
+</resources>

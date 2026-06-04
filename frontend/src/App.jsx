@@ -11,6 +11,7 @@ import { Capacitor } from '@capacitor/core'
 import { SplashScreen } from '@capacitor/splash-screen'
 import MobileLayout from './mobile/MobileLayout'
 import RoleSelect from './mobile/RoleSelect'
+import BrandedSplashScreen from './components/common/BrandedSplashScreen'
 import { useAuth } from './context/AuthContext'
 
 const Home = lazy(() => import('./pages/Home'))
@@ -33,6 +34,7 @@ const ShopScan = lazy(() => import('./pages/ShopScan'))
 function PageWrapper({ children }) {
   return (
     <motion.div
+      className="page-wrapper"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
@@ -53,7 +55,7 @@ function Shell() {
   // STM Help + WhatsApp: show on every customer-facing page (including login, checkout, pay)
   const hideFloatingHelp = path.startsWith('/admin') || path.startsWith('/driver') || path.startsWith('/rider')
 
-  const { userProfile, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
 
   React.useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -61,8 +63,13 @@ function Shell() {
     }
   }, [])
 
+  // Wait for auth to settle before any routing redirects on native
+  if (authLoading) {
+    return <BrandedSplashScreen />;
+  }
+
   // Intercept root route for native users who are logged out
-  if (Capacitor.isNativePlatform() && !authLoading && !userProfile && path === '/') {
+  if (Capacitor.isNativePlatform() && !user && path === '/') {
     return <Navigate to="/mobile-role-select" replace />
   }
 
@@ -100,7 +107,7 @@ function Shell() {
       {!hideNavFooter && <Footer />}
       {!hideFloatingHelp && <SupportHubWidget />}
       {!hideFloatingHelp && (
-        <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />
+        <WhatsAppChatButton message="Hi GoldenGravityExpressX, I need help with my order." label="Chat with Admin" />
       )}
     </LayoutWrapper>
   )

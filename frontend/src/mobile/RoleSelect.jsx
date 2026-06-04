@@ -19,7 +19,7 @@ export default function RoleSelect() {
       id: 'rider',
       title: 'Rider Partner',
       description: 'I am a delivery rider',
-      icon: <Bike size={32} color="#f59e0b" />,
+      icon: <Bike size={32} color="#D4AF37" />,
       route: '/login?role=rider',
       color: 'rgba(245, 158, 11, 0.1)'
     },
@@ -49,7 +49,7 @@ export default function RoleSelect() {
         transition={{ duration: 0.5 }}
         style={{ textAlign: 'center', marginBottom: '40px' }}
       >
-        <img src="/stmsalamlogo.png" alt="STM Salam" style={{ width: '120px', marginBottom: '16px', borderRadius: '50%' }} />
+        <img src="/stmsalamlogo.png" alt="GoldenGravityExpressX" style={{ width: '120px', marginBottom: '16px', borderRadius: '50%' }} />
         <h1 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 8px 0' }}>Welcome to STM</h1>
         <p style={{ color: '#94a3b8', margin: 0 }}>Select your portal to continue</p>
       </motion.div>

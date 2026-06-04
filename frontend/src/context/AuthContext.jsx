@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setIsAuthenticated(true);
-        let role = 'user';
+        let role = 'customer';
         let name = firebaseUser.displayName || 'Customer';
         let profilePhone = '';
         let profileAddress = '';
@@ -100,23 +100,11 @@ export function AuthProvider({ children }) {
         localStorage.setItem('stm_user', JSON.stringify(userData));
       } else {
         // CRITICAL: If Firebase says signed out, PURGE everything to prevent ghost sessions
-        // ONLY if there is no custom API token (driver/admin)
-        if (!localStorage.getItem('token')) {
-          setIsAuthenticated(false);
-          setUser(null);
-          localStorage.removeItem('stm_user');
-        } else {
-          // If they have a token, restore their authentication state from localStorage
-          try {
-            const savedUser = localStorage.getItem('stm_user');
-            if (savedUser) {
-              setUser(JSON.parse(savedUser));
-              setIsAuthenticated(true);
-            }
-          } catch(e) {
-            // Do nothing
-          }
-        }
+        // We no longer rely on legacy custom API tokens
+        setIsAuthenticated(false);
+        setUser(null);
+        localStorage.removeItem('stm_user');
+        localStorage.removeItem('token');
       }
       setLoading(false);
     });

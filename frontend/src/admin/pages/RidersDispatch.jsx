@@ -10,6 +10,9 @@ import { httpsCallable } from 'firebase/functions';
 import { Bike, CheckCircle, Package, XCircle } from 'lucide-react';
 import { safeLog } from '../../utils/runtimeSafety';
 import { assertNoDirectOrderLifecycleWrite } from '../../lib/orderLifecycleGuards';
+import { adminTransition } from '../services/adminApi';
+
+const assignRiderToOrderCallable = httpsCallable(functions, 'assignRiderToOrder');
 
 const RidersDispatch = () => {
   const [orders, setOrders] = useState([]);
@@ -102,9 +105,9 @@ const RidersDispatch = () => {
             marginBottom: '16px',
             padding: '14px 18px',
             borderRadius: '14px',
-            background: '#fffbeb',
-            border: '1px solid #fcd34d',
-            color: '#92400e',
+            background: 'rgba(212,175,55,0.08)',
+            border: '1px solid #E6C200',
+            color: '#B8860B',
             fontWeight: 700,
             fontSize: '13px',
             lineHeight: 1.5,
@@ -189,8 +192,7 @@ const RidersDispatch = () => {
                           throw new Error('Rider UID mismatch. Pick from list.');
                         }
                         safeLog('Assign Rider →', assignedRiderId);
-                        const assignRiderToOrder = httpsCallable(functions, 'assignRiderToOrder');
-                        const res = await assignRiderToOrder({ orderId: id, assignedRiderId: assignedRiderId });
+                        const res = await assignRiderToOrderCallable({ orderId: id, assignedRiderId: assignedRiderId });
                         console.log(
                           '[DISPATCH_ASSIGNMENT]',
                           {
@@ -209,8 +211,7 @@ const RidersDispatch = () => {
                         type="button"
                         disabled={busy}
                         onClick={() => run(id, async () => {
-                          const adminTransition = httpsCallable(functions, 'adminTransition');
-                          await adminTransition({ orderId: id, eventName: 'out_for_delivery' });
+                          await adminTransition(id, 'out_for_delivery');
                         })}
                         style={{ padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#0369a1', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
                       >
@@ -227,8 +228,7 @@ const RidersDispatch = () => {
                     type="button"
                     disabled={busy}
                     onClick={() => run(id, async () => {
-                      const adminTransition = httpsCallable(functions, 'adminTransition');
-                      await adminTransition({ orderId: id, eventName: 'delivered' });
+                      await adminTransition(id, 'delivered');
                     })}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', border: 'none', fontWeight: '900', background: '#013220', color: 'white', cursor: busy ? 'wait' : 'pointer' }}
                   >

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import Sidebar from '../admin/components/Sidebar';
 import Navbar from '../admin/components/Navbar';
@@ -21,16 +21,57 @@ import AdminOrderNotifications from '../admin/components/AdminOrderNotifications
 import { useAuth } from '../context/AuthContext';
 
 const AdminLayout = ({ children }) => {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+    <div className="admin-root-wrapper" style={{ display: 'flex', backgroundColor: '#f8fafc' }}>
       <AdminOrderNotifications />
-      <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        <Navbar />
-        <main style={{ padding: '30px', flex: 1, overflowY: 'auto' }}>
+      <Sidebar isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+      <div className="admin-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
+        <Navbar onMenuClick={() => setIsMobileSidebarOpen(true)} />
+        <main className="admin-main-content" style={{ flex: 1 }}>
           {children}
         </main>
       </div>
+
+      <style>{`
+        .admin-root-wrapper {
+          min-height: 100vh;
+        }
+        .admin-content-wrapper {
+          height: 100vh;
+          overflow: hidden;
+        }
+        .admin-main-content {
+          padding: 30px;
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        @media (max-width: 768px) {
+          .admin-root-wrapper {
+            min-height: auto !important;
+            height: auto !important;
+          }
+          .admin-content-wrapper {
+            height: auto !important;
+            min-height: auto !important;
+            overflow: visible !important;
+          }
+          .admin-main-content {
+            padding: 12px !important;
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            margin-left: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          /* Ensure all immediate children flex containers stack vertically to fix grid overflow */
+          .admin-main-content > div > div[style*="display: flex"] {
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

@@ -50,7 +50,7 @@ const PaymentsOps = () => {
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{
                       fontWeight: '950',
-                      color: ps === 'PAID' ? '#15803d' : ps === 'PENDING_VERIFICATION' ? '#b45309' : '#64748b',
+                      color: ps === 'PAID' ? '#15803d' : ps === 'PENDING_VERIFICATION' ? '#B8860B' : '#64748b',
                     }}>{ps}</span>
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: '700' }}>{st}</td>

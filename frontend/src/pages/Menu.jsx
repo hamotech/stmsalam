@@ -5,12 +5,18 @@ import { shopInfo } from '../data/menuData'
 import { subscribeProducts, subscribeCategories } from '../admin/services/dataService'
 import { useCart } from '../context/CartContext'
 import { useData } from '../context/DataContext'
+import { useAuth } from '../context/AuthContext'
 import SmartImage from '../components/common/SmartImage'
 
 function MenuItemRow({ item }) {
   const { addToCart, updateQty, cartItems = [] } = useCart() || {}
+  const { user } = useAuth() || {}
   const cartItem = (cartItems || []).find(i => i.id === item.id)
   const qty = cartItem ? cartItem.qty : 0
+
+  console.log("MenuItemRow Render - User:", user);
+  console.log("MenuItemRow Render - Role:", user?.role);
+  console.log("MenuItemRow Render - Rendering Add To Cart for:", item.id);
 
   const badgeMap = { 
     bestseller: { label: '⭐ Bestseller', cls: 'badge-bestseller' }, 
@@ -21,7 +27,7 @@ function MenuItemRow({ item }) {
   const price = Number(item.price) || 0
 
   return (
-    <div className="menu-item-row" style={{ 
+    <div className="menu-item-row product-card" style={{ 
       background: 'white', borderRadius: '24px', padding: '24px', display: 'flex', gap: '24px', 
       alignItems: 'center', border: '1px solid #eef2f6', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', 
       transition: 'all 0.3s', position: 'relative'
@@ -30,14 +36,14 @@ function MenuItemRow({ item }) {
         <SmartImage src={item.image || item.img || 'https://images.unsplash.com/photo-1544145945-f904253d0c71?auto=format&fit=crop&w=300'} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         {b && <span className={`badge ${b.cls}`} style={{ position: 'absolute', top: '10px', left: '10px', padding: '4px 8px', fontSize: '10px' }}>{b.label}</span>}
       </div>
-      
-      <div className="menu-item-text-col" style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-          <h3 style={{ fontSize: '19px', fontWeight: 950, color: '#0f172a' }}>{item.name}</h3>
-          <span style={{ fontSize: '19px', fontWeight: 950, color: 'var(--green-mid)' }}>${price.toFixed(2)}</span>
-        </div>
-        <p style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.5, marginBottom: '16px', maxWidth: '580px' }}>{item.description || 'Deliciously prepared with authentic SMT Salam spices.'}</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>
+      <div className="menu-item-text-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <h3 style={{ fontSize: '19px', fontWeight: 950, color: '#0f172a', marginBottom: '8px' }}>{item.name}</h3>
+        
+        <p style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.5, marginBottom: '16px', maxWidth: '580px', flex: 1 }}>
+          {item.description || 'Deliciously prepared with authentic SMT Salam spices.'}
+        </p>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '16px' }}>
            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--cream)', color: 'var(--green-dark)', padding: '4px 8px', borderRadius: '6px' }}>
              <Timer size={14} color="var(--gold)" /> {item.prepTime || 15} min
            </span>
@@ -47,24 +53,28 @@ function MenuItemRow({ item }) {
              </span>
            )}
         </div>
-      </div>
-
-      <div className="menu-item-action-col" style={{ flexShrink: 0, width: '130px', display: 'flex', justifyContent: 'flex-end' }}>
-        {qty > 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--green-dark)', color: 'white', padding: '8px 16px', borderRadius: '14px' }}>
-            <button onClick={() => updateQty(item.id, -1)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 4, display: 'flex' }}><Minus size={18} /></button>
-            <span style={{ fontWeight: 950, fontSize: '16px', minWidth: '12px', textAlign: 'center' }}>{qty}</span>
-            <button onClick={() => updateQty(item.id, 1)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 4, display: 'flex' }}><Plus size={18} /></button>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '20px', fontWeight: 950, color: 'var(--green-mid)' }}>${price.toFixed(2)}</span>
+          
+          <div className="menu-item-action-col-desktop" style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+            {qty > 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--green-dark)', color: 'white', padding: '8px 16px', borderRadius: '14px' }}>
+                <button onClick={() => updateQty(item.id, -1)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 4, display: 'flex' }}><Minus size={18} /></button>
+                <span style={{ fontWeight: 950, fontSize: '16px', minWidth: '12px', textAlign: 'center' }}>{qty}</span>
+                <button onClick={() => updateQty(item.id, 1)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 4, display: 'flex' }}><Plus size={18} /></button>
+              </div>
+            ) : (
+              <button className="add-to-cart-btn" onClick={() => addToCart(item)} style={{
+                display: 'flex', alignItems: 'center', gap: '8px', background: 'white', color: 'var(--green-dark)', 
+                border: '2px solid var(--green-dark)', borderRadius: '14px', padding: '10px 20px',
+                fontWeight: 900, fontSize: '14px', cursor: 'pointer', transition: '0.2s transform active',
+              }}>
+                <Plus size={18} /> ADD
+              </button>
+            )}
           </div>
-        ) : (
-          <button onClick={() => addToCart(item)} style={{
-            display: 'flex', alignItems: 'center', gap: '8px', background: 'white', color: 'var(--green-dark)', 
-            border: '2px solid var(--green-dark)', borderRadius: '14px', padding: '10px 20px',
-            fontWeight: 900, fontSize: '14px', cursor: 'pointer', transition: '0.2s transform active',
-          }}>
-            <Plus size={18} /> ADD
-          </button>
-        )}
+        </div>
       </div>
     </div>
   )
@@ -73,7 +83,7 @@ function MenuItemRow({ item }) {
 export default function Menu() {
   const [params] = useSearchParams()
   const { totalItems = 0, subtotal = 0 } = useCart() || {}
-  const { products: items, categories: dynamicCategories, loading } = useData()
+  const { products: items = [], categories: dynamicCategories = [], loading } = useData() || {}
   const [activeCategory, setActiveCategory] = useState(params.get('cat') || 'all')
   const [search, setSearch] = useState('')
   const scrollRef = useRef(null)
@@ -107,12 +117,12 @@ export default function Menu() {
   }
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+    <div className="content-container" style={{ background: '#f8fafc', minHeight: '100vh' }}>
       {/* Page header */}
       <div style={{ background: 'var(--green-dark)', padding: '60px 0 100px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=1800)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.1 }} />
         <div className="container" style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 'clamp(40px, 8vw, 64px)', fontWeight: 950, color: 'white', letterSpacing: '-3px', marginBottom: '16px', lineHeight: 1 }}>STM Salam Menu</h1>
+          <h1 style={{ fontSize: 'clamp(40px, 8vw, 64px)', fontWeight: 950, color: 'white', letterSpacing: '-3px', marginBottom: '16px', lineHeight: 1 }}>GoldenGravityExpressX Menu</h1>
           <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '18px', marginBottom: '40px', maxWidth: '600px', margin: '0 auto 40px', fontWeight: 500 }}>
             {shopInfo.tagline}
           </p>

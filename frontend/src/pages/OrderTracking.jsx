@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db, storage } from '../lib/firebase'
@@ -33,6 +33,7 @@ export default function OrderTracking() {
   const [showChat, setShowChat] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [riderLocation, setRiderLocation] = useState(null)
+  const [targetRiderLocation, setTargetRiderLocation] = useState(null)
   const [directions, setDirections] = useState(null)
   const [etaText, setEtaText] = useState('')
   const lastRouteCalc = useRef(0)
@@ -56,9 +57,10 @@ export default function OrderTracking() {
   const normalizeCustomerStatus = (raw) => {
     const s = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
     if (!s) return 'pending'
-    if (s === 'placed') return 'pending'
+    if (s === 'placed' || s === 'paid') return 'pending' // FSM 'paid' acts as 'placed/confirmed' conceptually for the user until 'preparing'
+    if (s === 'ready_for_pickup') return 'ready'
     if (s === 'out_for_delivery' || s === 'delivering') return 'picked_up'
-    if (s === 'complete' || s === 'completed') return 'delivered'
+    if (s === 'complete' || s === 'completed' || s === 'delivered') return 'delivered'
     return s
   }
 
@@ -152,35 +154,51 @@ export default function OrderTracking() {
   }, [cleanOrderId])
 
   useEffect(() => {
-    const riderId = String(order?.assignedRiderId || order?.riderId || '').trim()
+    const riderId = String(order?.assignedDriverId || order?.assignedRiderId || order?.riderId || '').trim()
     if (!riderId) return undefined
     
-    // Poll the backend RTDB endpoint for live driver location
-    const fetchLocation = async () => {
-      try {
-        const res = await fetch(`http://localhost:5000/api/driver/location/${riderId}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.location) {
-            setRiderLocation(prev => {
-              // Force route recalculation every 60 seconds
-              if (Date.now() - lastRouteCalc.current > 60000) {
-                setDirections(null)
-                lastRouteCalc.current = Date.now()
-              }
-              return { lat: data.location.latitude, lng: data.location.longitude }
-            })
+    const driverRef = doc(db, 'drivers', riderId)
+    const unsub = onSnapshot(driverRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data()
+        if (data.location && data.location.lat && data.location.lng) {
+          // Force route recalculation every 60 seconds
+          if (Date.now() - lastRouteCalc.current > 60000) {
+            setDirections(null)
+            lastRouteCalc.current = Date.now()
           }
+          setTargetRiderLocation({ lat: data.location.lat, lng: data.location.lng })
         }
-      } catch (err) {
-        console.error('Failed to fetch driver location', err)
       }
-    }
+    }, (err) => {
+      console.error('Failed to fetch driver location from Firestore', err)
+    })
 
-    fetchLocation()
-    const interval = setInterval(fetchLocation, 3000)
-    return () => clearInterval(interval)
-  }, [order?.assignedRiderId, order?.riderId])
+    return () => unsub()
+  }, [order?.assignedDriverId, order?.assignedRiderId, order?.riderId])
+
+  useEffect(() => {
+    if (!targetRiderLocation) return undefined
+    let animationFrame
+    const lerp = (start, end, amt) => (1 - amt) * start + amt * end
+    
+    const animate = () => {
+      setRiderLocation((prev) => {
+        if (!prev) return targetRiderLocation
+        const lat = lerp(prev.lat, targetRiderLocation.lat, 0.1)
+        const lng = lerp(prev.lng, targetRiderLocation.lng, 0.1)
+        
+        if (Math.abs(lat - targetRiderLocation.lat) < 0.00001 && Math.abs(lng - targetRiderLocation.lng) < 0.00001) {
+          return targetRiderLocation
+        }
+        animationFrame = requestAnimationFrame(animate)
+        return { lat, lng }
+      })
+    }
+    
+    animate()
+    return () => { if (animationFrame) cancelAnimationFrame(animationFrame) }
+  }, [targetRiderLocation])
 
   useEffect(() => {
     if (!stripeSessionId || !cleanOrderId) return undefined
@@ -293,10 +311,14 @@ export default function OrderTracking() {
 
   const paymentBannerText = resolvePaymentBannerMessage(order, paymentQueryParam)
 
-  const activeStep = getActiveStep(getOrderContext(order).canonicalStatus)
+  let activeStep = getActiveStep(getOrderContext(order).canonicalStatus)
+  // If the order is ready, but a driver has accepted/been assigned to the order, advance it to 'assigned'
+  if (activeStep === 3 && (order?.rider?.legStatus || order?.assignedDriverId || order?.assignedRiderId)) {
+    activeStep = 4; // 'assigned' step
+  }
   const orderType = order?.mode || 'delivery'
   const items = order?.items || []
-  const total = Number(order?.total || 0)
+  const total = Number(order?.totalAmount || order?.total || 0)
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '100px', position: 'relative' }}>
@@ -332,7 +354,7 @@ export default function OrderTracking() {
                 ) : null}
              </div>
              <div style={{ background: 'rgba(255,255,255,0.1)', padding: '20px 40px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', textAlign: 'center' }}>
-                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{getCustomerStatusText(order?.status)}</div>
+                <div style={{ color: 'var(--gold)', fontWeight: 950, fontSize: '32px', lineHeight: 1 }}>{steps[activeStep]?.label || 'Processing...'}</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Current Status</div>
              </div>
           </div>
@@ -432,7 +454,7 @@ export default function OrderTracking() {
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '100%', textAlign: 'center' }}>
                      <div style={{ background: 'white', padding: '16px 24px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', display: 'inline-flex', alignItems: 'center', gap: '12px', fontWeight: 900 }}>
                         <div style={{ width: '12px', height: '12px', background: 'var(--green-mid)', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
-                        {!(order?.assignedRiderId || order?.riderId) ? 'Waiting for driver assignment...' : 'Locating Driver...'}
+                        {!(order?.assignedDriverId || order?.assignedRiderId || order?.riderId) ? 'Waiting for driver assignment...' : 'Locating Driver...'}
                      </div>
                   </div>
                 </>
@@ -498,7 +520,7 @@ export default function OrderTracking() {
                 </button>
               )}
               <WhatsAppChatButton 
-                message={`Hi STM Salam, I want to check my order status for order #${cleanOrderId}`} 
+                message={`Hi GoldenGravityExpressX, I want to check my order status for order #${cleanOrderId}`} 
                 type="button" 
                 label="Check Status on WhatsApp" 
                 style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }} 

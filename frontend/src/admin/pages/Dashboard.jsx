@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchDashboardStats, subscribeOrders } from '../services/dataService';
-import { ShoppingBag, DollarSign, TrendingUp, Clock, ArrowUpRight, Activity, MessageCircle } from 'lucide-react';
+import { ShoppingBag, DollarSign, TrendingUp, Clock, ArrowUpRight, Activity, MessageCircle, Bike } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // --- ANIMATION VARIANTS --- //
@@ -127,11 +127,10 @@ const Dashboard = () => {
         </Link>
       </motion.div>
       
-      {/* STATS ROW */}
       <div style={{ display: 'flex', gap: '24px', marginBottom: '40px', flexWrap: 'wrap' }}>
-        <StatCard title="Total Orders" value={stats.totalOrders} icon={<ShoppingBag size={28} />} gradient="linear-gradient(135deg, #023c28 0%, #056a48 100%)" trend="12%" />
-        <StatCard title="Total Revenue" value={`$${stats.totalRevenue}`} icon={<DollarSign size={28} />} gradient="linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)" trend="8.4%" />
-        <StatCard title="Daily Growth" value="+15%" icon={<TrendingUp size={28} />} gradient="linear-gradient(135deg, #d4af37 0%, #b8962c 100%)" />
+        <StatCard title="Total Orders" value={stats.totalOrders} icon={<ShoppingBag color="var(--gold)" size={24} />} trend="+8% from yesterday" />
+        <StatCard title="Total Revenue" value={`$${parseFloat(stats.totalRevenue).toFixed(2)}`} icon={<DollarSign color="var(--green-light)" size={24} />} trend="+12% from yesterday" />
+        <StatCard title="Active Riders" value={stats.activeRiders || 0} icon={<Bike color="var(--indigo-600)" size={24} />} trend="2 online now" />
       </div>
 
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
@@ -176,9 +175,9 @@ const Dashboard = () => {
                         borderRadius: '12px', 
                         fontSize: '12px', 
                         fontWeight: '800',
-                        backgroundColor: order.status === 'Pending' ? '#fffbeb' : order.status === 'Delivered' ? '#f0fdf4' : '#eff6ff',
-                        color: order.status === 'Pending' ? '#d97706' : order.status === 'Delivered' ? '#16a34a' : '#2563eb',
-                        border: `1px solid ${order.status === 'Pending' ? '#fde68a' : order.status === 'Delivered' ? '#bbf7d0' : '#bfdbfe'}`
+                        backgroundColor: order.status === 'Pending' ? 'rgba(212,175,55,0.08)' : order.status === 'Delivered' ? '#f0fdf4' : '#eff6ff',
+                        color: order.status === 'Pending' ? '#B8860B' : order.status === 'Delivered' ? '#16a34a' : '#2563eb',
+                        border: `1px solid ${order.status === 'Pending' ? 'rgba(212,175,55,0.3)' : order.status === 'Delivered' ? '#bbf7d0' : '#bfdbfe'}`
                       }}>
                         {order.status}
                       </span>
@@ -193,7 +192,7 @@ const Dashboard = () => {
 
         {/* POPULAR ITEMS RANKING */}
         <motion.div variants={itemVariants} style={{ flex: '1', background: 'white', padding: '32px', borderRadius: '32px', boxShadow: '0 20px 50px rgba(0,0,0,0.04)', minWidth: '300px', border: '1px solid rgba(0,0,0,0.02)' }}>
-          <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>Trending Items</h3>
+          <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#1e293b', marginBottom: '16px' }}>Trending Items</h3>
           <p style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', marginBottom: '24px' }}>Top products sold this week</p>
           
           <ul style={{ listStyle: 'none', padding: 0 }}>

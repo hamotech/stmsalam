@@ -1,9 +1,10 @@
 :root {
-  /* Brand Colors */
+  /* Brand Colors - Premium Original */
   --green-dark:    #013220;   /* Luxury Dark Green */
   --green-mid:     #059669;   /* Emerald Green */
   --green-light:   #10B981;   /* Vibrant Green */
   --green-tint:    rgba(1, 50, 32, 0.05);
+  
   --gold:          #D4AF37;   /* Metallic Gold */
   --gold-light:    #E5C76B;   /* Sunlit Gold */
   --gold-tint:     rgba(212, 175, 55, 0.08);
@@ -12,10 +13,16 @@
   --indigo-600:    #4f46e5;
   --indigo-hover:  #4338ca;
 
+  /* Retaining mapped names to prevent breaks during revert */
+  --neon-cyan:     var(--green-mid);
+  --neon-pink:     var(--gold);
+  --electric-blue: var(--indigo-600);
+  
   /* Neutrals: Light Base */
   --white:         #FFFFFF;
   --bg-body:       #F8F5F2;   /* Premium Warm White */
   --bg-card:       #FFFFFF;
+  --bg-panel:      #FFFFFF;
   --cream:         #F9FAFB;
   --border:        rgba(6,78,59,0.08);
   --border-gold:   rgba(250,204,21,0.25);
@@ -25,10 +32,10 @@
   --text-mid:      #374151;
   --text-light:    #6B7280;
 
-  /* Shadows */
+  /* Premium Shadows */
   --shadow-sm:     0 2px 8px rgba(0,0,0,0.05);
   --shadow-md:     0 8px 24px rgba(6,78,59,0.08);
-  --shadow-lg:     0 16px-48px rgba(0,0,0,0.12);
+  --shadow-lg:     0 16px 48px rgba(0,0,0,0.12);
   --shadow-gold:   0 10px 30px rgba(250,204,21,0.3);
 
   /* Utils */
@@ -48,6 +55,10 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  /* Soft background gradient instead of neon */
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(212, 175, 55, 0.03), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(1, 50, 32, 0.03), transparent 25%);
 }
 
 .container {
@@ -106,12 +117,12 @@ body {
   letter-spacing: 1px;
   box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: glow 2s infinite alternate;
+  animation: premium-glow 2s infinite alternate;
   display: inline-flex;
   text-decoration: none;
 }
 
-@keyframes glow {
+@keyframes premium-glow {
   from { box-shadow: 0 0 10px rgba(250, 204, 21, 0.4); }
   to { box-shadow: 0 0 30px rgba(250, 204, 21, 0.8), 0 0 10px rgba(255, 255, 255, 0.4); }
 }
@@ -128,6 +139,12 @@ body {
   100% { transform: translateY(0px) rotate(0deg); }
 }
 
+@keyframes float-hologram {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -138,24 +155,33 @@ body {
   100% { transform: scale(1.1); opacity: 0.6; }
 }
 
+.glitch:hover {
+  text-shadow: none;
+  color: inherit;
+  animation: none;
+}
+
 .fade-up {
   animation: fadeUp 1s ease-out forwards;
 }
 
-.glass-panel-light {
+.glass-panel-light, .hologram-panel {
   background: rgba(255,255,255,0.7);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(6,78,59,0.1);
   box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+  color: var(--text-dark);
 }
 
-.glass-card-light {
+.glass-card-light, .cyber-card {
   background: white;
   border: 1px solid rgba(6,78,59,0.05);
   box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  border-radius: var(--radius-lg);
   transition: all 0.3s ease;
+  color: var(--text-dark);
 }
-.glass-card-light:hover {
+.glass-card-light:hover, .cyber-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 20px 60px rgba(1, 50, 32, 0.1);
   border-color: var(--gold);
@@ -252,16 +278,14 @@ body {
     grid-template-columns: repeat(2, 1fr) !important;
   }
   
-  /* Fix Admin Sidebars & Master Layouts */
-  .admin-sidebar, aside {
-     position: static !important;
+  /* Fix Master Layouts */
+  .admin-main-content table, 
+  .admin-main-content .table-wrapper {
+     display: block !important;
      width: 100% !important;
-     height: auto !important;
-     border-right: none !important;
-     border-bottom: 2px solid var(--border) !important;
-     overflow-y: visible !important;
+     overflow-x: auto !important;
+     -webkit-overflow-scrolling: touch;
   }
-  
   /* Override minHeight flex layouts to stack vertically */
   .admin-layout, div[style*="min-height: 100vh"] {
      flex-direction: column !important;
@@ -329,3 +353,43 @@ body {
   div[style*="padding: 32px"] { padding: 20px !important; }
   div[style*="gap: 40px"] { gap: 20px !important; }
 }
+
+@media (max-width: 768px) {
+  .add-to-cart-btn {
+     display:flex !important;
+     visibility:visible !important;
+     opacity:1 !important;
+     width:100% !important;
+     min-height:48px !important;
+     z-index: 100 !important;
+  }
+  .product-card {
+     height:auto !important;
+     min-height:unset !important;
+     display:flex !important;
+     flex-direction:column !important;
+     overflow:visible !important;
+  }
+  .page-wrapper, .content-container {
+     height: auto !important;
+     min-height: auto !important;
+     max-height: none !important;
+     overflow: visible !important;
+  }
+  body {
+     padding-bottom: 80px;
+  }
+  .cart-container {
+     padding-bottom: 120px;
+  }
+  .proceed-btn {
+     margin-bottom: 90px;
+     position: relative;
+  }
+  .mobile-bottom-nav {
+     position: fixed;
+     bottom: 0;
+     z-index: 1000;
+  }
+}
+

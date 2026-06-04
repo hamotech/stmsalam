@@ -1113,7 +1113,6 @@ exports.assignRiderToOrder = onCall(
         assignedDriverId: assignedRiderId,
         assignedRiderName,
         assignedRiderPhone,
-        status: 'assigned',
         assignedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -1264,7 +1263,7 @@ exports.transitionOrderStatus = onCall(
     const actor =
       isAdminClaim || role === 'admin'
         ? 'admin'
-        : role === 'rider'
+        : role === 'rider' || role === 'driver'
           ? 'rider'
           : role === 'kitchen'
             ? 'kitchen'
@@ -1413,3 +1412,6 @@ exports.createEmployeeAccount = onCall(
     }
   }
 );
+
+const notifications = require('./notifications.js');
+exports.sendOrderNotifications = notifications.sendOrderNotifications;

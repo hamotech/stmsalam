@@ -276,6 +276,11 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    match /drivers/{driverUid} {
+      allow read: if isAuthed();
+      allow write: if isOwner(driverUid) || isAdmin();
+    }
+
     match /support_chats/{conversationId} {
       allow read: if true;
       allow create, update: if true;

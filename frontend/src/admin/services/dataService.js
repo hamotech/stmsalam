@@ -420,13 +420,15 @@ export const advanceRiderLeg = async (orderId, leg) => {
 
   if (leg === 'accept') {
     if (cur !== 'ready_for_pickup') throw new Error('Rider accept only when order is ready_for_pickup');
-    if (rider.legStatus !== 'OFFERED') throw new Error('Assign a rider first');
+    if (rider.legStatus !== 'OFFERED' && !data.assignedDriverId) throw new Error('Assign a rider first');
     await runTransactionalStatusTransition(orderId, {
       toStatus: 'out_for_delivery',
       metadata: { source: 'advanceRiderLeg', leg: 'accept' },
     });
     const patch = {
-      rider: { ...rider, legStatus: 'ACCEPTED', acceptedAt: ts },
+      assignedDriverId: auth.currentUser.uid,
+      assignedRiderName: auth.currentUser.displayName || auth.currentUser.email || 'Driver',
+      rider: { ...rider, id: auth.currentUser.uid, legStatus: 'ACCEPTED', acceptedAt: ts },
       updatedAt: ts,
     };
     assertNoDirectOrderLifecycleWrite(patch, 'dataService.advanceRiderLeg.accept');
