@@ -279,7 +279,7 @@ export default function Home() {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ maxWidth: '800px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div style={{ width: '40px', height: '2px', background: 'var(--gold)' }} />
-              <span className="fade-up" style={{ color: 'var(--gold)', fontWeight: 800, letterSpacing: '4px', fontSize: '14px', textTransform: 'uppercase' }}>GoldenGravityExpressX · MARINE TERRACE</span>
+              <span className="fade-up" style={{ color: 'var(--gold)', fontWeight: 800, letterSpacing: '4px', fontSize: '14px', textTransform: 'uppercase' }}>STM Salam · MARINE TERRACE</span>
             </div>
             <h1 style={{ color: 'var(--white)', fontSize: 'clamp(38px, 6vw, 72px)', fontWeight: 900, lineHeight: 1.2, letterSpacing: '-1.5px', marginBottom: '28px', textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
               Authentic Drinks & <span style={{ color: 'var(--gold)', letterSpacing: '-0.5px' }}>Warm Comfort Food</span>
@@ -289,7 +289,7 @@ export default function Home() {
                 <Zap size={20} /> View Menu & Order
               </Link>
               <WhatsAppChatButton 
-                message="Hi GoldenGravityExpressX, I want to know more about your menu." 
+                message="Hi STM Salam, I want to know more about your menu." 
                 type="button" 
                 label="Chat with Admin"
                 style={{ padding: '18px 40px', borderRadius: '16px', fontSize: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} 
@@ -339,15 +339,11 @@ export default function Home() {
               <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '28px', border: '2px solid #e2e8f0', marginBottom: '24px', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: 'var(--green-mid)', color: 'white', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>SGQR PayNow</div>
                 <div style={{ width: '240px', height: '300px', background: 'white', margin: '12px auto 0', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-                  <object
-                    data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
-                    type="application/pdf"
-                    style={{ width: '240px', height: '300px', border: 'none' }}
-                  >
-                    <div style={{ padding: '12px', fontSize: '13px', fontWeight: 700 }}>
-                      <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ color: 'var(--green-mid)' }}>Open scan-to-pay PDF</a>
-                    </div>
-                  </object>
+                  <img
+                    src="/paymentscanner.jpeg"
+                    alt="Scan to Pay"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
                 </div>
                 <div style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-light)', fontWeight: 700 }}>
                   PayNow: <span style={{ color: 'var(--green-dark)', fontWeight: 900 }}>{shopInfo.phone}</span>
@@ -373,7 +369,7 @@ export default function Home() {
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
-                    const message = `Hello GoldenGravityExpressX! 👋\n\nI have completed my PayNow payment.\n\n💳 Payment Method: ScanPay (SGQR PayNow)\n📞 Contact: My attached screenshot\n\nPlease verify my payment. Thank you! 🙏`
+                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n💳 Payment Method: ScanPay (SGQR PayNow)\n📞 Contact: My attached screenshot\n\nPlease verify my payment. Thank you! 🙏`
                     const whatsappUrl = `https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
                     window.open(whatsappUrl, '_blank')
                   }}
@@ -436,9 +432,7 @@ export default function Home() {
 
                 <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '28px', border: '2px solid #e2e8f0', marginBottom: '24px' }}>
                   <div style={{ width: '220px', height: '220px', background: 'white', margin: '0 auto', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-                    <object data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH" type="application/pdf" style={{ width: '220px', height: '220px', border: 'none' }}>
-                      <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green-mid)' }}>Open PDF</a>
-                    </object>
+                    <img src="/paymentscanner.jpeg" alt="Scan to Pay" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                   </div>
                   
                   <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
@@ -473,7 +467,7 @@ export default function Home() {
                   onClick={() => {
                     const tempId = `PN-${Math.floor(1000 + Math.random() * 9000)}`;
                     const total = subtotal.toFixed(2);
-                    const message = `Hello GoldenGravityExpressX! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Item subtotal: SGD ${total}\n(Delivery & final total confirmed at checkout.)\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
+                    const message = `Hello STM Salam! 👋\n\nI have completed my PayNow payment.\n\n📄 Order ID: ${tempId}\n👤 Name: Customer\n💰 Item subtotal: SGD ${total}\n(Delivery & final total confirmed at checkout.)\n\nI am attaching my payment screenshot below. Please verify my order. Thank you!`;
                     window.open(`https://wa.me/${shopInfo.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
                     setShowPayNow(false);
                   }}
@@ -538,7 +532,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               style={{ color: 'var(--text-light)', fontSize: '18px', fontWeight: 500, maxWidth: '600px', margin: '0 auto' }}
             >
-              Enjoy GoldenGravityExpressX’s most-loved drinks and snacks, freshly prepared every day.
+              Enjoy STM Salam’s most-loved drinks and snacks, freshly prepared every day.
             </motion.p>
           </div>
 
@@ -651,13 +645,11 @@ export default function Home() {
             >
               <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 16px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, whiteSpace: 'nowrap' }}>Official SGQR</div>
               <div style={{ background: 'white', borderRadius: '25px', padding: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
-                <object
-                  data="/scanner-pay.pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
-                  type="application/pdf"
-                  style={{ width: '100%', height: '200px', border: 'none', borderRadius: '15px' }}
-                >
-                  <a href="/scanner-pay.pdf" target="_blank" rel="noreferrer" style={{ fontSize: '14px', fontWeight: 800, color: 'var(--green-dark)' }}>Open scan-to-pay PDF</a>
-                </object>
+                <img
+                  src="/paymentscanner.jpeg"
+                  alt="Scan to Pay"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '15px' }}
+                />
               </div>
               <div style={{ textAlign: 'center', marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>TAP TO ENLARGE</div>
@@ -666,7 +658,7 @@ export default function Home() {
           </motion.div>
         </section>
 
-        {/* ══════════ WHY CHOOSE GoldenGravityExpressX ══════════ */}
+        {/* ══════════ WHY CHOOSE STM Salam ══════════ */}
         <section style={{ marginBottom: '64px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
             {[
@@ -739,7 +731,7 @@ export default function Home() {
               })
             ) : (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: 'var(--cream)', borderRadius: '24px', border: '1px dashed #cbd5e1' }}>
-                 <p style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '15px' }}>Check back soon for latest moments at GoldenGravityExpressX!</p>
+                 <p style={{ fontWeight: 800, color: 'var(--text-light)', fontSize: '15px' }}>Check back soon for latest moments at STM Salam!</p>
               </div>
             )}
           </div>
@@ -950,7 +942,7 @@ export default function Home() {
               transition={{ delay: 0.05 }}
               style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 950, color: 'var(--green-dark)', letterSpacing: '-2px', lineHeight: 1.1, marginBottom: '20px' }}
             >
-              Your GoldenGravityExpressX,<br /><span style={{ color: 'var(--green-mid)' }}>in your pocket.</span>
+              Your STM Salam,<br /><span style={{ color: 'var(--green-mid)' }}>in your pocket.</span>
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -1009,7 +1001,7 @@ export default function Home() {
                 <Smartphone size={14} /> STM Mobile · React Native
               </div>
               <h2 style={{ color: 'white', fontSize: 'clamp(28px,4vw,46px)', fontWeight: 950, marginBottom: '20px', lineHeight: 1.1, letterSpacing: '-1.5px' }}>
-                Download the GoldenGravityExpressX App
+                Download the STM Salam App
                 <span style={{ display: 'inline-block', background: 'var(--gold)', color: 'var(--green-dark)', padding: '4px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase', marginLeft: '12px', verticalAlign: 'middle' }}>
                   Coming Soon
                 </span>
@@ -1073,7 +1065,7 @@ export default function Home() {
               >
                 {/* Status bar */}
                 <div style={{ padding: '14px 14px 8px', background: '#062410', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--gold)', fontSize: '9px', fontWeight: 900, letterSpacing: '1px' }}>GoldenGravityExpressX</span>
+                  <span style={{ color: 'var(--gold)', fontSize: '9px', fontWeight: 900, letterSpacing: '1px' }}>STM Salam</span>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
@@ -1114,7 +1106,7 @@ export default function Home() {
                 {/* Top bar */}
                 <div style={{ padding: '18px 16px 12px', background: 'var(--green-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontSize: '8px', color: 'var(--gold)', fontWeight: 800, letterSpacing: '1px' }}>GoldenGravityExpressX</div>
+                    <div style={{ fontSize: '8px', color: 'var(--gold)', fontWeight: 800, letterSpacing: '1px' }}>STM Salam</div>
                     <div style={{ fontSize: '13px', color: 'white', fontWeight: 900 }}>Home</div>
                   </div>
                   <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👤</div>

@@ -45,7 +45,7 @@ if errorlevel 1 (
 )
 rem Create/overwrite capacitor.config.json
 > capacitor.config.json (
-    echo {^"appId^": ^"com.stmsalam.app^",^"appName^": ^"GoldenGravityExpressX^",^"webDir^": ^"stmapp^",^"server^": {^"androidScheme^": ^"https^",^"hostname^": ^"teh-tarik-app-my-own.web.app^",^"cleartext^": true}}
+    echo {^"appId^": ^"com.stmsalam.app^",^"appName^": ^"STM Salam^",^"webDir^": ^"stmapp^",^"server^": {^"androidScheme^": ^"https^",^"hostname^": ^"teh-tarik-app-my-own.web.app^",^"cleartext^": true}}
 )
 rem Initialise Capacitor if not already
 if not exist ios (
@@ -63,10 +63,10 @@ if errorlevel 1 (
 popd
 
 rem ----------------------------------------------------
-rem 5. Open Android Studio
+rem 5. Build Android APK
 rem ----------------------------------------------------
-pushd stmapp
-npx cap open android
+pushd stmapp\android
+call gradlew assembleRelease
 popd
 
 echo ----------------------------------------------------

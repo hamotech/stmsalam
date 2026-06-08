@@ -32,7 +32,7 @@ export default function Gallery() {
             Our Gallery
           </h1>
           <p style={{ fontSize: '19px', color: 'var(--text-light)', maxWidth: '600px', margin: '0 auto', fontWeight: 500, lineHeight: 1.6 }}>
-            Explore moments, memories, and highlights from GoldenGravityExpressX.
+            Explore moments, memories, and highlights from STM Salam.
           </p>
         </motion.div>
 

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Option 2: Supabase Serverless Backend Integration
-// Replace these with your actual GoldenGravityExpressX Supabase URL and Anon Key
+// Replace these with your actual STM Salam Supabase URL and Anon Key
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project-id.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
 

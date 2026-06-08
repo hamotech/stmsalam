@@ -1,11 +1,11 @@
 export const shopInfo = {
-  name: 'GoldenGravityExpressX',
+  name: 'STM Salam',
   tagline: "Authentic Kopitiam Flavors, Delivered.",
   /** Fulfilment / pickup location (two lines for UI) */
-  outletName: 'GoldenGravityExpressX — Blk 50A',
-  outletAddress: 'GoldenGravityExpressX — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+  outletName: 'STM Salam — Blk 50A',
+  outletAddress: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
   /** Same as outletAddress — kept for backwards compatibility */
-  address: 'GoldenGravityExpressX — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+  address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
   /** Approx. WGS84 for Blk 50A Marine Terrace — used for delivery radius checks */
   outletLat: 1.30892,
   outletLng: 103.91548,
@@ -30,8 +30,8 @@ export const shopInfo = {
 export const outlets = [
   {
     id: 1,
-    name: 'GoldenGravityExpressX — Blk 50A',
-    address: 'GoldenGravityExpressX — Blk 50A Marine Terrace, #01-303, Singapore 441050',
+    name: 'STM Salam — Blk 50A',
+    address: 'STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050',
     phone: '+65 9191 5766',
     hours: 'Daily 9:00 AM – 11:00 PM',
     isMain: true,
@@ -113,7 +113,7 @@ export const testimonials = [
 ]
 
 export const promos = [
-  { id: 1, code: 'STMSALAM2', title: '$2 OFF first order', subtitle: 'Welcome to GoldenGravityExpressX', color: '#013220' },
+  { id: 1, code: 'STMSALAM2', title: '$2 OFF first order', subtitle: 'Welcome to STM Salam', color: '#013220' },
 ]
 
 

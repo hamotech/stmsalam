@@ -464,8 +464,8 @@ export default function Login() {
             {mode === 'register' ? 'Create Account' : headerTitle}
           </h1>
           <p style={{ color: 'var(--text-light)', fontSize: '15px', fontWeight: 600 }}>
-            {mode === 'register' ? 'Join GoldenGravityExpressX for exclusive deals' :
-             'Sign in to your GoldenGravityExpressX account'}
+            {mode === 'register' ? 'Join STM Salam for exclusive deals' :
+             'Sign in to your STM Salam account'}
           </p>
         </div>
 
@@ -602,7 +602,7 @@ export default function Login() {
         {/* FOOTER */}
         <div style={{ marginTop: '40px', paddingTop: '28px', borderTop: '2px dashed var(--border)' }}>
           <p style={{ color: 'var(--text-light)', fontSize: '13px', lineHeight: 1.6, fontWeight: 600 }}>
-            Secure login for GoldenGravityExpressX.<br />
+            Secure login for STM Salam.<br />
             By entering, you accept our <span style={{ color: 'var(--green-mid)', fontWeight: 800 }}>User Terms</span> & <span style={{ color: 'var(--green-mid)', fontWeight: 800 }}>Privacy</span>.
           </p>
         </div>

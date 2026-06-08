@@ -17,7 +17,7 @@ export default function BrandedSplashScreen() {
         flexDirection: 'column',
         justifyContent: 'center', 
         alignItems: 'center', 
-        background: '#013220',
+        background: '#143E32',
         opacity: opacity,
         transition: 'opacity 0.5s ease-in-out',
         padding: '24px',
@@ -41,7 +41,7 @@ export default function BrandedSplashScreen() {
           letterSpacing: '1px'
         }}
       >
-        GoldenGravityExpressX
+        STM Salam
       </h1>
       
       <p 
@@ -54,7 +54,7 @@ export default function BrandedSplashScreen() {
           letterSpacing: '0.5px'
         }}
       >
-        Premium Delivery Platform
+        Fast Delivery Services
       </p>
 
       {/* Loading indicator */}

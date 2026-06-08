@@ -401,7 +401,7 @@ const Orders = () => {
                           )}
                        </button>
                        <button 
-                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || order.customerPhone || order.phone || '').replace(/\D/g,'')}?text=Hi, your GoldenGravityExpressX order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
+                         onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${(order.customer?.phone || order.customerPhone || order.phone || '').replace(/\D/g,'')}?text=Hi, your STM Salam order #${order.id?.slice(-8)} is ${pipelineSt}!`, '_blank'); }}
                          style={{ background: '#25D366', border: 'none', padding: '10px', borderRadius: '10px', color: 'white', cursor: 'pointer' }}
                        >
                           <MessageSquare size={18} />

@@ -98,7 +98,7 @@ export default function AboutUs() {
                 A Legacy Crafted <br /> <span style={{ color: 'var(--green-mid)' }}>With Deep Devotion.</span>
               </h2>
               <p style={{ fontSize: '18px', lineHeight: 1.8, color: 'var(--text-dark)', marginBottom: '24px' }}>
-                Established in 1988, <strong>GoldenGravityExpressX</strong> has been serving the Marine Terrace community with authentic, high-quality, and deeply flavorful Halal Indian-Muslim cuisine. 
+                Established in 1988, <strong>STM Salam</strong> has been serving the Marine Terrace community with authentic, high-quality, and deeply flavorful Halal Indian-Muslim cuisine. 
               </p>
               <p style={{ fontSize: '17px', lineHeight: 1.8, color: 'var(--text-light)', marginBottom: '40px' }}>
                 From our gourmet Lamb Burgers to our signature Teh Tarik, every item on our menu is crafted with care, preserving generations of family tradition while embracing modern tastes. We believe that good food is the universal language of connection, and our mission is to deliver that connection right to your doorstep.

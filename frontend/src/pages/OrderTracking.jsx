@@ -154,7 +154,7 @@ export default function OrderTracking() {
   }, [cleanOrderId])
 
   useEffect(() => {
-    const riderId = String(order?.assignedDriverId || order?.assignedRiderId || order?.riderId || '').trim()
+    const riderId = String(order?.assignedDriverId || order?.assignedRiderId || order?.riderId || order?.rider?.id || '').trim()
     if (!riderId) return undefined
     
     const driverRef = doc(db, 'drivers', riderId)
@@ -167,7 +167,9 @@ export default function OrderTracking() {
             setDirections(null)
             lastRouteCalc.current = Date.now()
           }
-          setTargetRiderLocation({ lat: data.location.lat, lng: data.location.lng })
+          const newLoc = { lat: data.location.lat, lng: data.location.lng }
+          setTargetRiderLocation(newLoc)
+          setRiderLocation(newLoc) // Update marker position immediately
         }
       }
     }, (err) => {
@@ -175,30 +177,7 @@ export default function OrderTracking() {
     })
 
     return () => unsub()
-  }, [order?.assignedDriverId, order?.assignedRiderId, order?.riderId])
-
-  useEffect(() => {
-    if (!targetRiderLocation) return undefined
-    let animationFrame
-    const lerp = (start, end, amt) => (1 - amt) * start + amt * end
-    
-    const animate = () => {
-      setRiderLocation((prev) => {
-        if (!prev) return targetRiderLocation
-        const lat = lerp(prev.lat, targetRiderLocation.lat, 0.1)
-        const lng = lerp(prev.lng, targetRiderLocation.lng, 0.1)
-        
-        if (Math.abs(lat - targetRiderLocation.lat) < 0.00001 && Math.abs(lng - targetRiderLocation.lng) < 0.00001) {
-          return targetRiderLocation
-        }
-        animationFrame = requestAnimationFrame(animate)
-        return { lat, lng }
-      })
-    }
-    
-    animate()
-    return () => { if (animationFrame) cancelAnimationFrame(animationFrame) }
-  }, [targetRiderLocation])
+  }, [order?.assignedDriverId, order?.assignedRiderId, order?.riderId, order?.rider?.id])
 
   useEffect(() => {
     if (!stripeSessionId || !cleanOrderId) return undefined
@@ -520,7 +499,7 @@ export default function OrderTracking() {
                 </button>
               )}
               <WhatsAppChatButton 
-                message={`Hi GoldenGravityExpressX, I want to check my order status for order #${cleanOrderId}`} 
+                message={`Hi STM Salam, I want to check my order status for order #${cleanOrderId}`} 
                 type="button" 
                 label="Check Status on WhatsApp" 
                 style={{ width: '100%', borderRadius: '20px', padding: '20px', background: 'var(--green-dark)', color: 'white', border: 'none', fontWeight: 950, fontSize: '18px', boxShadow: '0 10px 25px rgba(1,50,32,0.15)' }} 

@@ -124,8 +124,8 @@ export default function Profile() {
   }
 
   const generateWhatsAppMessage = () => {
-    if (!cartItems || cartItems.length === 0) return "Hi GoldenGravityExpressX, I'd like to place an order!";
-    let text = "Hi GoldenGravityExpressX, I'd like to order:\n\n";
+    if (!cartItems || cartItems.length === 0) return "Hi STM Salam, I'd like to place an order!";
+    let text = "Hi STM Salam, I'd like to order:\n\n";
     cartItems.forEach(item => {
       text += `${item.qty}x ${item.name} - $${(item.price * item.qty).toFixed(2)}\n`;
     });

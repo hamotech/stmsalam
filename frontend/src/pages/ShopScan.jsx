@@ -166,14 +166,14 @@ export default function ShopScan() {
               cursor: 'zoom-in', position: 'relative'
             }}
           >
-            <img src="/sgqr.png" alt="PayNow SGQR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src="/paymentscanner.jpeg" alt="PayNow SGQR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             <div style={{ position: 'absolute', bottom: '12px', right: '12px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700 }}>
               Tap to Enlarge
             </div>
           </div>
 
-          <a href="/scanner-pay.pdf" download style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--green-mid)', fontWeight: 800, fontSize: '13px', textDecoration: 'none' }}>
-            <Download size={14} /> Download official SGQR PDF
+          <a href="/paymentscanner.jpeg" download style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--green-mid)', fontWeight: 800, fontSize: '13px', textDecoration: 'none' }}>
+            <Download size={14} /> Download official SGQR Image
           </a>
         </div>
 
@@ -253,7 +253,7 @@ export default function ShopScan() {
             }}
           >
             <img 
-              src="/sgqr.png" 
+              src="/paymentscanner.jpeg" 
               alt="SGQR Enlarged" 
               style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '16px', border: '4px solid white' }} 
             />

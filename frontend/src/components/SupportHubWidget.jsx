@@ -70,8 +70,8 @@ export default function SupportHubWidget() {
         onClick={() => setOpen(true)}
         style={{
           position: 'fixed',
-          bottom: 30,
-          left: 30,
+          bottom: 'calc(85px + env(safe-area-inset-bottom))',
+          left: '20px',
           width: 56,
           height: 56,
           borderRadius: '50%',
@@ -102,10 +102,10 @@ export default function SupportHubWidget() {
             transition={{ type: 'spring', damping: 26, stiffness: 320 }}
             style={{
               position: 'fixed',
-              bottom: 100,
-              left: 20,
-              width: 'min(400px, calc(100vw - 32px))',
-              height: 'min(560px, calc(100vh - 140px))',
+              bottom: 'calc(150px + env(safe-area-inset-bottom))',
+              left: '20px',
+              width: 'min(400px, calc(100vw - 40px))',
+              height: 'min(560px, calc(100vh - 180px))',
               background: 'white',
               borderRadius: 24,
               boxShadow: '0 25px 60px rgba(0,0,0,0.18)',

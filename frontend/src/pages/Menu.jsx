@@ -122,7 +122,7 @@ export default function Menu() {
       <div style={{ background: 'var(--green-dark)', padding: '60px 0 100px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=1800)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.1 }} />
         <div className="container" style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 'clamp(40px, 8vw, 64px)', fontWeight: 950, color: 'white', letterSpacing: '-3px', marginBottom: '16px', lineHeight: 1 }}>GoldenGravityExpressX Menu</h1>
+          <h1 style={{ fontSize: 'clamp(40px, 8vw, 64px)', fontWeight: 950, color: 'white', letterSpacing: '-3px', marginBottom: '16px', lineHeight: 1 }}>STM Salam Menu</h1>
           <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '18px', marginBottom: '40px', maxWidth: '600px', margin: '0 auto 40px', fontWeight: 500 }}>
             {shopInfo.tagline}
           </p>
@@ -182,7 +182,7 @@ export default function Menu() {
 
       {/* Floating Cart Footer */}
       {totalItems > 0 && (
-        <div className="floating-cart" style={{ position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 40px)', maxWidth: '560px' }}>
+        <div className="floating-cart" style={{ position: 'fixed', bottom: 'calc(85px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: 'calc(100% - 40px)', maxWidth: '560px' }}>
           <Link to="/cart" style={{ 
             background: 'var(--green-dark)', color: 'white', padding: '20px 32px', borderRadius: '24px', 
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', textDecoration: 'none', 

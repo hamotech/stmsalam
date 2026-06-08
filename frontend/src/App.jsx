@@ -107,7 +107,7 @@ function Shell() {
       {!hideNavFooter && <Footer />}
       {!hideFloatingHelp && <SupportHubWidget />}
       {!hideFloatingHelp && (
-        <WhatsAppChatButton message="Hi GoldenGravityExpressX, I need help with my order." label="Chat with Admin" />
+        <WhatsAppChatButton message="Hi STM Salam, I need help with my order." label="Chat with Admin" />
       )}
     </LayoutWrapper>
   )

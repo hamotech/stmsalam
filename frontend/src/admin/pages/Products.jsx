@@ -345,7 +345,7 @@ const Products = () => {
     );
   }
 
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes((search || '').toLowerCase()));
 
   return (
     <div style={{ position: 'relative' }}>

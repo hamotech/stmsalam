@@ -1,5 +1,5 @@
 // src/lib/firebase.js
-// Firebase initialization for GoldenGravityExpressX App (Vite setup)
+// Firebase initialization for STM Salam App (Vite setup)
 
 import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";

@@ -147,7 +147,7 @@ export default function DemoPaymentGateway() {
           padding: '24px 28px 4px', borderBottom: '1px solid #f1f5f9',
         }}>
           <div style={{ color: '#64748b', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-            Pay GoldenGravityExpressX
+            Pay STM Salam
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '6px 0 4px' }}>
             <span style={{ color: '#0f172a', fontWeight: 900, fontSize: '32px' }}>

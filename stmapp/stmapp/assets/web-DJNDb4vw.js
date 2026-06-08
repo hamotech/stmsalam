@@ -1,1 +1,0 @@
-import{aw as n}from"./App-BRiTWX-K.js";import"./index-BJABmrye.js";import"./vendor-DGlXZeyz.js";import"./icons-Ri5pl4Oq.js";class p extends n{async show(e){}async hide(e){}}export{p as SplashScreenWeb};

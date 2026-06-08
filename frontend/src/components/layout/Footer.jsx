@@ -112,7 +112,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: '32px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px' }}>
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
-            © {new Date().getFullYear()} GoldenGravityExpressX. All rights reserved.
+            © {new Date().getFullYear()} STM Salam. All rights reserved.
           </p>
           <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -121,7 +121,7 @@ export default function Footer() {
             </div>
             <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.1)' }} />
             <span style={{ background: 'var(--gold)', color: 'var(--green-dark)', fontSize: '11px', fontWeight: 950, padding: '6px 14px', borderRadius: '30px', letterSpacing: '1px' }}>HALAL Certified</span>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>GoldenGravityExpressX — Blk 50A Marine Terrace, #01-303, Singapore 441050</span>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>STM Salam — Blk 50A Marine Terrace, #01-303, Singapore 441050</span>
           </div>
         </div>
       </div>

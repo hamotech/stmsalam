@@ -923,7 +923,7 @@ export default function Checkout() {
             </button>
             
             <WhatsAppChatButton 
-              message="Hi GoldenGravityExpressX, I want help with payment." 
+              message="Hi STM Salam, I want help with payment." 
               type="button" 
               label="Payment Help?" 
               style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--gold-tint)', color: 'var(--green-dark)', boxShadow: 'none' }} 

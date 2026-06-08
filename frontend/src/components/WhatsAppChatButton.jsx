@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { shopInfo } from '../data/menuData';
 
 const WhatsAppChatButton = ({ 
-  message = "Hi GoldenGravityExpressX, I need help with my order", 
+  message = "Hi STM Salam, I need help with my order", 
   type = 'floating', 
   label = 'Chat with Admin',
   className = '',
@@ -52,8 +52,8 @@ const WhatsAppChatButton = ({
       className={className}
       style={{
         position: 'fixed',
-        bottom: '30px',
-        right: '30px',
+        bottom: 'calc(85px + env(safe-area-inset-bottom))',
+        right: '20px',
         width: '60px',
         height: '60px',
         background: '#25d366',

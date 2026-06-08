@@ -4,8 +4,8 @@
   "description": "Authentic Kopitiam Flavors, Delivered. Order online from STM Salam — Marine Terrace, Singapore.",
   "start_url": "/stmapp/index.html",
   "display": "standalone",
-  "background_color": "#013220",
-  "theme_color": "#013220",
+  "background_color": "#143E32",
+  "theme_color": "#143E32",
   "orientation": "portrait",
   "icons": [
     {

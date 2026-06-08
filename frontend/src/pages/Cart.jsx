@@ -58,7 +58,7 @@ export default function Cart() {
       `Customer: Guest Customer\n\n` +
       `*Items:*\n${itemsList}\n\n` +
       `*Total: SGD ${total.toFixed(2)}*\n\n` +
-      `Hello GoldenGravityExpressX, I would like to place this order via WhatsApp. Please advise on delivery timing and payment.`;
+      `Hello STM Salam, I would like to place this order via WhatsApp. Please advise on delivery timing and payment.`;
     
     const whatsappUrl = `https://wa.me/${(shopInfo?.whatsapp || '').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, '_blank')
@@ -185,7 +185,7 @@ export default function Cart() {
               </button>
 
               <WhatsAppChatButton 
-                message="Hi GoldenGravityExpressX, I need help with my cart." 
+                message="Hi STM Salam, I need help with my cart." 
                 type="button" 
                 label="Help with Order?" 
                 style={{ width: '100%', marginTop: '16px', padding: '16px', fontSize: '15px', borderRadius: '16px', background: 'var(--cream)', color: 'var(--green-dark)', boxShadow: 'none' }} 

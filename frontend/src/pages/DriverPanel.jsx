@@ -62,6 +62,7 @@ export default function DriverPanel() {
   const [chatOrderId, setChatOrderId] = useState('')
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
+  const [driverLocation, setDriverLocation] = useState(null)
   const lastGpsPushRef = useRef(0)
   const lastGpsCoordsRef = useRef(null)
   const hasTrackableDelivery = assignedOrders.some((o) => {
@@ -163,6 +164,7 @@ export default function DriverPanel() {
 
         lastGpsPushRef.current = now
         lastGpsCoordsRef.current = { lat, lng }
+        setDriverLocation({ lat, lng })
         
         console.log("Updating driver GPS:", {
           uid: riderId,
@@ -278,6 +280,20 @@ export default function DriverPanel() {
       })
     return sorted[0] || null
   }, [assignedOrders])
+
+  const getDeliveryDistance = (delivery) => {
+    if (delivery?.distance) return delivery.distance;
+    if (delivery?.deliveryDistance) return delivery.deliveryDistance;
+    
+    const cLat = delivery?.customerLocation?.lat || delivery?.customerSnapshot?.location?.lat || delivery?.location?.lat;
+    const cLng = delivery?.customerLocation?.lng || delivery?.customerSnapshot?.location?.lng || delivery?.location?.lng;
+    
+    if (driverLocation && cLat && cLng) {
+      const dist = calculateDistance(driverLocation.lat, driverLocation.lng, cLat, cLng);
+      return `${(dist / 1000).toFixed(1)} km`;
+    }
+    return 'N/A';
+  };
 
   const earningsToday = completedToday * 7.5
   const dailyGoal = 20
@@ -445,11 +461,11 @@ export default function DriverPanel() {
             <>
               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Order #{activeDelivery.id?.slice(-8)?.toUpperCase()}</div>
               <div style={{ marginTop: '8px', display: 'grid', gap: '6px', fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
-                <div>Distance: {activeDelivery.distanceKm ? `${activeDelivery.distanceKm} km` : (activeDelivery.distance || 'N/A')}</div>
+                <div>Distance: {getDeliveryDistance(activeDelivery)}</div>
                 <div>Status: {riderTaskStatusLabel(activeDelivery.status)}</div>
-                <div>Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || 'N/A'}</div>
-                <div>Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || 'N/A'}</div>
-                <div>Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.address || 'N/A'}</div>
+                <div>Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || activeDelivery?.customerName || 'N/A'}</div>
+                <div>Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || activeDelivery?.customerPhone || activeDelivery?.phone || 'N/A'}</div>
+                <div>Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.deliveryAddress || activeDelivery?.address || 'N/A'}</div>
                 <div>Items: {(activeDelivery?.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ') || 'N/A'}</div>
               </div>
               <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>

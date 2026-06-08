@@ -36,7 +36,7 @@ export default function Navbar() {
       position: 'relative'
     }}>
       <marquee scrollamount="6" style={{ display: 'block' }}>
-        ✨ MINIMUM ORDER SGD 10.00 FOR ALL DELIVERIES AND PICKUPS ✨ ENJOY AUTHENTIC GoldenGravityExpressX FLAVORS ✨ MINIMUM ORDER SGD 10.00 ✨
+        ✨ MINIMUM ORDER SGD 10.00 FOR ALL DELIVERIES AND PICKUPS ✨ ENJOY AUTHENTIC STM Salam FLAVORS ✨ MINIMUM ORDER SGD 10.00 ✨
       </marquee>
     </div>
   );
@@ -68,7 +68,7 @@ export default function Navbar() {
       <AnnouncementBanner />
       <nav style={{
         position: 'sticky', top: 0, zIndex: 1000,
-        background: scrolled ? 'rgba(1, 50, 32, 0.98)' : 'var(--green-dark)',
+        background: scrolled ? 'rgba(20, 62, 50, 0.98)' : 'var(--green-dark)',
         backdropFilter: 'blur(16px)',
         borderBottom: scrolled ? '1px solid rgba(201, 163, 68, 0.15)' : '1px solid transparent',
         boxShadow: scrolled ? '0 10px 40px rgba(0,0,0,0.3)' : 'none',
