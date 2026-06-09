@@ -41,6 +41,7 @@ import {
   subscribeOrders,
   deleteOrder,
   markOrderAsSeen,
+  markOrderAsPrinted,
   normalizeOrderLineItems,
 } from '../services/dataService';
 import { adminTransition } from '../services/adminApi';
@@ -76,9 +77,58 @@ const Orders = () => {
   };
 
   useEffect(() => {
+    // Request notification permission if not already granted or denied
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
     const unsub = subscribeOrders((ords) => setOrders(ords));
     return () => { if (unsub) unsub(); }
   }, []);
+
+  // Process new orders for notifications and auto-print
+  useEffect(() => {
+    const processNewOrders = async () => {
+      const newOrdersToPrint = orders.filter(o => o.isNewForAdmin && !o.printed);
+      if (newOrdersToPrint.length === 0) return;
+
+      // Play sound once per batch
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0, ctx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.5);
+      } catch (e) {
+        console.warn('Audio play failed', e);
+      }
+
+      for (const order of newOrdersToPrint) {
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("New Order Received!", {
+            body: `Order #${(order.id || '').slice(-8).toUpperCase()} has just arrived.`,
+            icon: "/stmsalamlogo.png"
+          });
+        }
+        
+        printCustomerBill(order);
+        try {
+          await markOrderAsPrinted(order.id);
+        } catch (e) {
+          console.error("Failed to mark order as printed", e);
+        }
+      }
+    };
+    
+    processNewOrders();
+  }, [orders]);
 
   const [transitioningOrderIds, setTransitioningOrderIds] = useState(new Set());
 

@@ -7,8 +7,8 @@ logo = Image.open('../frontend/public/stm-logo-final.png').convert("RGBA")
 # Create a 1024x1024 canvas for icon-foreground (transparent)
 bg_transparent = Image.new("RGBA", (1024, 1024), (255, 255, 255, 0))
 
-# Create a 1024x1024 canvas for icon-background (#0B4D3A)
-brand_color = (11, 77, 58, 255)
+# Create a 1024x1024 canvas for icon-background (#143E32)
+brand_color = (20, 62, 50, 255)
 bg_solid = Image.new("RGBA", (1024, 1024), brand_color)
 
 # Safe area is a circle of diameter 682px in the center of the 1024x1024 canvas.

@@ -532,6 +532,12 @@ export const markOrderAsSeen = async (orderId) => {
   await updateDoc(orderRef, { isNewForAdmin: false, unreadAdmin: 0 });
 };
 
+export const markOrderAsPrinted = async (orderId) => {
+  if (!auth.currentUser) return;
+  const orderRef = doc(db, 'orders', orderId);
+  await updateDoc(orderRef, { printed: true });
+};
+
 // ─── SITE SUPPORT CHAT (customer ↔ admin, separate from order threads) ──────
 
 const preview140 = (s) => String(s || '').trim().slice(0, 140);
