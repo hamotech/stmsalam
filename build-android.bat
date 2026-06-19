@@ -24,9 +24,10 @@ popd
 
 rem ----------------------------------------------------
 rem 3. Copy built assets to Capacitor webDir (stmapp/stmapp)
+rem (Vite outputs to ../dist from frontend; copy from repo-root dist)
 rem ----------------------------------------------------
 if exist stmapp\stmapp rd /s /q stmapp\stmapp
-xcopy /E /I frontend\dist stmapp\stmapp >nul
+xcopy /E /I dist stmapp\stmapp >nul
 if errorlevel 1 (
     echo *** Copying assets failed. aborting.& exit /b 1
 )
