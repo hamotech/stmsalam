@@ -298,7 +298,7 @@ export function createOrderPipelineModeAuditPayload(input) {
 }
 
 /** Canonical lifecycle — always goes through `getOrderContext` so it cannot drift. */
-export function normalizeGrabOrderStatus(order, options) {
+export function normalizeOnlineOrderStatus(order, options) {
   return getOrderContext(order, options).canonicalStatus;
 }
 

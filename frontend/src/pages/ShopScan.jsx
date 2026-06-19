@@ -267,7 +267,7 @@ export default function ShopScan() {
               <div style={{ width: '60px', height: '60px', background: 'var(--green-tint)', color: 'var(--green-dark)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
                 <QrCode size={30} />
               </div>
-              <h3 style={{ fontSize: '20px', fontWeight: 900, marginBottom: '12px' }}>Grab-style Mock Scanner</h3>
+              <h3 style={{ fontSize: '20px', fontWeight: 900, marginBottom: '12px' }}>Mock Scanner</h3>
               <p style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
                 In a production mobile app environment, this launches the native camera scanner. For this web flow, please scan the SGQR code using your bank app, upload your receipt below, or contact support.
               </p>

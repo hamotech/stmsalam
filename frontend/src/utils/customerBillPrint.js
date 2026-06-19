@@ -22,6 +22,7 @@ function num(v) {
 /** Firestore Timestamp, ISO string, or number ms */
 function toJsDate(val) {
   if (val == null) return null
+  if (val instanceof Date) return val
   if (typeof val?.toDate === 'function') {
     try {
       const d = val.toDate()
@@ -30,9 +31,12 @@ function toJsDate(val) {
       return null
     }
   }
-  if (typeof val === 'object' && typeof val.seconds === 'number') {
-    const d = new Date(val.seconds * 1000)
-    return !Number.isNaN(d.getTime()) ? d : null
+  if (typeof val === 'object') {
+    const secs = val.seconds ?? val._seconds
+    if (typeof secs === 'number') {
+      const d = new Date(secs * 1000)
+      return !Number.isNaN(d.getTime()) ? d : null
+    }
   }
   const d = new Date(val)
   return !Number.isNaN(d.getTime()) ? d : null

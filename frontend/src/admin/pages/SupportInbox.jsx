@@ -26,9 +26,12 @@ export default function SupportInbox() {
 
   const formatTime = (row) => {
     const u = row.updatedAt;
-    if (u?.toDate) return u.toDate().toLocaleString();
-    if (u?.seconds) return new Date(u.seconds * 1000).toLocaleString();
-    return '—';
+    if (!u) return '—';
+    if (typeof u.toDate === 'function') return u.toDate().toLocaleString();
+    const secs = u.seconds ?? u._seconds;
+    if (secs != null) return new Date(secs * 1000).toLocaleString();
+    const d = new Date(u);
+    return isNaN(d) ? '—' : d.toLocaleString();
   };
 
   return (

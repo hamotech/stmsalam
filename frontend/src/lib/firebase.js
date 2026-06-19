@@ -130,7 +130,7 @@ if (import.meta.env.DEV) {
   }
   if (FUNCTIONS_REGION !== "us-central1") {
     console.warn(
-      `[firebase] VITE_FIREBASE_FUNCTIONS_REGION=${FUNCTIONS_REGION} — ensure createGrabOrder is deployed in this region.`
+      `[firebase] VITE_FIREBASE_FUNCTIONS_REGION=${FUNCTIONS_REGION} — ensure createOnlineOrder is deployed in this region.`
     );
   }
   if (FIREBASE_PROJECT_ID) {

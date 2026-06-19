@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MapPin, MessageSquare, Package, Navigation, CheckCircle, User, Target, Wallet, Phone } from 'lucide-react'
+import { MapPin, MessageSquare, Package, Navigation, CheckCircle, User, Target, Wallet, Phone, History, Clock, CreditCard } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { db, functions } from '../lib/firebase'
@@ -41,6 +41,36 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
             Math.sin(Δλ/2) * Math.sin(Δλ/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c; 
+}
+
+function extractDate(ts) {
+  if (!ts) return null;
+  if (ts instanceof Date) return ts;
+  if (typeof ts === 'object') {
+    if (typeof ts.toDate === 'function') return ts.toDate();
+    const secs = ts.seconds ?? ts._seconds;
+    if (secs != null) return new Date(secs * 1000);
+  }
+  const d = new Date(ts);
+  return isNaN(d) ? null : d;
+}
+
+function formatOrderDateOnly(ts) {
+  const d = extractDate(ts);
+  if (!d) return '-';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+}
+
+function formatOrderTimeOnly(ts) {
+  const d = extractDate(ts);
+  if (!d) return '-';
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatTimestamp(ts) {
+  const d = extractDate(ts);
+  if (!d) return '-';
+  return `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 export default function DriverPanel() {
@@ -459,14 +489,51 @@ export default function DriverPanel() {
           <h3 style={{ margin: 0, marginBottom: '12px', fontSize: '16px', fontWeight: 900 }}>Active Delivery</h3>
           {activeDelivery ? (
             <>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Order #{activeDelivery.id?.slice(-8)?.toUpperCase()}</div>
-              <div style={{ marginTop: '8px', display: 'grid', gap: '6px', fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
-                <div>Distance: {getDeliveryDistance(activeDelivery)}</div>
-                <div>Status: {riderTaskStatusLabel(activeDelivery.status)}</div>
-                <div>Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || activeDelivery?.customerName || 'N/A'}</div>
-                <div>Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || activeDelivery?.customerPhone || activeDelivery?.phone || 'N/A'}</div>
-                <div>Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.deliveryAddress || activeDelivery?.address || 'N/A'}</div>
-                <div>Items: {(activeDelivery?.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ') || 'N/A'}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: '16px', color: '#0f172a', fontWeight: 900 }}>Order #{activeDelivery.id?.slice(-8)?.toUpperCase()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748b', marginTop: '4px', fontWeight: 700 }}>
+                    <Clock size={12} /> {formatOrderDateOnly(activeDelivery.createdAt || activeDelivery.placedAt || activeDelivery.date)} at {formatOrderTimeOnly(activeDelivery.createdAt || activeDelivery.placedAt || activeDelivery.date)}
+                  </div>
+                </div>
+                <div style={{ background: (activeDelivery.paymentStatus === 'PAID' || activeDelivery.payment_status === 'PAID') ? '#f0fdf4' : '#fff7ed', color: (activeDelivery.paymentStatus === 'PAID' || activeDelivery.payment_status === 'PAID') ? '#166534' : '#9a3412', padding: '6px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <CreditCard size={12} /> {(activeDelivery.paymentStatus === 'PAID' || activeDelivery.payment_status === 'PAID') ? 'PAID' : 'COD / UNPAID'}
+                </div>
+              </div>
+              
+              <div style={{ marginTop: '16px', padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'grid', gap: '8px', fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={16} color="#64748b" /> Distance: {getDeliveryDistance(activeDelivery)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={16} color="#64748b" /> Customer: {activeDelivery?.customerSnapshot?.name || activeDelivery?.customer?.name || activeDelivery?.customerName || 'N/A'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Phone size={16} color="#64748b" /> Phone: {activeDelivery?.customerSnapshot?.phone || activeDelivery?.customer?.phone || activeDelivery?.customerPhone || activeDelivery?.phone || 'N/A'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', alignItems: 'flex-start' }}><MapPin size={16} color="#64748b" style={{ marginTop: '2px' }} /> Address: {activeDelivery?.customerSnapshot?.address || activeDelivery?.customer?.address || activeDelivery?.deliveryAddress || activeDelivery?.address || 'N/A'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', alignItems: 'flex-start' }}><Package size={16} color="#64748b" style={{ marginTop: '2px' }} /> Items: {(activeDelivery?.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ') || 'N/A'}</div>
+              </div>
+
+              {/* Mini Timeline */}
+              <div style={{ marginTop: '16px', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '12px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <History size={14} /> ORDER TIMELINE
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { label: 'Placed', ts: activeDelivery.placedAt || activeDelivery.createdAt },
+                    { label: 'Preparing', ts: activeDelivery.preparingAt },
+                    { label: 'Ready', ts: activeDelivery.readyAt },
+                    { label: 'Accepted by You', ts: activeDelivery.assignedAt || activeDelivery.driverAssignedAt },
+                    { label: 'Out for Delivery', ts: activeDelivery.outForDeliveryAt },
+                  ].filter(s => s.ts).map((step, i, arr) => (
+                    <div key={step.label} style={{ display: 'flex', gap: '12px', position: 'relative' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: i === arr.length - 1 ? 'var(--green-dark)' : '#cbd5e1', zIndex: 2 }} />
+                        {i < arr.length - 1 && <div style={{ width: '2px', height: '100%', background: '#e2e8f0', position: 'absolute', top: '8px', zIndex: 1 }} />}
+                      </div>
+                      <div style={{ paddingBottom: i === arr.length - 1 ? 0 : '8px', flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: i === arr.length - 1 ? '#0f172a' : '#64748b' }}>{step.label}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>{formatTimestamp(step.ts)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                 <button onClick={() => openMaps(activeDelivery)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><Navigation size={18} /> Maps</button>

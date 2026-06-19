@@ -20,6 +20,10 @@ const enrichProductImages = (products = []) => {
   });
 };
 
+const filterActiveProducts = (products = []) => {
+  return products.filter((p) => p.isActive !== false);
+};
+
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
@@ -81,8 +85,9 @@ export function DataProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const nextProducts = enrichProductImages(liveProducts);
-    setProducts(nextProducts);
+    const enriched = enrichProductImages(liveProducts);
+    const activeProducts = filterActiveProducts(enriched);
+    setProducts(activeProducts);
   }, [liveProducts]);
 
   useEffect(() => {

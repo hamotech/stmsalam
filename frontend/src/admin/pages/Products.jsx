@@ -20,6 +20,7 @@ const Products = () => {
   const [view, setView] = useState('list'); // list | add | edit
   const [currentProduct, setCurrentProduct] = useState(null);
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [deleteModal, setDeleteModal] = useState({ show: false, id: null });
   const [saving, setSaving] = useState(false);
@@ -59,6 +60,7 @@ const Products = () => {
     image: '',
     featured: false,
     available: true,
+    isActive: true,
     active: true,
     order: products.length + 1,
   }), [categories, products.length]);
@@ -318,7 +320,7 @@ const Products = () => {
             <textarea value={currentProduct.description} onChange={e => setCurrentProduct({ ...currentProduct, description: e.target.value })} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '15px', minHeight: '100px', resize: 'vertical', boxSizing: 'border-box' }} placeholder="Brief description of the item..." />
           </div>
 
-          <div style={{ display: 'flex', gap: '32px', background: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
+          <div style={{ display: 'flex', gap: '32px', background: '#f8fafc', padding: '24px', borderRadius: '16px', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontWeight: '800', color: currentProduct.featured ? 'var(--gold)' : '#64748b' }}>
               <input type="checkbox" checked={currentProduct.featured} onChange={e => setCurrentProduct({ ...currentProduct, featured: e.target.checked })} style={{ width: '20px', height: '20px' }} />
               <Star size={20} fill={currentProduct.featured ? 'currentColor' : 'none'} /> Featured Item
@@ -330,7 +332,16 @@ const Products = () => {
                 onChange={e => setCurrentProduct({ ...currentProduct, available: e.target.checked })}
                 style={{ width: '20px', height: '20px' }}
               />
-              {isAvailableProduct(currentProduct) ? <CheckCircle size={20} /> : <XCircle size={20} />} {isAvailableProduct(currentProduct) ? 'Available (Visible)' : 'Unavailable (Hidden)'}
+              {isAvailableProduct(currentProduct) ? <CheckCircle size={20} /> : <XCircle size={20} />} {isAvailableProduct(currentProduct) ? 'Available' : 'Unavailable'}
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontWeight: '800', color: currentProduct.isActive !== false ? '#0ea5e9' : '#64748b' }}>
+              <input
+                type="checkbox"
+                checked={currentProduct.isActive !== false}
+                onChange={e => setCurrentProduct({ ...currentProduct, isActive: e.target.checked })}
+                style={{ width: '20px', height: '20px' }}
+              />
+              {currentProduct.isActive !== false ? <CheckCircle size={20} /> : <XCircle size={20} />} {currentProduct.isActive !== false ? 'Active (Visible)' : 'Inactive (Hidden)'}
             </label>
           </div>
 
@@ -345,7 +356,13 @@ const Products = () => {
     );
   }
 
-  const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes((search || '').toLowerCase()));
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = (p.name || '').toLowerCase().includes((search || '').toLowerCase());
+    if (!matchesSearch) return false;
+    if (filterStatus === 'active') return p.isActive !== false;
+    if (filterStatus === 'inactive') return p.isActive === false;
+    return true;
+  });
 
   return (
     <div style={{ position: 'relative' }}>
@@ -400,6 +417,11 @@ const Products = () => {
       <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a' }}>Products Management</h2>
         <div className="mobile-stack-buttons" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '600', outline: 'none', background: 'white' }}>
+            <option value="all">All Products</option>
+            <option value="active">Active Products</option>
+            <option value="inactive">Inactive Products</option>
+          </select>
           <input type="text" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '600', outline: 'none' }} />
           <button
             onClick={handleDryRunImageFix}
@@ -520,9 +542,14 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '20px', fontWeight: '900', color: 'var(--green-dark)', fontSize: '16px' }}>${product.price ? parseFloat(product.price).toFixed(2) : '0.00'}</td>
                   <td style={{ padding: '20px' }}>
-                    <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', background: isAvailableProduct(product) ? '#ecfdf5' : '#fef2f2', color: isAvailableProduct(product) ? '#10b981' : '#ef4444' }}>
-                      {isAvailableProduct(product) ? 'Available' : 'Unavailable'}
-                    </span>
+                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+                      <span style={{ width: 'fit-content', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', background: product.isActive !== false ? '#ecfdf5' : '#fef2f2', color: product.isActive !== false ? '#10b981' : '#ef4444' }}>
+                        {product.isActive !== false ? 'Active' : 'Inactive'}
+                      </span>
+                      <span style={{ width: 'fit-content', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', background: isAvailableProduct(product) ? '#f0f9ff' : '#fef2f2', color: isAvailableProduct(product) ? '#0ea5e9' : '#ef4444' }}>
+                        {isAvailableProduct(product) ? 'Available' : 'Unavailable'}
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', gap: '12px' }}>
@@ -583,6 +610,14 @@ const Products = () => {
                      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Category: {categoryLabel}</div>
                      <div style={{ fontSize: '16px', fontWeight: '900', color: 'var(--green-dark)' }}>${parseFloat(product.price || 0).toFixed(2)}</div>
                      {product.featured && <div style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}><Star size={12} fill="currentColor" /> Featured</div>}
+                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                       <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', background: product.isActive !== false ? '#ecfdf5' : '#fef2f2', color: product.isActive !== false ? '#10b981' : '#ef4444' }}>
+                         {product.isActive !== false ? 'Active' : 'Inactive'}
+                       </span>
+                       <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', background: isAvailableProduct(product) ? '#f0f9ff' : '#fef2f2', color: isAvailableProduct(product) ? '#0ea5e9' : '#ef4444' }}>
+                         {isAvailableProduct(product) ? 'Avail' : 'Unavail'}
+                       </span>
+                     </div>
                    </div>
                  </div>
                  

@@ -146,9 +146,19 @@ const ChatWindow = ({ orderId, role, senderId, token = null, onClose }) => {
                   gap: '4px'
                 }}>
                   <Clock size={10} /> 
-                  {msg.createdAt?.toDate 
-                    ? msg.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : (msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now')}
+                  {(() => {
+                    const ts = msg.createdAt;
+                    if (!ts) return 'Just now';
+                    if (typeof ts.toDate === 'function') {
+                      return ts.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }
+                    const secs = ts.seconds ?? ts._seconds;
+                    if (secs != null) {
+                      return new Date(secs * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }
+                    const d = new Date(ts);
+                    return isNaN(d) ? 'Just now' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  })()}
                 </div>
               </div>
             );

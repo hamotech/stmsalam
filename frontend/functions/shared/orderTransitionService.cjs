@@ -515,13 +515,34 @@ module.exports = function createOrderTransitionService({
         // WHITELIST: only these non-lifecycle extras may be written atomically with the FSM transition.
         // Any other metadata.patch key is intentionally dropped — no blind spreading.
         // WHITELISTED ONLY: paidAt, stripeCheckoutSessionId, paymentIntentId, lastEventId, assignedRiderId, assignedRiderName, assignedRiderPhone, assignedAt.
-        const PATCH_WHITELIST = ['paidAt', 'stripeCheckoutSessionId', 'paymentIntentId', 'lastEventId', 'assignedRiderId', 'assignedRiderName', 'assignedRiderPhone', 'assignedAt'];
+        const PATCH_WHITELIST = [
+          'paidAt', 'stripeCheckoutSessionId', 'paymentIntentId', 'lastEventId', 
+          'assignedRiderId', 'assignedRiderName', 'assignedRiderPhone', 'assignedAt',
+          'acceptedAt', 'preparingAt', 'readyAt', 'driverAssignedAt', 'outForDeliveryAt', 'deliveredAt', 'cancelledAt', 'cancellationReason'
+        ];
         const whitelistedExtras = {};
         if (metadata?.patch && typeof metadata.patch === 'object') {
           for (const k of PATCH_WHITELIST) {
             if (Object.prototype.hasOwnProperty.call(metadata.patch, k) && metadata.patch[k] != null) {
               whitelistedExtras[k] = metadata.patch[k];
             }
+          }
+        }
+
+        // Auto-inject state timestamps based on destination state
+        if (to === 'placed') whitelistedExtras.placedAt = now;
+        if (to === 'paid') whitelistedExtras.paidAt = now;
+        if (to === 'preparing') {
+          whitelistedExtras.acceptedAt = now;
+          whitelistedExtras.preparingAt = now;
+        }
+        if (to === 'ready_for_pickup') whitelistedExtras.readyAt = now;
+        if (to === 'out_for_delivery') whitelistedExtras.outForDeliveryAt = now;
+        if (to === 'delivered') whitelistedExtras.deliveredAt = now;
+        if (to === 'cancelled') {
+          whitelistedExtras.cancelledAt = now;
+          if (metadata?.cancellationReason) {
+            whitelistedExtras.cancellationReason = String(metadata.cancellationReason).slice(0, 500);
           }
         }
         tx.set(

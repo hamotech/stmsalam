@@ -1,5 +1,5 @@
 /**
- * Keep in sync with stm-mobile/server/lib/mirrorGrabPublicTracking.mjs
+ * Keep in sync with stm-mobile/server/lib/mirrorOnlinePublicTracking.mjs
  */
 
 const { readCanonicalOrderStatus } = require('./orderLifecycleServer.cjs');
@@ -28,7 +28,7 @@ function buildPublicTrackingFromOrder(orderId, data) {
   const paymentStatus = normalizePaymentStatus(data);
   const lifecycleStatus = readCanonicalOrderStatus(data);
 
-  if (data.flow === 'grab') {
+  if (data.flow === 'online') {
     return {
       id: orderId,
       status: lifecycleStatus,

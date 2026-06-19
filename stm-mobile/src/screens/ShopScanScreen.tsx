@@ -7,12 +7,13 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { navReplace } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
 import { useAuth } from '@/src/context/AuthContext';
-import QRCode from 'react-native-qrcode-svg';
+// import QRCode from 'react-native-qrcode-svg';
 import HeaderBar from '@/src/components/stm/HeaderBar';
 import { Brand, cardShadow } from '@/src/theme/brand';
 import { useCart } from '@/src/context/CartContext';
@@ -127,7 +128,7 @@ export default function ShopScanScreen() {
         </Text>
 
         <View style={styles.qrContainer}>
-          <QRCode value={qrPayload} size={240} color={Brand.green} backgroundColor="#fff" />
+          <Image source={require('../../assets/paymentscanner.jpeg')} style={{ width: 240, height: 240 }} resizeMode="contain" />
           <Text style={styles.phoneLabel}>Pay to: {shopInfo.phone}</Text>
         </View>
 

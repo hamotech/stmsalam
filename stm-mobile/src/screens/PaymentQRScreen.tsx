@@ -12,12 +12,13 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { navReplace } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
 import { useAuth } from '@/src/context/AuthContext';
-import QRCode from 'react-native-qrcode-svg';
+// import QRCode from 'react-native-qrcode-svg';
 import HeaderBar from '@/src/components/stm/HeaderBar';
 import { Brand, cardShadow } from '@/src/theme/brand';
 import { useCart } from '@/src/context/CartContext';
@@ -116,7 +117,7 @@ export default function PaymentQRScreen() {
           <Text style={styles.label}>Pay to</Text>
           <Text style={styles.phone}>{shopInfo.phone}</Text>
           <View style={styles.qrBox}>
-            <QRCode value={qrPayload} size={220} color={Brand.green} backgroundColor="#fff" />
+            <Image source={require('../../assets/paymentscanner.jpeg')} style={{ width: 220, height: 220 }} resizeMode="contain" />
           </View>
           <Text style={styles.help}>
             Open your bank app and scan, or copy the reference. Amount must match exactly. After you pay, tap

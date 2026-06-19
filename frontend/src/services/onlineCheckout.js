@@ -2,7 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { signInAnonymously } from 'firebase/auth';
 import { auth, functions } from '../lib/firebase';
 
-const createGrabOrder = httpsCallable(functions, 'createGrabOrder');
+const createOnlineOrder = httpsCallable(functions, 'createOnlineOrder');
 
 /* ---------------- AUTH ---------------- */
 
@@ -54,7 +54,7 @@ function jsonSafeForCallable(value) {
   try {
     return JSON.parse(JSON.stringify(value));
   } catch (err) {
-    console.error('[grabCheckout] jsonSafeForCallable', err);
+    console.error('[onlineCheckout] jsonSafeForCallable', err);
     throw new Error('Invalid order data. Please refresh and try again.');
   }
 }
@@ -113,7 +113,7 @@ export function persistResolvedOrderForIdempotency(idem, orderId) {
 
 /* ---------------- LINE ITEMS + UI → CALLABLE ---------------- */
 
-export function cartItemsToGrabLineItems(cartItems) {
+export function cartItemsToOnlineLineItems(cartItems) {
   return (Array.isArray(cartItems) ? cartItems : []).map((item) => {
     const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
     const price = Math.max(0, Number(item.price) || 0);
@@ -266,7 +266,7 @@ export function validateCheckoutSessionController() {
 
 /* ---------------- MAIN CHECKOUT ---------------- */
 
-export async function placeGrabOrderAtCheckout({
+export async function placeOnlineOrderAtCheckout({
   items,
   totalAmount,
   paymentMethod,
@@ -339,7 +339,7 @@ export async function placeGrabOrderAtCheckout({
   let callableResult;
   try {
     /* SINGLE CALL ONLY (NO RETRY, NO LEASE) */
-    callableResult = await createGrabOrder(payload);
+    callableResult = await createOnlineOrder(payload);
   } catch (err) {
     const code = typeof err?.code === 'string' ? err.code : '';
     const msg = String(err?.message || '');
@@ -363,7 +363,7 @@ export async function placeGrabOrderAtCheckout({
       /not authorized to invoke|cloud run|401|403/.test(joined)
     ) {
       throw new Error(
-        'Order service is blocked by Cloud Run IAM. Set createGrabOrder invoker to public and redeploy.'
+        'Order service is blocked by Cloud Run IAM. Set createOnlineOrder invoker to public and redeploy.'
       );
     }
     throw err;

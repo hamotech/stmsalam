@@ -10,7 +10,7 @@ import { shopInfo } from '../data/menuData';
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import {
-  placeGrabOrderAtCheckout,
+  placeOnlineOrderAtCheckout,
   createCheckoutIdempotencyKey,
   readPersistedCheckoutIdempotencyKey,
   persistCheckoutIdempotencyKey,
@@ -21,7 +21,7 @@ import {
   validateCheckoutSessionController,
   releaseServerCheckoutLease,
   persistResolvedOrderForIdempotency,
-} from '../services/grabCheckout'
+} from '../services/onlineCheckout'
 import {
   createStripePendingOrder,
   handleStripePayment,
@@ -35,7 +35,7 @@ import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import { haversineKm, geocodeAddressSingapore, computeDeliveryQuote, isGoogleMapsGeocodingConfigured } from '../utils/delivery'
 import { PAYMENT_MODE } from '../domain/orderStateMachine';
 
-/** UI payment id → labels normalized by `grabCheckout` + Cloud Function `PAYMENT_ALIASES`. */
+/** UI payment id → labels normalized by `onlineCheckout` + Cloud Function `PAYMENT_ALIASES`. */
 const CHECKOUT_PAYMENT_MAP = {
   COD: 'COD',
   SCANNER: 'SCANNER',
@@ -443,7 +443,7 @@ export default function Checkout() {
         return
       }
 
-      const orderId = await placeGrabOrderAtCheckout({
+      const orderId = await placeOnlineOrderAtCheckout({
         items: safeItems,
         totalAmount: Number(orderTotalRaw.toFixed(2)),
         paymentMethod: paymentMethodOut,

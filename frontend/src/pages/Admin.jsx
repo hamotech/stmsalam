@@ -45,7 +45,7 @@ const AdminLayout = ({ children }) => {
         .admin-main-content {
           padding: 30px;
           overflow-y: auto;
-          overflow-x: hidden;
+          overflow-x: auto;
         }
         @media (max-width: 768px) {
           .admin-root-wrapper {

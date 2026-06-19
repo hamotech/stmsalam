@@ -6,7 +6,7 @@ const { buildPublicTrackingFromOrder } = require('./mirrorPayload');
 const { getService } = require('./shared/bootstrap/functionBootstrap.cjs');
 const { PAYMENT_MODE, normalizePaymentMode } = require('./shared/paymentConstants.cjs');
 const { log, error } = require('./lib/logger.cjs');
-const { withValidation, validateCreateGrabOrder, validateStripePendingOrder } = require('./lib/validators.cjs');
+const { withValidation, validateCreateOnlineOrder, validateStripePendingOrder } = require('./lib/validators.cjs');
 
 admin.initializeApp();
 const IS_DEPLOY_MODE = String(process.env.FUNCTIONS_DEPLOY_MODE || '').toLowerCase() === 'true';
@@ -36,10 +36,10 @@ const completeKey = (...args) =>
 const REGION = 'us-central1';
 
 /*
- * Stripe Hosted Checkout contract (web + mobile Grab “stripe” rail):
+ * Stripe Hosted Checkout contract (web + mobile Online “stripe” rail):
  *   Firestore `orders/{id}` MUST have `status: 'pending_payment'` before Cloud Run `createStripeCheckout`.
- *   Shared builder: `buildPendingPaymentStripeOrderDocument` (used by createStripePendingOrder + createGrabOrder).
- *   COD / QR (non-card) grab orders still use `buildOrderDocumentForSet` with legacy `status: 'PENDING'` until a full pipeline migration.
+ *   Shared builder: `buildPendingPaymentStripeOrderDocument` (used by createStripePendingOrder + createOnlineOrder).
+ *   COD / QR (non-card) online orders still use `buildOrderDocumentForSet` with legacy `status: 'PENDING'` until a full pipeline migration.
  */
 const DEFAULT_ADMIN_UID = '9xMUEfOE4EhsDWTAo8d3NnE12Oh2';
 
@@ -194,11 +194,11 @@ function coerceItemsOrThrow(items) {
 }
 
 /**
- * DTO sanitization for createGrabOrder:
+ * DTO sanitization for createOnlineOrder:
  * - clients must not control lifecycle fields (`status`, `paymentStatus`)
  * - only normalized checkout input is passed downstream
  */
-function sanitizeCreateGrabOrderInput(raw) {
+function sanitizeCreateOnlineOrderInput(raw) {
   const data = raw && typeof raw === 'object' ? raw : {};
   return {
     items: data.items,
@@ -242,7 +242,7 @@ function buildOrderDocumentForSet({
     totalAmount,
     paymentMethod: normalizedMode,
     paymentMode: normalizedMode,
-    flow: 'grab',
+    flow: 'online',
     metaData: {},
     paymentStatus: 'PENDING',
     status: 'placed',
@@ -250,6 +250,7 @@ function buildOrderDocumentForSet({
     customerPhone: phoneNorm,
     mode: modeNorm,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    placedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   if (notes) doc.notes = String(notes).slice(0, 2000);
@@ -265,7 +266,7 @@ function buildOrderDocumentForSet({
 
 
 /**
- * ONE Firestore document shape for Stripe Hosted Checkout (web `createStripePendingOrder` OR mobile Grab rail).
+ * ONE Firestore document shape for Stripe Hosted Checkout (web `createStripePendingOrder` OR mobile Online rail).
  * Cloud Run `createStripeCheckout` requires `status === 'pending_payment'` (no other status may open checkout).
  */
 function buildPendingPaymentStripeOrderDocument({
@@ -298,7 +299,7 @@ function buildPendingPaymentStripeOrderDocument({
     totalAmount,
     paymentMethod: 'STRIPE',
     paymentMode: 'STRIPE',
-    flow: 'grab',
+    flow: 'online',
     metaData: meta,
     paymentStatus: 'PENDING',
     status: 'pending_payment',
@@ -306,6 +307,7 @@ function buildPendingPaymentStripeOrderDocument({
     customerPhone: phoneNorm,
     mode: modeNorm,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    placedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
 
@@ -349,9 +351,9 @@ function buildStripePendingOrderDocument({
 }
 
 /**
- * Mobile Grab checkout — Stripe Hosted only: customer + draft from `metaData` (must match web field semantics).
+ * Mobile Online checkout — Stripe Hosted only: customer + draft from `metaData` (must match web field semantics).
  */
-function buildStripeHostedGrabOrderDocument({
+function buildStripeHostedOnlineOrderDocument({
   uid,
   items,
   totalAmount,
@@ -396,14 +398,14 @@ function buildStripeHostedGrabOrderDocument({
 
 /* -------------------- FUNCTIONS -------------------- */
 
-exports.createGrabOrder = onCall(
+exports.createOnlineOrder = onCall(
   { region: REGION, invoker: 'public' },
   withValidation(async (request) => {
     assertProductionSecurityMode();
-    enforceCallableAppCheck(request, 'createGrabOrder');
-    console.log('[CF] START createGrabOrder');
+    enforceCallableAppCheck(request, 'createOnlineOrder');
+    console.log('[CF] START createOnlineOrder');
     // Structured log for start
-    const data = sanitizeCreateGrabOrderInput(request.data);
+    const data = sanitizeCreateOnlineOrderInput(request.data);
     let traceId = '';
 
     try {
@@ -415,26 +417,26 @@ exports.createGrabOrder = onCall(
       traceId = `${uid}-${Date.now()}`;
       const ip = String(request?.rawRequest?.ip || '').trim() || 'unknown';
       const db = admin.firestore();
-      const createGrabRatePayload = {
+      const createOnlineRatePayload = {
         code: 'RATE_LIMITED',
-        message: 'Too many createGrabOrder requests',
+        message: 'Too many createOnlineOrder requests',
         debug: { from: null, to: null, actor: 'customer' },
       };
       await enforceRateLimitOrThrow({
         db,
-        key: `createGrabOrder:uid:${uid}`,
+        key: `createOnlineOrder:uid:${uid}`,
         limit: RATE_LIMIT_UID_MAX,
         windowMs: RATE_LIMIT_UID_WINDOW_MS,
-        payload: createGrabRatePayload,
-        metadata: { functionName: 'createGrabOrder', scope: 'uid', uid, ip },
+        payload: createOnlineRatePayload,
+        metadata: { functionName: 'createOnlineOrder', scope: 'uid', uid, ip },
       });
       await enforceRateLimitOrThrow({
         db,
-        key: `createGrabOrder:ip:${ip}`,
+        key: `createOnlineOrder:ip:${ip}`,
         limit: RATE_LIMIT_IP_MAX,
         windowMs: RATE_LIMIT_IP_WINDOW_MS,
-        payload: createGrabRatePayload,
-        metadata: { functionName: 'createGrabOrder', scope: 'ip', uid, ip },
+        payload: createOnlineRatePayload,
+        metadata: { functionName: 'createOnlineOrder', scope: 'ip', uid, ip },
       });
 
       const pmRaw = String(data.paymentMethod || data.paymentMode || "ONLINE").trim();
@@ -462,7 +464,7 @@ exports.createGrabOrder = onCall(
       console.log('[CF][VALIDATION OK]', { totalAmount, count: items.length });
 
 
-      // Contract: createGrabOrder persists canonical non-stripe lifecycle only.
+      // Contract: createOnlineOrder persists canonical non-stripe lifecycle only.
       // Stripe-specific pending-payment lifecycle is handled exclusively by
       // `createStripePendingOrder` + `createStripeCheckout`.
       const useStripeHostedCheckout = false;
@@ -561,12 +563,12 @@ exports.createGrabOrder = onCall(
         paymentMode: normalizedMode,
 
         useStripeHostedCheckout,
-        committedPath: 'grab_non_stripe',
+        committedPath: 'online_non_stripe',
       });
       console.log('[CF][SUCCESS]', orderId);
 
       // Log success
-      log({ level: 'info', service: 'createGrabOrder', event: 'success', payload: { orderId, paymentMode: normalizedMode }, requestId: traceId });
+      log({ level: 'info', service: 'createOnlineOrder', event: 'success', payload: { orderId, paymentMode: normalizedMode }, requestId: traceId });
 
       return { success: true, orderId };
     } catch (err) {
@@ -574,14 +576,14 @@ exports.createGrabOrder = onCall(
       if (unwrapped) throw unwrapped;
 
       // Structured error logging (forward critical errors to Cloud Logging)
-      error({ service: 'createGrabOrder', event: 'error', error: err, payload: { uid }, requestId: traceId });
+      error({ service: 'createOnlineOrder', event: 'error', error: err, payload: { uid }, requestId: traceId });
       console.error('[CF][CREATE ORDER ERROR]', err);
 
       throw new HttpsError('internal', err.message || 'Unknown error', {
         traceId,
       });
     }
-  }, validateCreateGrabOrder)
+  }, validateCreateOnlineOrder)
 );
 
 exports.createStripePendingOrder = onCall(
@@ -932,7 +934,9 @@ exports.adminTransition = onCall({ region: REGION, invoker: 'public' }, async (r
   const orderRef = db.collection('orders').doc(orderId);
   // FSM manages all lifecycle fields (status, paymentStatus, paymentMethod) internally.
   // Do NOT pass lifecycle fields through metadata.patch — that triggers assertNoDirectStatusMutation.
-  const metadata = {};
+  const metadata = {
+    cancellationReason: request.data?.cancellationReason || null
+  };
   // Use orderTransitionService to perform transition via FSM
   const { performOrderTransition } = getService('orderTransitionService');
   // Determine event type based on desired status change

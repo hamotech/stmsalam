@@ -162,12 +162,14 @@ export const addProduct = async (product) => {
   if (!Number.isFinite(price) || price < 0) throw new Error('Product price must be a valid non-negative number.');
   if (!syncedImage) throw new Error('Product image is required.');
   if (!categoryName) throw new Error('Product category is required.');
+  const isActive = product.isActive !== undefined ? Boolean(product.isActive) : true;
   const payload = {
     name,
     price,
     image: syncedImage,
     category: categoryName,
     available,
+    isActive,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -186,12 +188,14 @@ export const updateProduct = (id, updatedProduct) => {
   if (!Number.isFinite(price) || price < 0) throw new Error('Product price must be a valid non-negative number.');
   if (!syncedImage) throw new Error('Product image is required.');
   if (!categoryName) throw new Error('Product category is required.');
+  const isActive = updatedProduct.isActive !== undefined ? Boolean(updatedProduct.isActive) : true;
   return updateDoc(doc(db, 'products', id), {
     name,
     price,
     image: syncedImage,
     category: categoryName,
     available,
+    isActive,
     updatedAt: serverTimestamp(),
   });
 };

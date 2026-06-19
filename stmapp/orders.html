@@ -60,7 +60,7 @@
         <div class="order-tracker-label">Order ID: <span id="live-order-id">â€”</span></div>
         <div class="order-tracker-status" id="live-order-status">Preparing your order...</div>
       </div>
-      <a href="#" id="live-track-link" style="text-decoration:none;font-size:11px;font-weight:900;color:#D4AF37;white-space:nowrap">Track â†’</a>
+      <a href="tracking.html" id="live-track-link" style="text-decoration:none;font-size:11px;font-weight:900;color:#D4AF37;white-space:nowrap">Track â†’</a>
     </div>
     <div class="tracker-progress">
       <div class="tracker-progress-bar" id="live-tracker-bar" style="width:30%"></div>
@@ -156,6 +156,7 @@
     if (liveOrder) {
       liveSection.style.display = 'block';
       document.getElementById('live-order-id').textContent = liveOrder.id;
+      document.getElementById('live-track-link').href = 'tracking.html?id=' + liveOrder.id;
       
       const cfg = STATUS_CONFIG[liveOrder.status] || STATUS_CONFIG.pending;
       let labelText = cfg.label;
@@ -281,10 +282,7 @@
   }
 
   function trackOrder(orderId) {
-    const order = allOrders.find(o => o.id === orderId);
-    if (!order) return;
-    const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
-    showToast(`Order ${orderId}: ${status.label}`, 'gold', 3000);
+    window.location.href = 'tracking.html?id=' + orderId;
   }
 
   function clearAllOrders() {

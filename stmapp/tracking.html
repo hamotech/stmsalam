@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#013220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Track your STM Salam order live." />
+  <title>Order Tracking — STM Salam</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="../stmsalamlogo.png" />
+  <link rel="icon" href="../stmsalamlogo.png" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background-color: #f8fafc; padding-bottom: 100px; font-family: 'Inter', sans-serif; }
+    .hero-bg {
+      background-color: #013220; /* var(--green-dark) */
+      padding: 30px 20px 40px;
+      position: relative;
+      overflow: hidden;
+      color: white;
+    }
+    .hero-overlay {
+      position: absolute; inset: 0;
+      background-image: url('https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800');
+      background-size: cover; background-position: center; opacity: 0.1;
+    }
+    .hero-content { position: relative; z-index: 1; }
+    .back-btn {
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 8px;
+      cursor: pointer; padding: 8px 16px; border-radius: 12px; margin-bottom: 24px; text-decoration: none;
+    }
+    .hero-title { font-size: 32px; font-weight: 900; letter-spacing: -1px; margin: 0 0 4px; font-family: 'Poppins', sans-serif; }
+    .hero-sub { color: rgba(255,255,255,0.7); font-size: 15px; font-weight: 600; margin: 0 0 20px; }
+    
+    .status-block {
+      background: rgba(255,255,255,0.1); padding: 16px 20px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(10px);
+    }
+    .status-text { color: #D4AF37; font-weight: 900; font-size: 24px; font-family: 'Outfit', sans-serif; }
+    .status-label { color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 4px; letter-spacing: 1px; }
+
+    .tracking-container { padding: 20px; display: flex; flex-direction: column; gap: 20px; margin-top: -20px; position: relative; z-index: 10; }
+    .card { background: white; border-radius: 24px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+    
+    .timeline { position: relative; padding-left: 20px; }
+    .timeline-line { position: absolute; left: 33px; top: 10px; bottom: 20px; width: 3px; background: #f1f5f9; z-index: 0; }
+    .timeline-progress { position: absolute; left: 33px; top: 10px; width: 3px; background: #059669; z-index: 1; transition: height 0.5s ease; }
+    
+    .timeline-step { display: flex; gap: 16px; align-items: flex-start; position: relative; z-index: 2; margin-bottom: 28px; }
+    .timeline-step:last-child { margin-bottom: 0; }
+    .step-icon-box {
+      width: 44px; height: 44px; border-radius: 14px; background: white;
+      border: 3px solid #e2e8f0; color: #94a3b8; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.3s; background: white; z-index: 2;
+    }
+    .step-icon-box.completed { background: #059669; border-color: #059669; color: white; }
+    .step-icon-box.active { background: #D4AF37; border-color: #D4AF37; color: white; }
+    .step-content { flex: 1; padding-top: 2px; }
+    .step-title { font-weight: 900; font-size: 16px; color: #94a3b8; font-family: 'Outfit', sans-serif; }
+    .step-title.completed, .step-title.active { color: #0f172a; }
+    .step-desc { font-size: 13px; color: #64748b; font-weight: 500; margin-top: 2px; }
+    .step-badge {
+      background: rgba(212,175,55,0.15); color: #B8860B; padding: 4px 10px; border-radius: 100px;
+      font-size: 10px; font-weight: 900; align-self: center; margin-top: 4px; display: inline-block;
+    }
+
+    .map-placeholder {
+      background: white; border-radius: 24px; overflow: hidden; height: 240px; border: 1px solid #e2e8f0; position: relative;
+    }
+    .map-bg {
+      position: absolute; inset: 0; background-image: url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800');
+      background-size: cover; opacity: 0.6;
+    }
+    .map-badge {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: white; padding: 14px 20px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 13px; color: #013220;
+    }
+    .pulse-dot { width: 10px; height: 10px; background: #059669; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(5, 150, 105, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
+    }
+
+    .summary-header { background: #fdfbf7; padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f1f5f9; }
+    .summary-title { font-size: 16px; font-weight: 900; color: #013220; }
+    .summary-body { padding: 20px; }
+    .item-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .item-qty { background: #fdfbf7; width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #D4AF37; }
+    .item-name { font-weight: 700; font-size: 14px; color: #0f172a; margin-left: 10px; flex: 1; }
+    .item-price { font-weight: 800; font-size: 14px; color: #0f172a; }
+    .total-row { border-top: 2px dashed #e2e8f0; padding-top: 16px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .action-btn {
+      width: 100%; border-radius: 16px; padding: 16px; font-weight: 800; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px; border: none; margin-bottom: 12px;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-whatsapp { background: #013220; color: white; box-shadow: 0 8px 20px rgba(1,50,32,0.15); }
+    .btn-reorder { background: white; color: #013220; border: 2px solid #013220; }
+  </style>
+</head>
+<body>
+
+  <div class="hero-bg">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <a href="orders.html" class="back-btn"><i data-lucide="arrow-left" style="width:16px;height:16px"></i> Back to Orders</a>
+      <h1 class="hero-title">Order Status</h1>
+      <p class="hero-sub">ID: <span id="hdr-order-id" style="color:white">...</span> · <span id="hdr-item-count">0</span> Items</p>
+      
+      <div class="status-block">
+        <div class="status-text" id="hdr-status-text">Processing...</div>
+        <div class="status-label">Current Status</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tracking-container">
+    
+    <!-- TIMELINE -->
+    <div class="card" style="padding: 30px 20px;">
+      <div class="timeline" id="timeline-container">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
+    <!-- MAP PLACEHOLDER -->
+    <div class="map-placeholder">
+      <div class="map-bg"></div>
+      <div class="map-badge" id="map-badge">
+        <div class="pulse-dot"></div>
+        <span id="map-text">Waiting for driver assignment...</span>
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="summary-header">
+        <i data-lucide="receipt-text" style="color:#059669;width:20px;height:20px"></i>
+        <div class="summary-title">Order Summary</div>
+      </div>
+      <div class="summary-body" id="summary-body">
+        <!-- Items go here -->
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div style="margin-top: 10px">
+      <button class="action-btn btn-whatsapp" onclick="openWhatsApp()">
+        <i data-lucide="message-circle" style="width:18px;height:18px"></i> Check Status on WhatsApp
+      </button>
+      <button class="action-btn btn-reorder" onclick="window.location.href='menu.html'">
+        <i data-lucide="plus" style="width:18px;height:18px"></i> Order More Food
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <a href="index.html" class="nav-item" data-page="home"><i data-lucide="home" style="width:24px;height:24px;margin-bottom:4px"></i>Home<span class="nav-dot"></span></a>
+    <a href="menu.html" class="nav-item" data-page="menu"><i data-lucide="layout-grid" style="width:24px;height:24px;margin-bottom:4px"></i>Menu<span class="nav-dot"></span></a>
+    <a href="orders.html" class="nav-item active" data-page="orders"><i data-lucide="receipt" style="width:24px;height:24px;margin-bottom:4px"></i>Orders<span class="nav-dot"></span></a>
+    <a href="support.html" class="nav-item" data-page="support"><i data-lucide="help-circle" style="width:24px;height:24px;margin-bottom:4px"></i>Support<span class="nav-dot"></span></a>
+    <a href="profile.html" class="nav-item" data-page="profile"><i data-lucide="user" style="width:24px;height:24px;margin-bottom:4px"></i>Profile<span class="nav-dot"></span></a>
+  </nav>
+
+  <script src="js/app.js"></script>
+  <script>
+    lucide.createIcons();
+
+    const FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered'];
+    const STEPS = [
+      { id: 'pending', label: 'Order Placed', desc: 'We have received your order', icon: 'plus' },
+      { id: 'confirmed', label: 'Confirmed', desc: 'Kitchen has accepted your order', icon: 'check-circle-2' },
+      { id: 'preparing', label: 'Preparing your food', desc: 'Kitchen is preparing your order', icon: 'clock' },
+      { id: 'ready', label: 'Ready for pickup', desc: 'Order is packed and ready', icon: 'package' },
+      { id: 'assigned', label: 'Rider assigned', desc: 'A rider is assigned to your order', icon: 'check-circle-2' },
+      { id: 'picked_up', label: 'Out for delivery', desc: 'Your order is on the way', icon: 'truck' },
+      { id: 'delivered', label: 'Delivered', desc: 'Enjoy your meal!', icon: 'check-circle-2' },
+    ];
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('id');
+
+    let currentOrder = null;
+    let trackingInterval = null;
+
+    function normalizeStatus(raw) {
+      const s = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+      if (!s) return 'pending';
+      if (s === 'placed' || s === 'paid') return 'pending';
+      if (s === 'ready_for_pickup') return 'ready';
+      if (s === 'out_for_delivery' || s === 'delivering') return 'picked_up';
+      if (s === 'complete' || s === 'completed') return 'delivered';
+      return s;
+    }
+
+    function getActiveStepIndex(status) {
+      const normalized = normalizeStatus(status);
+      const idx = FLOW.indexOf(normalized);
+      return idx >= 0 ? idx : 0;
+    }
+
+    async function loadOrder() {
+      const allOrders = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+      currentOrder = allOrders.find(o => o.id === orderId);
+
+      if (!currentOrder) {
+        document.querySelector('.tracking-container').innerHTML = '<div class="card" style="text-align:center;padding:40px"><h2>Order Not Found</h2><p>Invalid order link.</p><br><a href="orders.html" class="action-btn btn-reorder">Go to My Orders</a></div>';
+        return;
+      }
+
+      renderUI();
+
+      // Poll live updates from backend
+      try {
+        const liveDetails = await STMApp.API.getOrderDetails(orderId);
+        if (liveDetails && liveDetails.status) {
+          currentOrder.status = liveDetails.status;
+          currentOrder.otp = liveDetails.otp;
+          
+          // Save back to local storage
+          const idx = allOrders.findIndex(o => o.id === orderId);
+          if (idx !== -1) {
+            allOrders[idx].status = liveDetails.status;
+            localStorage.setItem('stmapp_orders', JSON.stringify(allOrders));
+          }
+          renderUI();
+        }
+      } catch(err) {
+        console.warn('Initial tracking sync failed', err);
+      }
+
+      // Start poller if not delivered
+      if (normalizeStatus(currentOrder.status) !== 'delivered') {
+        trackingInterval = setInterval(async () => {
+          try {
+            const liveDetails = await STMApp.API.getOrderDetails(orderId);
+            if (liveDetails && liveDetails.status && liveDetails.status !== currentOrder.status) {
+              currentOrder.status = liveDetails.status;
+              currentOrder.otp = liveDetails.otp;
+              
+              const stored = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
+              const i = stored.findIndex(o => o.id === orderId);
+              if (i !== -1) {
+                stored[i].status = liveDetails.status;
+                localStorage.setItem('stmapp_orders', JSON.stringify(stored));
+              }
+              renderUI();
+              
+              if (normalizeStatus(currentOrder.status) === 'delivered') {
+                clearInterval(trackingInterval);
+              }
+            }
+          } catch(err) {}
+        }, 5000);
+      }
+    }
+
+    function renderUI() {
+      // Header Info
+      document.getElementById('hdr-order-id').textContent = orderId.slice(-8).toUpperCase();
+      document.getElementById('hdr-item-count').textContent = (currentOrder.items || []).length;
+      
+      let activeIdx = getActiveStepIndex(currentOrder.status);
+      document.getElementById('hdr-status-text').textContent = STEPS[activeIdx].label;
+
+      // Map text
+      const mapText = document.getElementById('map-text');
+      if (activeIdx >= 5) {
+        mapText.textContent = `Rider en route 🚴 Handover OTP: ${currentOrder.otp || 'N/A'}`;
+      } else if (activeIdx >= 4) {
+        mapText.textContent = "Locating Driver...";
+      } else {
+        mapText.textContent = "Waiting for driver assignment...";
+      }
+
+      // Timeline
+      const timelineHtml = [];
+      timelineHtml.push('<div class="timeline-line"></div>');
+      timelineHtml.push(`<div class="timeline-progress" style="height: ${(activeIdx / (STEPS.length - 1)) * 100}%"></div>`);
+      
+      STEPS.forEach((step, i) => {
+        const isCompleted = i < activeIdx;
+        const isActive = i === activeIdx;
+        
+        let iconClass = '';
+        if (isCompleted) iconClass = 'completed';
+        if (isActive) iconClass = 'active';
+
+        const checkIcon = isCompleted ? 'check' : step.icon;
+        
+        timelineHtml.push(`
+          <div class="timeline-step">
+            <div class="step-icon-box ${iconClass}">
+              <i data-lucide="${checkIcon}" style="width:20px;height:20px"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title ${iconClass}">${step.label}</div>
+              <div class="step-desc">${step.desc}</div>
+              ${isActive ? '<div class="step-badge">LIVE</div>' : ''}
+            </div>
+          </div>
+        `);
+      });
+      document.getElementById('timeline-container').innerHTML = timelineHtml.join('');
+      lucide.createIcons();
+
+      // Summary
+      const itemsHtml = (currentOrder.items || []).map(it => `
+        <div class="item-row">
+          <div style="display:flex;align-items:center;flex:1">
+            <div class="item-qty">${it.qty}</div>
+            <div class="item-name">${it.name}</div>
+          </div>
+          <div class="item-price">$${((it.price||0)*(it.qty||1)).toFixed(2)}</div>
+        </div>
+      `).join('');
+      
+      document.getElementById('summary-body').innerHTML = `
+        ${itemsHtml}
+        <div class="total-row">
+          <span style="font-weight:700;color:#64748b">Total Paid</span>
+          <span style="font-weight:900;color:#013220;font-size:20px">$${(currentOrder.total || 0).toFixed(2)}</span>
+        </div>
+      `;
+    }
+
+    function openWhatsApp() {
+      const msg = `Hi STM Salam, I want to check my order status for order #${orderId}`;
+      const waUrl = `https://wa.me/6591915766?text=${encodeURIComponent(msg)}`;
+      window.open(waUrl, '_blank');
+    }
+
+    loadOrder();
+
+    window.addEventListener('unload', () => {
+      if (trackingInterval) clearInterval(trackingInterval);
+    });
+  </script>
+</body>
+</html>

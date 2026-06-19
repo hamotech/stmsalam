@@ -9,7 +9,7 @@ const LOG_COLLECTION = 'debugLogs';
  *
  * @param {Object} params
  * @param {'info'|'warn'|'error'} [params.level='info'] Log severity.
- * @param {string} params.service Name of the service/function (e.g. 'grabCheckout').
+ * @param {string} params.service Name of the service/function (e.g. 'onlineCheckout').
  * @param {string} params.event   Short identifier of the event (e.g. 'checkoutStart').
  * @param {Object} params.payload Payload or context to store (will be serialized as JSON).
  * @param {string} [params.requestId] Correlation ID passed through the request flow.

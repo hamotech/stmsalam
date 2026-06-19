@@ -11,12 +11,13 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
-import { Image } from 'expo-image';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { navReplace } from '@/src/navigation/appNavigation';
 import { useAppRole } from '@/src/auth/useAppRole';
-import QRCode from 'react-native-qrcode-svg';
+// import QRCode from 'react-native-qrcode-svg';
 import {
   createPayNowPayment,
   fetchHitPayPaymentStatus,
@@ -205,10 +206,10 @@ export default function ScanPayScreen() {
       {phase === 'ready' && qrPayload && (
         <View style={styles.qrCard}>
           {isUrl ? (
-            <Image source={{ uri: qrPayload }} style={styles.qrImage} contentFit="contain" />
+            <ExpoImage source={{ uri: qrPayload }} style={styles.qrImage} contentFit="contain" />
           ) : (
-            <View style={styles.qrWrap}>
-              <QRCode value={qrPayload} size={220} color={GREEN} backgroundColor="#FFFFFF" />
+            <View style={styles.qrCodeWrapper}>
+              <Image source={require('../../../assets/paymentscanner.jpeg')} style={{ width: 220, height: 220 }} resizeMode="contain" />
             </View>
           )}
           <Text style={styles.wait}>Waiting for payment…</Text>

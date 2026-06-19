@@ -2,9 +2,9 @@
 const { HttpsError } = require('firebase-functions/v2/https');
 
 /**
- * Validate payload for createGrabOrder callable.
+ * Validate payload for createOnlineOrder callable.
  */
-function validateCreateGrabOrder(payload) {
+function validateCreateOnlineOrder(payload) {
   if (!payload || typeof payload !== 'object') {
     throw new HttpsError('invalid-argument', 'Missing payload');
   }
@@ -68,7 +68,7 @@ function withValidation(fn, validator) {
 }
 
 module.exports = {
-  validateCreateGrabOrder,
+  validateCreateOnlineOrder,
   validateStripePendingOrder,
   validateAdminTransition,
   withValidation,
