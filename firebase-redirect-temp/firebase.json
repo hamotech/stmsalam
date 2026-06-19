@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "site": "teh-tarik-app-my-own",
+    "public": "dist",
+    "redirects": [
+      {
+        "source": "/:path*",
+        "destination": "https://www.stmsalam.sg/:path",
+        "type": 301
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
