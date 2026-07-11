@@ -1,7 +1,9 @@
 // stmapp/admin/js/admin.js
 'use strict';
 
-const API_BASE = window.location.origin; // Dynamically resolves to unified Express server port
+const PROD_API_BASE = 'https://teh-tarik-app-k4w4.onrender.com';
+const isLocalHostRuntime = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_BASE = isLocalHostRuntime ? PROD_API_BASE : window.location.origin;
 let API_TOKEN = localStorage.getItem('stmapp_admin_token') || '';
 let currentOpenOrders = [];
 let onlineDrivers = [];
@@ -69,7 +71,7 @@ async function handleLogin(e) {
   const password = document.getElementById('login-password').value.trim();
 
   try {
-    const res = await fetch(`${API_BASE}/api/auth/admin/login`, {
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -164,7 +166,7 @@ async function loadOverviewStats() {
 // 2. LIVE ORDERS MANAGER FEED
 async function loadOrdersFeed() {
   try {
-    const res = await fetch(`${API_BASE}/api/admin/orders`, {
+    const res = await fetch(`${API_BASE}/api/orders`, {
       headers: { 'Authorization': `Bearer ${API_TOKEN}` }
     });
     const data = await res.json();
@@ -182,11 +184,11 @@ async function loadOrdersFeed() {
       // Driver selection options markup
       let driverSelector = `<span style="font-size:12px; color:var(--text-muted)">N/A (Pickup)</span>`;
       if (order.mode === 'delivery') {
-        const currentDriverName = order.driverId ? order.driverId.name : 'Unassigned';
+        const currentDriverName = order.assignedRiderName || 'Unassigned';
         driverSelector = `
           <select class="form-select" style="margin:0; padding:6px 12px; font-size:12px; width:140px" onchange="assignDriver('${order.id}', this.value)">
             <option value="">${currentDriverName}</option>
-            ${onlineDrivers.filter(d => d.status !== 'offline').map(d => `<option value="${d._id}">${d.name} (${d.vehicleType})</option>`).join('')}
+            ${onlineDrivers.map(d => `<option value="${d._id}">${d.name} (${d.vehicleType || d.vehicleDetails || 'rider'})</option>`).join('')}
           </select>
         `;
       }
@@ -255,13 +257,13 @@ async function updateOrderStatus(orderId, nextStatus) {
 async function assignDriver(orderId, driverId) {
   if (!driverId) return;
   try {
-    const res = await fetch(`${API_BASE}/api/orders/${orderId}/status`, {
+    const res = await fetch(`${API_BASE}/api/orders/${orderId}/assign-driver`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_TOKEN}`
       },
-      body: JSON.stringify({ status: 'confirmed', driverId })
+      body: JSON.stringify({ driverId })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -434,10 +436,10 @@ async function loadDriversList() {
       <tr>
         <td><strong>${driver.name}</strong></td>
         <td>${driver.phone}<br><span style="font-size:11px; color:var(--text-muted)">${driver.email}</span></td>
-        <td style="text-transform:capitalize">${driver.vehicleType} (${driver.vehiclePlate || 'Walk'})</td>
-        <td>⭐ ${driver.rating.toFixed(1)} (${driver.tripCount} trips)</td>
-        <td>SGD ${driver.earnings.toFixed(2)}</td>
-        <td><span class="badge ${driver.status === 'delivering' ? 'badge-out' : driver.status === 'online' ? 'badge-preparing' : 'badge-cancelled'}">${driver.status}</span></td>
+        <td style="text-transform:capitalize">${driver.vehicleType || driver.vehicleDetails || '-'} (${driver.vehiclePlate || 'Walk'})</td>
+        <td>⭐ ${(driver.rating || 0).toFixed(1)} (${driver.tripCount || 0} trips)</td>
+        <td>SGD ${(driver.earnings || 0).toFixed(2)}</td>
+        <td><span class="badge ${driver.status === 'delivering' ? 'badge-out' : driver.status === 'online' ? 'badge-preparing' : 'badge-cancelled'}">${driver.status || 'unknown'}</span></td>
       </tr>
     `).join('');
   } catch (err) {

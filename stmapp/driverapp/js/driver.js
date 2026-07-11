@@ -1,14 +1,16 @@
 // stmapp/driverapp/js/driver.js
 'use strict';
 
-const API_BASE = window.location.origin;
+const PROD_API_BASE = 'https://teh-tarik-app-k4w4.onrender.com';
+const isLocalHostRuntime = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_BASE = isLocalHostRuntime ? PROD_API_BASE : window.location.origin;
 let API_TOKEN = localStorage.getItem('stmapp_driver_token') || '';
+let DRIVER_UID = localStorage.getItem('stmapp_driver_uid') || '';
 let driverStatus = 'offline';
 let activeOrder = null;
 let jobsPollInterval = null;
-let simulationInterval = null;
-let simulatedLat = 1.3048; // Marine Terrace Outlet Default
-let simulatedLng = 103.9130;
+let activeDeliveryPollInterval = null;
+let gpsWatchId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
@@ -21,13 +23,27 @@ function checkAuth() {
   if (API_TOKEN) {
     document.getElementById('auth-view').style.display = 'none';
     document.getElementById('driver-hub').style.display = 'block';
-    
+
     loadDriverStats();
+    startActiveDeliveryPolling();
   } else {
     document.getElementById('auth-view').style.display = 'block';
     document.getElementById('driver-hub').style.display = 'none';
     stopJobsPolling();
+    stopActiveDeliveryPolling();
   }
+}
+
+// Independent of driver stats (which relies on an unimplemented endpoint) so that
+// tracking an assigned delivery keeps working even when the stats card fails to load.
+function startActiveDeliveryPolling() {
+  if (activeDeliveryPollInterval) clearInterval(activeDeliveryPollInterval);
+  checkActiveDeliveries();
+  activeDeliveryPollInterval = setInterval(checkActiveDeliveries, 5000);
+}
+
+function stopActiveDeliveryPolling() {
+  if (activeDeliveryPollInterval) clearInterval(activeDeliveryPollInterval);
 }
 
 function showRegisterPanel() {
@@ -41,7 +57,7 @@ async function handleLogin(e) {
   const password = document.getElementById('login-password').value.trim();
 
   try {
-    const res = await fetch(`${API_BASE}/api/auth/driver/login`, {
+    const res = await fetch(`${API_BASE}/api/driver/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -51,7 +67,9 @@ async function handleLogin(e) {
 
     localStorage.setItem('stmapp_driver_token', data.token);
     localStorage.setItem('stmapp_driver_name', data.user.name);
+    localStorage.setItem('stmapp_driver_uid', data.user.uid);
     API_TOKEN = data.token;
+    DRIVER_UID = data.user.uid;
 
     checkAuth();
   } catch (err) {
@@ -88,7 +106,10 @@ async function handleRegister(e) {
 function handleLogout() {
   localStorage.removeItem('stmapp_driver_token');
   localStorage.removeItem('stmapp_driver_name');
+  localStorage.removeItem('stmapp_driver_uid');
   API_TOKEN = '';
+  DRIVER_UID = '';
+  stopLiveLocationSharing();
   checkAuth();
 }
 
@@ -225,21 +246,17 @@ async function acceptDeliveryJob(orderId) {
 
 // Checks if Courier has uncompleted delivery assignments active
 async function checkActiveDeliveries() {
+  if (!DRIVER_UID) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/orders`, {
+    const res = await fetch(`${API_BASE}/api/orders`, {
       headers: { 'Authorization': `Bearer ${API_TOKEN}` }
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    // Find any order assigned to this driver that is not delivered or cancelled
-    // (We decode rider profile from admin listing or search orders list)
-    // Actually, let's query the specific order
-    const courierRiderName = localStorage.getItem('stmapp_driver_name');
-    const myActiveJob = data.orders.find(o => 
-      o.driverId && 
-      o.driverId.name === courierRiderName && 
-      ['confirmed', 'preparing', 'ready', 'out_for_delivery'].includes(o.status)
+    const myActiveJob = data.orders.find(o =>
+      o.assignedRiderId === DRIVER_UID &&
+      ['placed', 'paid', 'preparing', 'ready_for_pickup', 'out_for_delivery'].includes(o.status)
     );
 
     const activeSec = document.getElementById('active-job-section');
@@ -260,19 +277,20 @@ async function checkActiveDeliveries() {
       const btnArrive = document.getElementById('btn-arrive-location');
       const otpPanel = document.getElementById('otp-entry-panel');
 
-      if (myActiveJob.status === 'confirmed' || myActiveJob.status === 'preparing' || myActiveJob.status === 'ready') {
+      if (['placed', 'paid', 'preparing', 'ready_for_pickup'].includes(myActiveJob.status)) {
         btnOut.style.display = 'block';
         btnArrive.style.display = 'none';
         otpPanel.style.display = 'none';
         document.getElementById('map-simulation-status').textContent = 'Rider waiting for kitchen preparation 🍳';
+        stopLiveLocationSharing();
       } else if (myActiveJob.status === 'out_for_delivery') {
         btnOut.style.display = 'none';
         btnArrive.style.display = 'block';
         otpPanel.style.display = 'none';
         document.getElementById('map-simulation-status').textContent = 'Rider en route to delivery destination... 🗺️';
-        
-        // Start streaming simulation if not active
-        startCoordinatesSimulation(myActiveJob.id);
+
+        // Start sharing real device GPS if not already active
+        startLiveLocationSharing();
       }
     } else {
       activeOrder = null;
@@ -280,7 +298,7 @@ async function checkActiveDeliveries() {
       if (driverStatus === 'online') {
         document.getElementById('available-jobs-section').style.display = 'block';
       }
-      stopCoordinatesSimulation();
+      stopLiveLocationSharing();
     }
   } catch (err) {
     console.error('Active delivery sync failed', err);
@@ -291,18 +309,18 @@ async function checkActiveDeliveries() {
 async function startDeliveryTransition() {
   if (!activeOrder) return;
   try {
-    const res = await fetch(`${API_BASE}/api/drivers/update-order-status`, {
+    const res = await fetch(`${API_BASE}/api/driver/status`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_TOKEN}`
       },
-      body: JSON.stringify({ orderId: activeOrder.id, status: 'out_for_delivery' })
+      body: JSON.stringify({ orderId: activeOrder.id, status: 'out_for_delivery', driverId: DRIVER_UID })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    alert('Rider Out for Delivery status updated! Tracking streaming active.');
+    alert('Rider Out for Delivery status updated! Live tracking active.');
     checkActiveDeliveries();
   } catch (err) {
     alert(`❌ Status update failed: ${err.message}`);
@@ -311,55 +329,53 @@ async function startDeliveryTransition() {
 
 // 📍 Arrive Destination Transition Router
 function arriveAtDestination() {
-  stopCoordinatesSimulation();
+  stopLiveLocationSharing();
   document.getElementById('btn-arrive-location').style.display = 'none';
   document.getElementById('otp-entry-panel').style.display = 'block';
   document.getElementById('map-simulation-status').textContent = 'Rider arrived at customer doorstep! 📍';
 }
 
-// Geolocation GPS Simulator
-function startCoordinatesSimulation(orderId) {
-  if (simulationInterval) clearInterval(simulationInterval);
+// Real device GPS sharing (replaces the earlier straight-line simulation)
+function startLiveLocationSharing() {
+  if (gpsWatchId !== null) return; // already sharing
+  if (!navigator.geolocation) {
+    document.getElementById('map-simulation-status').textContent = 'This device/browser does not support GPS location.';
+    return;
+  }
 
-  simulatedLat = 1.3048; // Marine Terrace Outlet
-  simulatedLng = 103.9130;
-
-  // Let's increment towards mock customer location S440055 (1.3056, 103.9080)
-  const targetLat = 1.3068;
-  const targetLng = 103.9060;
-  const stepLat = (targetLat - simulatedLat) / 8;
-  const stepLng = (targetLng - simulatedLng) / 8;
-  let steps = 0;
-
-  simulationInterval = setInterval(async () => {
-    if (steps < 8) {
-      simulatedLat += stepLat;
-      simulatedLng += stepLng;
-      steps++;
-      document.getElementById('map-simulation-status').textContent = `En route... (Step ${steps}/8) 🚴`;
-    } else {
-      document.getElementById('map-simulation-status').textContent = 'Rider reached destination building! click arrived.';
-      clearInterval(simulationInterval);
-    }
-
-    // Stream coords to backend Mongoose Order driverLocation!
-    try {
-      await fetch(`${API_BASE}/api/drivers/update-coordinates`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_TOKEN}`
-        },
-        body: JSON.stringify({ lat: simulatedLat, lng: simulatedLng, orderId })
-      });
-    } catch (err) {
-      console.error('Coords push failed', err);
-    }
-  }, 4000);
+  gpsWatchId = navigator.geolocation.watchPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      document.getElementById('map-simulation-status').textContent = 'Sharing live location 🚴📍';
+      try {
+        const res = await fetch(`${API_BASE}/api/driver/location`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_TOKEN}`
+          },
+          body: JSON.stringify({ driverId: DRIVER_UID, latitude, longitude })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          console.error('Location push failed', data.error);
+        }
+      } catch (err) {
+        console.error('Location push failed', err);
+      }
+    },
+    (err) => {
+      document.getElementById('map-simulation-status').textContent = `⚠️ Location error: ${err.message}. Enable GPS permission to let the customer track you.`;
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+  );
 }
 
-function stopCoordinatesSimulation() {
-  if (simulationInterval) clearInterval(simulationInterval);
+function stopLiveLocationSharing() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
 }
 
 // SECURE KEYPAD CONTROLS

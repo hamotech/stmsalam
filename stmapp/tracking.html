@@ -15,6 +15,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body { background-color: #f8fafc; padding-bottom: 100px; font-family: 'Inter', sans-serif; }
     .hero-bg {
@@ -77,6 +79,9 @@
       position: absolute; inset: 0; background-image: url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800');
       background-size: cover; opacity: 0.6;
     }
+    #driver-map {
+      position: absolute; inset: 0; display: none;
+    }
     .map-badge {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       background: white; padding: 14px 20px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
@@ -132,9 +137,10 @@
       </div>
     </div>
 
-    <!-- MAP PLACEHOLDER -->
+    <!-- MAP -->
     <div class="map-placeholder">
-      <div class="map-bg"></div>
+      <div class="map-bg" id="map-bg-fallback"></div>
+      <div id="driver-map"></div>
       <div class="map-badge" id="map-badge">
         <div class="pulse-dot"></div>
         <span id="map-text">Waiting for driver assignment...</span>
@@ -191,6 +197,58 @@
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('id');
 
+    let driverMap = null;
+    let driverMarker = null;
+    let locationPollInterval = null;
+    let locationPollDriverId = null;
+
+    function showLiveDriverPosition(lat, lng) {
+      document.getElementById('map-bg-fallback').style.display = 'none';
+      const mapEl = document.getElementById('driver-map');
+      mapEl.style.display = 'block';
+
+      if (!driverMap) {
+        driverMap = L.map('driver-map', { zoomControl: false, attributionControl: false }).setView([lat, lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
+        driverMarker = L.marker([lat, lng]).addTo(driverMap);
+      } else {
+        driverMarker.setLatLng([lat, lng]);
+        driverMap.panTo([lat, lng]);
+      }
+    }
+
+    async function pollDriverLocation(driverId) {
+      try {
+        const res = await fetch(`${API_BASE}/api/driver/location/${driverId}`);
+        if (!res.ok) {
+          document.getElementById('map-text').textContent = "Waiting for driver's GPS…";
+          return;
+        }
+        const data = await res.json();
+        if (data && data.data && data.data.latitude != null && data.data.longitude != null) {
+          showLiveDriverPosition(data.data.latitude, data.data.longitude);
+        }
+      } catch (err) {
+        console.warn('Driver location poll failed', err);
+      }
+    }
+
+    function startLocationPolling(driverId) {
+      if (locationPollInterval && locationPollDriverId === driverId) return; // already polling this driver
+      stopLocationPolling();
+      locationPollDriverId = driverId;
+      pollDriverLocation(driverId);
+      locationPollInterval = setInterval(() => pollDriverLocation(driverId), 4000);
+    }
+
+    function stopLocationPolling() {
+      if (locationPollInterval) clearInterval(locationPollInterval);
+      locationPollInterval = null;
+      locationPollDriverId = null;
+      document.getElementById('map-bg-fallback').style.display = '';
+      document.getElementById('driver-map').style.display = 'none';
+    }
+
     let currentOrder = null;
     let trackingInterval = null;
 
@@ -225,15 +283,7 @@
       try {
         const liveDetails = await STMApp.API.getOrderDetails(orderId);
         if (liveDetails && liveDetails.status) {
-          currentOrder.status = liveDetails.status;
-          currentOrder.otp = liveDetails.otp;
-          
-          // Save back to local storage
-          const idx = allOrders.findIndex(o => o.id === orderId);
-          if (idx !== -1) {
-            allOrders[idx].status = liveDetails.status;
-            localStorage.setItem('stmapp_orders', JSON.stringify(allOrders));
-          }
+          applyLiveDetails(allOrders, liveDetails);
           renderUI();
         }
       } catch(err) {
@@ -245,24 +295,33 @@
         trackingInterval = setInterval(async () => {
           try {
             const liveDetails = await STMApp.API.getOrderDetails(orderId);
-            if (liveDetails && liveDetails.status && liveDetails.status !== currentOrder.status) {
-              currentOrder.status = liveDetails.status;
-              currentOrder.otp = liveDetails.otp;
-              
+            if (liveDetails && liveDetails.status) {
               const stored = JSON.parse(localStorage.getItem('stmapp_orders') || '[]');
-              const i = stored.findIndex(o => o.id === orderId);
-              if (i !== -1) {
-                stored[i].status = liveDetails.status;
-                localStorage.setItem('stmapp_orders', JSON.stringify(stored));
-              }
+              applyLiveDetails(stored, liveDetails);
               renderUI();
-              
+
               if (normalizeStatus(currentOrder.status) === 'delivered') {
                 clearInterval(trackingInterval);
+                stopLocationPolling();
               }
             }
           } catch(err) {}
         }, 5000);
+      }
+    }
+
+    // Merges the backend's view of the order (status/otp/assigned rider) into
+    // currentOrder + localStorage. Runs every poll tick regardless of whether
+    // status changed, so a driver assignment is picked up as soon as it happens.
+    function applyLiveDetails(ordersList, liveDetails) {
+      currentOrder.status = liveDetails.status;
+      currentOrder.otp = liveDetails.otp;
+      currentOrder.assignedRiderId = liveDetails.assignedRiderId || null;
+
+      const idx = ordersList.findIndex(o => o.id === orderId);
+      if (idx !== -1) {
+        ordersList[idx].status = liveDetails.status;
+        localStorage.setItem('stmapp_orders', JSON.stringify(ordersList));
       }
     }
 
@@ -274,7 +333,7 @@
       let activeIdx = getActiveStepIndex(currentOrder.status);
       document.getElementById('hdr-status-text').textContent = STEPS[activeIdx].label;
 
-      // Map text
+      // Map text + live driver tracking
       const mapText = document.getElementById('map-text');
       if (activeIdx >= 5) {
         mapText.textContent = `Rider en route 🚴 Handover OTP: ${currentOrder.otp || 'N/A'}`;
@@ -282,6 +341,12 @@
         mapText.textContent = "Locating Driver...";
       } else {
         mapText.textContent = "Waiting for driver assignment...";
+      }
+
+      if (currentOrder.assignedRiderId) {
+        startLocationPolling(currentOrder.assignedRiderId);
+      } else {
+        stopLocationPolling();
       }
 
       // Timeline
@@ -345,6 +410,7 @@
 
     window.addEventListener('unload', () => {
       if (trackingInterval) clearInterval(trackingInterval);
+      if (locationPollInterval) clearInterval(locationPollInterval);
     });
   </script>
 </body>

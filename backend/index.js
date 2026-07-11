@@ -356,6 +356,17 @@ app.post('/api/admin/drivers', async (req, res) => {
   }
 });
 
+app.get('/api/admin/drivers', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const snap = await db.collection('drivers').get();
+    const drivers = snap.docs.map((doc) => ({ _id: doc.id, ...doc.data() }));
+    res.json({ success: true, drivers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/admin/drivers/:email', async (req, res) => {
   const { name, phone, password, role, vehicleDetails, activeStatus } = req.body;
   const email = req.params.email.trim().toLowerCase();
@@ -894,6 +905,42 @@ app.patch('/api/orders/:id/status', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[PATCH ORDER ERROR]', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Assign a rider/driver to an order (no status change — pure metadata attach via the FSM's whitelist)
+app.patch('/api/orders/:id/assign-driver', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  const { driverId } = req.body;
+  if (!driverId) return res.status(400).json({ error: 'driverId required' });
+
+  try {
+    const driverDoc = await db.collection('drivers').doc(driverId).get();
+    const driverName = driverDoc.exists ? (driverDoc.data().name || '') : '';
+    const nowIso = new Date().toISOString();
+
+    const orderRef = db.collection('orders').doc(req.params.id);
+    await performOrderTransition({
+      db,
+      orderRef,
+      actor: 'admin',
+      actorUid: null,
+      event: { type: 'ADMIN_ASSIGN_RIDER' },
+      metadata: {
+        source: 'admin_assign_driver',
+        patch: {
+          assignedRiderId: driverId,
+          assignedRiderName: driverName,
+          assignedAt: nowIso,
+          driverAssignedAt: nowIso,
+        }
+      }
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[ASSIGN DRIVER ERROR]', err);
     res.status(400).json({ error: err.message });
   }
 });
