@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db, storage } from '../lib/firebase'
@@ -14,7 +14,26 @@ import {
   FileCheck, Paperclip, RefreshCw, MapPin
 } from 'lucide-react'
 import { getOrderContext } from '../admin/orderPipeline.js'
-import { GoogleMap, useJsApiLoader, Marker, DirectionsService, DirectionsRenderer } from '@react-google-maps/api'
+import { MapContainer, TileLayer, Marker as LeafletMarker, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
+// Vite doesn't resolve Leaflet's default marker icon URLs correctly without this.
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow })
+
+// react-leaflet's `center` prop only applies on initial mount — pan the map
+// whenever the driver's live position updates.
+function RecenterOnMove({ position }) {
+  const map = useMap()
+  useEffect(() => {
+    map.panTo(position)
+  }, [position, map])
+  return null
+}
 
 export default function OrderTracking() {
   const params = useParams()
@@ -33,15 +52,6 @@ export default function OrderTracking() {
   const [showChat, setShowChat] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [riderLocation, setRiderLocation] = useState(null)
-  const [targetRiderLocation, setTargetRiderLocation] = useState(null)
-  const [directions, setDirections] = useState(null)
-  const [etaText, setEtaText] = useState('')
-  const lastRouteCalc = useRef(0)
-
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
-  })
 
   const FLOW = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'delivered']
   const steps = [
@@ -162,14 +172,7 @@ export default function OrderTracking() {
       if (snap.exists()) {
         const data = snap.data()
         if (data.location && data.location.lat && data.location.lng) {
-          // Force route recalculation every 60 seconds
-          if (Date.now() - lastRouteCalc.current > 60000) {
-            setDirections(null)
-            lastRouteCalc.current = Date.now()
-          }
-          const newLoc = { lat: data.location.lat, lng: data.location.lng }
-          setTargetRiderLocation(newLoc)
-          setRiderLocation(newLoc) // Update marker position immediately
+          setRiderLocation({ lat: data.location.lat, lng: data.location.lng })
         }
       }
     }, (err) => {
@@ -393,40 +396,18 @@ export default function OrderTracking() {
 
             {/* Map Embed or Placeholder */}
            <div style={{ background: 'white', borderRadius: '32px', overflow: 'hidden', height: '340px', border: '1px solid #e2e8f0', position: 'relative' }}>
-              {isLoaded && riderLocation ? (
-                <>
-                  {etaText && (
-                    <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, background: 'var(--green-dark)', color: 'white', padding: '12px 18px', borderRadius: '16px', fontWeight: 900, fontSize: '14px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-                      ETA: {etaText}
-                    </div>
-                  )}
-                  <GoogleMap
-                    mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={riderLocation}
-                    zoom={15}
-                    options={{ disableDefaultUI: true }}
-                  >
-                    {order && !directions && (
-                      <DirectionsService
-                        options={{
-                          destination: order?.customerSnapshot?.address || order?.customer?.address || order?.address || '',
-                          origin: riderLocation,
-                          travelMode: 'DRIVING'
-                        }}
-                        callback={(res, status) => {
-                          if (status === 'OK') {
-                            setDirections(res)
-                            setEtaText(res.routes[0]?.legs[0]?.duration?.text || '')
-                          }
-                        }}
-                      />
-                    )}
-                    {directions && (
-                      <DirectionsRenderer directions={directions} options={{ suppressMarkers: true }} />
-                    )}
-                    <Marker position={riderLocation} icon={{ url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }} />
-                  </GoogleMap>
-                </>
+              {riderLocation ? (
+                <MapContainer
+                  center={[riderLocation.lat, riderLocation.lng]}
+                  zoom={15}
+                  style={{ width: '100%', height: '100%' }}
+                  zoomControl={false}
+                  attributionControl={false}
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <LeafletMarker position={[riderLocation.lat, riderLocation.lng]} />
+                  <RecenterOnMove position={[riderLocation.lat, riderLocation.lng]} />
+                </MapContainer>
               ) : (
                 <>
                   <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200)', backgroundSize: 'cover', opacity: 0.6 }} />

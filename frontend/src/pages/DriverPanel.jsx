@@ -10,6 +10,16 @@ import { httpsCallable } from 'firebase/functions'
 import { safeLog } from '../utils/runtimeSafety'
 import { assertNoDirectOrderLifecycleWrite } from '../lib/orderLifecycleGuards'
 import { advanceRiderLeg } from '../admin/services/dataService'
+import { MapContainer, TileLayer, Marker as LeafletMarker } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
+// Vite doesn't resolve Leaflet's default marker icon URLs correctly without this.
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow })
 /** Align with unified `orders.status` + legacy rider UI strings. */
 const STATUS_FILTER = ['assigned', 'picked_up', 'ready_for_pickup', 'out_for_delivery']
 const TASK_STATUS_FILTER = new Set(STATUS_FILTER)
@@ -220,7 +230,10 @@ export default function DriverPanel() {
           safeLog('[RiderGPS] update failed', e?.message || e)
         }
       },
-      () => undefined,
+      (err) => {
+        safeLog('[RiderGPS] watchPosition error', err?.message || err)
+        setPanelError(`Location error: ${err?.message || 'GPS unavailable'} — enable location permission so the customer can see your live position.`)
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     )
     return () => navigator.geolocation.clearWatch(watchId)
@@ -357,8 +370,13 @@ export default function DriverPanel() {
     if (import.meta.env.DEV) safeLog('Rider active status', next)
   }
 
-  const startDelivery = async (orderId) => {
+  const startDelivery = async (order) => {
+    const orderId = order?.id
     if (!orderId) return
+    // Open turn-by-turn navigation synchronously, still inside the click gesture —
+    // calling this after an `await` risks the popup blocker dropping it. Google Maps'
+    // directions link defaults the origin to the device's current location automatically.
+    openMaps(order)
     setBusyOrderId(orderId)
     try {
       await advanceRiderLeg(orderId, 'pickup');
@@ -541,6 +559,29 @@ export default function DriverPanel() {
                 <button onClick={() => callCustomer(activeDelivery)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><Phone size={18} /> Call</button>
                 <button onClick={() => setChatOrderId(activeDelivery.id)} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 800, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><MessageSquare size={18} /> Chat</button>
               </div>
+              {toOrderStatus(activeDelivery.status) !== 'ready_for_pickup' && (
+                <div style={{ marginTop: '16px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', height: '180px', position: 'relative' }}>
+                  {driverLocation ? (
+                    <MapContainer
+                      center={[driverLocation.lat, driverLocation.lng]}
+                      zoom={15}
+                      style={{ width: '100%', height: '100%' }}
+                      zoomControl={false}
+                      attributionControl={false}
+                    >
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <LeafletMarker position={[driverLocation.lat, driverLocation.lng]} />
+                    </MapContainer>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b', fontWeight: 700, fontSize: '13px', textAlign: 'center', padding: '0 20px' }}>
+                      Waiting for GPS fix — enable location permission to broadcast your live position to the customer.
+                    </div>
+                  )}
+                  <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'white', padding: '4px 10px', borderRadius: '100px', fontSize: '11px', fontWeight: 900, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    <div style={{ width: '8px', height: '8px', background: '#22c55e', borderRadius: '50%' }} /> LIVE TRACKING
+                  </div>
+                </div>
+              )}
               {toOrderStatus(activeDelivery.status) === 'ready_for_pickup' ? (
                 <button
                   type="button"
@@ -554,7 +595,7 @@ export default function DriverPanel() {
                 <button
                   type="button"
                   disabled={busyOrderId === activeDelivery.id}
-                  onClick={() => startDelivery(activeDelivery.id)}
+                  onClick={() => startDelivery(activeDelivery)}
                   style={{ marginTop: '16px', width: '100%', padding: '18px', fontSize: '16px', borderRadius: '14px', border: 'none', background: '#0369a1', color: 'white', fontWeight: 900, cursor: busyOrderId === activeDelivery.id ? 'wait' : 'pointer', boxShadow: '0 4px 12px rgba(3,105,161,0.2)' }}
                 >
                   {busyOrderId === activeDelivery.id ? 'Updating...' : 'Start Delivery (Live Track)'}
