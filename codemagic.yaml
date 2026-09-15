@@ -24,7 +24,7 @@ workflows:
             -scheme App \
             -destination "generic/platform=iOS" \
             CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR=build/Release-iphoneos \
+            -derivedDataPath ios/App/build_output \
             -clonedSourcePackagesDirPath .build/spm
     artifacts:
-      - ios/App/build/Release-iphoneos/*.app
+      - ios/App/build_output/Build/Products/Release-iphoneos/**/*.app
