@@ -8,7 +8,9 @@ workflows:
       xcode: latest
     scripts:
       - name: Install NPM dependencies
-        script: npm install
+        script: |
+          npm install
+          sed -i '' 's/package: "ion-ios-geolocation"/package: "IONGeolocationLib"/g' node_modules/@capacitor/geolocation/Package.swift
       - name: Sync Capacitor iOS
         script: npx cap sync ios
       - name: Resolve SPM Dependencies
