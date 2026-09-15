@@ -11,6 +11,12 @@ workflows:
         script: npm install
       - name: Sync Capacitor iOS
         script: npx cap sync ios
+      - name: Resolve SPM Dependencies
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -clonedSourcePackagesDirPath .build/spm
       - name: Build iOS App (Unsigned)
         script: |
           xcodebuild build \
@@ -18,6 +24,7 @@ workflows:
             -scheme App \
             -destination "generic/platform=iOS" \
             CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR=build/Release-iphoneos
+            CONFIGURATION_BUILD_DIR=build/Release-iphoneos \
+            -clonedSourcePackagesDirPath .build/spm
     artifacts:
       - ios/App/build/Release-iphoneos/*.app
