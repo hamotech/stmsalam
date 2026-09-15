@@ -27,4 +27,4 @@ workflows:
             -derivedDataPath ios/App/build_output \
             -clonedSourcePackagesDirPath .build/spm
     artifacts:
-      - ios/App/build_output/Build/Products/Release-iphoneos/**/*.app
+      - ios/App/build_output/Build/Products/*-iphoneos/**/*.app
