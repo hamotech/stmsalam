@@ -1,0 +1,20 @@
+{
+  "name": "iosapp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "prepare:web": "node scripts/prepare-web-assets-ios.cjs",
+    "sync:ios": "node scripts/prepare-web-assets-ios.cjs --skip-build && npx cap sync ios",
+    "open:ios": "npx cap open ios",
+    "build:ios": "node scripts/prepare-web-assets-ios.cjs && npx cap sync ios"
+  },
+  "devDependencies": {
+    "@capacitor/ios": "^8.3.4",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4"
+  },
+  "dependencies": {
+    "@capacitor/geolocation": "^8.2.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "appId": "sg.stmsalam.delivery",
+  "appName": "STMAPP",
+  "webDir": "www",
+  "server": {
+    "iosScheme": "capacitor",
+    "hostname": "localhost",
+    "cleartext": true
+  }
+}

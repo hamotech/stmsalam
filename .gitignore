@@ -33,3 +33,6 @@ stmapp/android/.gradle/
 stmapp/android/build/
 stmapp/android/app/build/
 stmapp/dist/
+
+# iOS proxy certificate
+proxy-ca.pem

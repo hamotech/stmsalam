@@ -1,0 +1,331 @@
+{
+  "_App-BqadYNyU.js": {
+    "file": "assets/App-BqadYNyU.js",
+    "name": "App",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ],
+    "dynamicImports": [
+      "node_modules/@capacitor/splash-screen/dist/esm/web.js",
+      "src/pages/Home.jsx",
+      "src/pages/Menu.jsx",
+      "src/pages/Cart.jsx",
+      "src/pages/Gallery.jsx",
+      "src/pages/AboutUs.jsx",
+      "src/pages/Checkout.jsx",
+      "src/pages/Login.jsx",
+      "src/pages/Profile.jsx",
+      "src/pages/OrderSuccess.jsx",
+      "src/pages/PaymentSuccess.jsx",
+      "src/pages/PaymentCancel.jsx",
+      "src/pages/OrderTracking.jsx",
+      "src/pages/Admin.jsx",
+      "src/pages/DriverPanel.jsx",
+      "src/pages/DataSeedPage.jsx",
+      "src/pages/ShopScan.jsx"
+    ],
+    "assets": [
+      "assets/halal-B_U34GkN.png"
+    ]
+  },
+  "_api-C-givZ-6.js": {
+    "file": "assets/api-C-givZ-6.js",
+    "name": "api"
+  },
+  "_client-DSJ_MluH.js": {
+    "file": "assets/client-DSJ_MluH.js",
+    "name": "client",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js"
+    ]
+  },
+  "_esm-D4osCRgx.js": {
+    "file": "assets/esm-D4osCRgx.js",
+    "name": "esm",
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "_icons-DLk2yLxZ.js": {
+    "file": "assets/icons-DLk2yLxZ.js",
+    "name": "icons",
+    "imports": [
+      "_vendor-DGlXZeyz.js"
+    ]
+  },
+  "_validators-KcHLYWIO.js": {
+    "file": "assets/validators-KcHLYWIO.js",
+    "name": "validators"
+  },
+  "_vendor-DGlXZeyz.js": {
+    "file": "assets/vendor-DGlXZeyz.js",
+    "name": "vendor",
+    "isDynamicEntry": true
+  },
+  "halal.png": {
+    "file": "assets/halal-B_U34GkN.png",
+    "src": "halal.png"
+  },
+  "index.html": {
+    "file": "assets/index-B-IUgGMt.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js"
+    ],
+    "dynamicImports": [
+      "_App-BqadYNyU.js",
+      "_vendor-DGlXZeyz.js",
+      "_client-DSJ_MluH.js"
+    ],
+    "css": [
+      "assets/index-DGk6Lgj5.css"
+    ]
+  },
+  "node_modules/@capacitor/geolocation/dist/esm/index.js": {
+    "file": "assets/index-DA5cULC-.js",
+    "name": "index",
+    "src": "node_modules/@capacitor/geolocation/dist/esm/index.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_App-BqadYNyU.js",
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ],
+    "dynamicImports": [
+      "node_modules/@capacitor/geolocation/dist/esm/web.js"
+    ]
+  },
+  "node_modules/@capacitor/geolocation/dist/esm/web.js": {
+    "file": "assets/web-Bqaqzuig.js",
+    "name": "web",
+    "src": "node_modules/@capacitor/geolocation/dist/esm/web.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_App-BqadYNyU.js",
+      "index.html",
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "node_modules/@capacitor/splash-screen/dist/esm/web.js": {
+    "file": "assets/web-DGc_n2ZQ.js",
+    "name": "web",
+    "src": "node_modules/@capacitor/splash-screen/dist/esm/web.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_App-BqadYNyU.js",
+      "index.html",
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "src/pages/AboutUs.jsx": {
+    "file": "assets/AboutUs-6Rsge1l5.js",
+    "name": "AboutUs",
+    "src": "src/pages/AboutUs.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Admin.jsx": {
+    "file": "assets/Admin-DGuoTiS4.js",
+    "name": "Admin",
+    "src": "src/pages/Admin.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "_esm-D4osCRgx.js",
+      "_validators-KcHLYWIO.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Cart.jsx": {
+    "file": "assets/Cart-DKmd0Tyo.js",
+    "name": "Cart",
+    "src": "src/pages/Cart.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Checkout.jsx": {
+    "file": "assets/Checkout-0ZHMAaLg.js",
+    "name": "Checkout",
+    "src": "src/pages/Checkout.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js"
+    ],
+    "dynamicImports": [
+      "node_modules/@capacitor/geolocation/dist/esm/index.js"
+    ]
+  },
+  "src/pages/DataSeedPage.jsx": {
+    "file": "assets/DataSeedPage-p3vSXDnE.js",
+    "name": "DataSeedPage",
+    "src": "src/pages/DataSeedPage.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/DriverPanel.jsx": {
+    "file": "assets/DriverPanel-BPYT57oO.js",
+    "name": "DriverPanel",
+    "src": "src/pages/DriverPanel.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Gallery.jsx": {
+    "file": "assets/Gallery-C6B0DRH_.js",
+    "name": "Gallery",
+    "src": "src/pages/Gallery.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Home.jsx": {
+    "file": "assets/Home-RwwBx96Z.js",
+    "name": "Home",
+    "src": "src/pages/Home.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_api-C-givZ-6.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Login.jsx": {
+    "file": "assets/Login-9sk1PFcB.js",
+    "name": "Login",
+    "src": "src/pages/Login.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_api-C-givZ-6.js",
+      "_validators-KcHLYWIO.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Menu.jsx": {
+    "file": "assets/Menu-CrELDvmT.js",
+    "name": "Menu",
+    "src": "src/pages/Menu.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/OrderSuccess.jsx": {
+    "file": "assets/OrderSuccess-qk3MZ1UT.js",
+    "name": "OrderSuccess",
+    "src": "src/pages/OrderSuccess.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "src/pages/OrderTracking.jsx": {
+    "file": "assets/OrderTracking-C7IUC70R.js",
+    "name": "OrderTracking",
+    "src": "src/pages/OrderTracking.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_esm-D4osCRgx.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  },
+  "src/pages/PaymentCancel.jsx": {
+    "file": "assets/PaymentCancel-JpDe9rvB.js",
+    "name": "PaymentCancel",
+    "src": "src/pages/PaymentCancel.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "src/pages/PaymentSuccess.jsx": {
+    "file": "assets/PaymentSuccess-C6QhkToM.js",
+    "name": "PaymentSuccess",
+    "src": "src/pages/PaymentSuccess.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_icons-DLk2yLxZ.js"
+    ]
+  },
+  "src/pages/Profile.jsx": {
+    "file": "assets/Profile-CkvVi3_l.js",
+    "name": "Profile",
+    "src": "src/pages/Profile.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "index.html",
+      "_icons-DLk2yLxZ.js",
+      "_validators-KcHLYWIO.js"
+    ],
+    "dynamicImports": [
+      "_App-BqadYNyU.js",
+      "node_modules/@capacitor/geolocation/dist/esm/index.js"
+    ]
+  },
+  "src/pages/ShopScan.jsx": {
+    "file": "assets/ShopScan-DHYQmuh3.js",
+    "name": "ShopScan",
+    "src": "src/pages/ShopScan.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-DGlXZeyz.js",
+      "_App-BqadYNyU.js",
+      "_icons-DLk2yLxZ.js",
+      "index.html"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+const i="http://10.0.2.2:5000/api",n="https://teh-tarik-app-k4w4.onrender.com/api";function a(){var o,t;return typeof window>"u"?!1:window.location.protocol==="capacitor:"||window.location.hostname==="10.0.2.2"||!!((t=(o=window.Capacitor)==null?void 0:o.isNativePlatform)!=null&&t.call(o))}a();
